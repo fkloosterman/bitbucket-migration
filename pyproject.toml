@@ -1,0 +1,21 @@
+[project]
+name = "bitbucket-migration"
+version = "0.1.0"
+description = "Scripts to assist with the migration of a Bitbucket git repository to GitHub."
+authors = [
+    { name = "FKloosterman", email = "devfakl@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.32.5",
+]
+
+[build-system]
+    requires = ["setuptools>=61.0"]
+    build-backend = "setuptools.build_meta"
+
+[project.scripts]
+    migrate_bitbucket_to_github = "bitbucket_migration.migrate_bitbucket_to_github:main"
+    audit_bitbucket = "bitbucket_migration.audit_bitbucket:main"
+    test_bitbucket_auth = "bitbucket_migration.test_auth:main"
