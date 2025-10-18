@@ -15,6 +15,15 @@ dependencies = [
     requires = ["setuptools>=61.0"]
     build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["bitbucket_migration*"]
+
+[dependency-groups]
+dev = [
+    "twine>=6.2.0",
+]
+
 [project.scripts]
     migrate_bitbucket_to_github = "bitbucket_migration.migrate_bitbucket_to_github:main"
     audit_bitbucket = "bitbucket_migration.audit_bitbucket:main"
