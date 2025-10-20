@@ -327,7 +327,7 @@ class BitbucketToGitHubMigrator:
         except Exception as e:
             self.log(f"    ✗ Error checking branch '{branch_name}': {e}")
             return False
-    
+
     def fetch_bb_issues(self) -> List[dict]:
         """Fetch all issues from Bitbucket"""
         self.log("Fetching Bitbucket issues...")
@@ -370,20 +370,48 @@ class BitbucketToGitHubMigrator:
         self.log(f"  Found {len(prs)} pull requests")
         return sorted(prs, key=lambda x: x['id'])
     
-    def fetch_bb_issue_attachments(self, issue_id: int) -> List[dict]:
-        """Fetch attachments for a Bitbucket issue"""
-        url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/issues/{issue_id}/attachments"
-        
+    def fetch_bb_attachments(self, url, item='item', item_id=0) -> List[dict]:
         try:
             response = self.bb_session.get(url)
             if response.status_code == 404:
                 return []
             response.raise_for_status()
             data = response.json()
-            return data.get('values', [])
-        except:
+            
+            # Handle pagination
+            attachments = data.get('values', [])
+            next_url = data.get('next')
+            
+            while next_url:
+                try:
+                    response = self.bb_session.get(next_url)
+                    response.raise_for_status()
+                    data = response.json()
+                    attachments.extend(data.get('values', []))
+                    next_url = data.get('next')
+                except Exception as e:
+                    self.log(f"    Warning: Error fetching next page of {item} attachments: {e}")
+                    break
+            
+            return attachments
+            
+        except requests.exceptions.HTTPError as e:
+            self.log(f"    Warning: HTTP error fetching attachments for {item} #{item_id}: {e}")
             return []
+        except Exception as e:
+            self.log(f"    Warning: Error fetching attachments for {item} #{item_id}: {e}")
+            return []
+
+    def fetch_bb_issue_attachments(self, issue_id: int) -> List[dict]:
+        """Fetch attachments for a Bitbucket issue"""
+        url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/issues/{issue_id}/attachments"
+        return self.fetch_bb_attachments(url, "issue", issue_id)
     
+    def fetch_bb_pr_attachments(self, pr_id: int) -> List[dict]:
+        """Fetch attachments for a Bitbucket PR"""
+        url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/pullrequests/{pr_id}/attachments"
+        return self.fetch_bb_attachments(url, "PR", pr_id)
+
     def download_attachment(self, attachment_url: str, filename: str) -> Optional[Path]:
         """Download an attachment from Bitbucket"""
         try:
@@ -431,10 +459,7 @@ class BitbucketToGitHubMigrator:
             self.log(f"    ERROR creating attachment comment: {e}")
             return None
     
-    def fetch_bb_issue_comments(self, issue_id: int) -> List[dict]:
-        """Fetch comments for a Bitbucket issue"""
-        url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/issues/{issue_id}/comments"
-        
+    def fetch_bb_comments(self, url) ->List[dict]:
         comments = []
         next_url = url
         
@@ -449,25 +474,16 @@ class BitbucketToGitHubMigrator:
             next_url = data.get('next')
             
         return comments
+
+    def fetch_bb_issue_comments(self, issue_id: int) -> List[dict]:
+        """Fetch comments for a Bitbucket issue"""
+        url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/issues/{issue_id}/comments"
+        return self.fetch_bb_comments(url)
     
     def fetch_bb_pr_comments(self, pr_id: int) -> List[dict]:
         """Fetch comments for a Bitbucket PR"""
         url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/pullrequests/{pr_id}/comments"
-        
-        comments = []
-        next_url = url
-        
-        while next_url:
-            response = self.bb_session.get(next_url)
-            if response.status_code == 404:
-                break
-            response.raise_for_status()
-            data = response.json()
-            
-            comments.extend(data.get('values', []))
-            next_url = data.get('next')
-            
-        return comments
+        return self.fetch_bb_comments(url)
     
     def create_gh_issue(self, title: str, body: str, labels: List[str] = None, 
                        state: str = 'open', assignees: List[str] = None) -> dict:
@@ -861,17 +877,26 @@ class BitbucketToGitHubMigrator:
                     
                     if att_url:
                         self.log(f"    Downloading {att_name}...")
-                        filepath = self.download_attachment(att_url, att_name)
-                        
-                        if filepath:
-                            self.log(f"    Creating attachment note on GitHub...")
-                            self.upload_attachment_to_github(filepath, gh_issue['number'])
+                        if self.dry_run:
+                            # In dry-run, record attachment without downloading
                             self.attachments.append({
                                 'issue_number': issue_num,
                                 'github_issue': gh_issue['number'],
                                 'filename': att_name,
-                                'filepath': str(filepath)
+                                'filepath': f"attachments_temp/{att_name}"
                             })
+                            self.log(f"    [DRY RUN] Would download {att_name}")
+                        else:
+                            filepath = self.download_attachment(att_url, att_name)
+                            if filepath:
+                                self.log(f"    Creating attachment note on GitHub...")
+                                self.upload_attachment_to_github(filepath, gh_issue['number'])
+                                self.attachments.append({
+                                    'issue_number': issue_num,
+                                    'github_issue': gh_issue['number'],
+                                    'filename': att_name,
+                                    'filepath': str(filepath)
+                                })
             
             # Migrate comments
             comments = self.fetch_bb_issue_comments(issue_num)
@@ -980,6 +1005,34 @@ class BitbucketToGitHubMigrator:
                                 comment_body = self.format_comment_body(comment, 'pr', pr_num)
                                 self.create_gh_comment(gh_pr['number'], comment_body, is_pr=True)
                             
+                            # Migrate PR attachments
+                            pr_attachments = self.fetch_bb_pr_attachments(pr_num)
+                            if pr_attachments:
+                                self.log(f"  Migrating {len(pr_attachments)} PR attachments...")
+                                for attachment in pr_attachments:
+                                    att_name = attachment.get('name', 'unknown')
+                                    att_url = attachment.get('links', {}).get('self', {}).get('href')
+                                    
+                                    if att_url:
+                                        self.log(f"    Processing {att_name}...")
+                                        if self.dry_run:
+                                            self.attachments.append({
+                                                'pr_number': pr_num,
+                                                'github_pr': gh_pr['number'],
+                                                'filename': att_name,
+                                                'filepath': f"attachments_temp/{att_name}"
+                                            })
+                                        else:
+                                            filepath = self.download_attachment(att_url, att_name)
+                                            if filepath:
+                                                self.upload_attachment_to_github(filepath, gh_pr['number'])
+                                                self.attachments.append({
+                                                    'pr_number': pr_num,
+                                                    'github_pr': gh_pr['number'],
+                                                    'filename': att_name,
+                                                    'filepath': str(filepath)
+                                                })
+
                             self.log(f"  ✓ Successfully migrated as PR #{gh_pr['number']} with {len(comments)} comments")
                             continue
                         else:
