@@ -1,11 +1,42 @@
 #!/usr/bin/env python3
 """
 Test Bitbucket API authentication before running the full audit.
-This helps diagnose authentication issues.
 
-Authentication:
-Uses user-level API Token (replacement for App Passwords).
-Repository Access Tokens do NOT support issue APIs.
+This script validates Bitbucket API credentials and permissions by testing multiple
+API endpoints including repository info, issues, and pull requests. It helps diagnose
+authentication issues and verify that the provided API token has the necessary
+permissions for the migration process.
+
+Args:
+    workspace (str): Bitbucket workspace name (e.g., 'myteam')
+    repo (str): Repository name (e.g., 'myrepo')
+    email (str): Atlassian account email address
+    api_token (str): Bitbucket user-level API token
+
+Returns:
+    bool: True if all authentication tests pass, False otherwise
+
+Raises:
+    SystemExit: Exits with code 0 on success, 1 on failure
+
+Authentication Notes:
+    - Uses user-level API Token (replacement for App Passwords)
+    - Repository Access Tokens do NOT support issue APIs
+    - Requires HTTP Basic Auth with email + token format
+
+Test Coverage:
+    - Repository Info: Verifies repository access and basic metadata
+    - Issues List: Confirms issues API permissions
+    - Pull Requests List: Validates pull request API access
+
+Output:
+    - Detailed test results for each API endpoint
+    - Authentication status and user information
+    - Troubleshooting guidance for failed tests
+    - Step-by-step API token creation instructions on failure
+
+Example:
+    python test_auth.py --workspace myteam --repo myrepo --email user@example.com --token API_TOKEN
 """
 
 import sys

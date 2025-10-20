@@ -1,26 +1,81 @@
 #!/usr/bin/env python3
 """
-Bitbucket to GitHub Migration Script (Improved)
+Bitbucket to GitHub Migration Script
 
-This script migrates a Bitbucket repository to GitHub, including:
-- Issues with comments and metadata
-- Pull requests (open PRs as PRs if branches exist, others as issues)
-- Preserving issue/PR numbers with placeholders
-- User mapping
-- Attachments (downloaded locally)
+Comprehensive migration tool that transfers a Bitbucket repository to GitHub while preserving
+all metadata, comments, attachments, and cross-references between issues and pull requests.
 
-Improvements:
-- Branch existence checking before creating PRs
-- Better PR migration strategy (only OPEN PRs with existing branches)
-- Enhanced logging and error reporting
-- Safer approach (no re-merging of already-merged PRs)
+Purpose:
+    Migrates entire Bitbucket repositories to GitHub with intelligent handling of:
+    - Issues with full comment history and metadata preservation
+    - Pull requests using smart migration strategy (open PRs → GitHub PRs, others → issues)
+    - User mapping from Bitbucket display names to GitHub usernames
+    - Attachments downloaded locally for manual upload to GitHub
+    - Automatic link rewriting to maintain issue/PR references
+    - Placeholder issues for deleted/missing content to preserve numbering
 
-Usage:
-    python migrate_bitbucket_to_github.py --config config.json
-    python migrate_bitbucket_to_github.py --config config.json --dry-run
+Arguments:
+    --config FILE       Path to configuration JSON file (required)
+                       Configuration file must contain bitbucket, github, and user_mapping sections
+    --dry-run          Simulate migration without making any changes to GitHub
+                       Shows exactly what would be migrated and validates connections
+    --skip-issues      Skip issue migration phase (migrate only pull requests)
+    --skip-prs         Skip pull request migration phase (migrate only issues)
+
+Outputs:
+    migration_mapping.json      Machine-readable mapping of Bitbucket → GitHub issue/PR numbers
+    migration_report.md         Comprehensive markdown report with migration statistics,
+                               detailed issue/PR tables, user mapping summary, and troubleshooting notes
+    migration_report_dry_run.md If run with --dry-run flag, simulation report
+    attachments_temp/           Directory containing downloaded attachments for manual upload
+    Console output              Detailed progress logging with timestamps and status indicators
+
+Migration Strategy:
+    Issues: All Bitbucket issues become GitHub issues, preserving original numbering with placeholders
+    Pull Requests:
+        - OPEN PRs with existing branches → GitHub PRs (remain open)
+        - OPEN PRs with missing branches → GitHub Issues
+        - MERGED/DECLINED/SUPERSEDED PRs → GitHub Issues (safest approach)
+
+Link Rewriting:
+    Automatically rewrites cross-references between issues and PRs:
+    - Full URLs: https://bitbucket.org/.../issues/123 → [#456](github_url) *(was BB #123)*
+    - Short references: #123 → [#456](github_url) *(was BB #123)*
+    - PR references: PR #45 → [PR #456](github_url) *(was BB PR #45)*
+
+User Mapping:
+    Maps Bitbucket display names to GitHub usernames in configuration file.
+    Users without GitHub accounts are mentioned as "Name (no GitHub account)".
+    Supports null values for users who shouldn't be mapped.
+
+Attachment Handling:
+    Downloads all attachments to local attachments_temp/ directory.
+    Creates comments on GitHub issues noting attached files.
+    Files must be manually uploaded via GitHub web interface (API limitation).
 
 Requirements:
     pip install requests
+
+Prerequisites:
+    1. Create empty GitHub repository
+    2. Push git history: git push --mirror <github-url>
+    3. Generate Bitbucket API token with repository read access
+    4. Generate GitHub personal access token with repository write access
+    5. Create user mapping configuration file
+    6. Run audit script first to understand migration scope
+
+Examples:
+    # Dry run to validate configuration and see what will be migrated
+    python migrate_bitbucket_to_github.py --config config.json --dry-run
+
+    # Full migration
+    python migrate_bitbucket_to_github.py --config config.json
+
+    # Migrate only issues
+    python migrate_bitbucket_to_github.py --config config.json --skip-prs
+
+    # Migrate only pull requests
+    python migrate_bitbucket_to_github.py --config config.json --skip-issues
 """
 
 import argparse
