@@ -1137,7 +1137,7 @@ class BitbucketToGitHubMigrator:
         
         self.log(f"\nMapping saved to {filename}")
     
-    def generate_migration_report(self, filename: str = 'migration_report.md'):
+    def generate_migration_report(self, report_filename: str = 'migration_report.md'):
         """Generate a comprehensive markdown migration report"""
         
         report = []
@@ -1372,12 +1372,12 @@ class BitbucketToGitHubMigrator:
         
         # Write report to file
         report_content = '\n'.join(report)
-        with open(filename, 'w', encoding='utf-8') as f:
+        with open(report_filename, 'w', encoding='utf-8') as f:
             f.write(report_content)
         
-        self.log(f"\nMigration report saved to {filename}")
+        self.log(f"\nMigration report saved to {report_filename}")
         
-        return filename
+        return report_filename
     
     def print_summary(self):
         """Print migration summary statistics"""
@@ -1595,7 +1595,7 @@ Example:
         
         # Generate comprehensive migration report
         if args.dry_run:
-            migrator.generate_migration_report(filename = "migration_report_dry_run.md")
+            migrator.generate_migration_report(report_filename = "migration_report_dry_run.md")
         else:
             migrator.generate_migration_report()
         
