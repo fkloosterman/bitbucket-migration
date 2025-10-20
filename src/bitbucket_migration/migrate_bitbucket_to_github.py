@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
 """
-Bitbucket to GitHub Migration Script
+Bitbucket to GitHub Migration Script (Improved)
 
 This script migrates a Bitbucket repository to GitHub, including:
 - Issues with comments and metadata
-- Pull requests (open PRs as PRs, closed as issues)
+- Pull requests (open PRs as PRs if branches exist, others as issues)
 - Preserving issue/PR numbers with placeholders
 - User mapping
-- Attachments (downloaded and re-uploaded)
+- Attachments (downloaded locally)
+
+Improvements:
+- Branch existence checking before creating PRs
+- Better PR migration strategy (only OPEN PRs with existing branches)
+- Enhanced logging and error reporting
+- Safer approach (no re-merging of already-merged PRs)
 
 Usage:
-    python migrate_bitbucket_to_github.py --bb-workspace WORKSPACE --bb-repo REPO \\
-        --gh-owner OWNER --gh-repo REPO --config config.json
+    python migrate_bitbucket_to_github.py --config config.json
+    python migrate_bitbucket_to_github.py --config config.json --dry-run
 
 Requirements:
     pip install requests
@@ -65,6 +71,17 @@ class BitbucketToGitHubMigrator:
         self.attachment_dir.mkdir(exist_ok=True)
         self.attachments = []  # Track all downloaded attachments
         
+        # Migration statistics
+        self.stats = {
+            'prs_as_prs': 0,  # Open PRs that became GitHub PRs
+            'prs_as_issues': 0,  # PRs that became GitHub issues
+            'pr_branch_missing': 0,  # PRs that couldn't be migrated due to missing branches
+            'pr_merged_as_issue': 0,  # Merged PRs migrated as issues (safest approach)
+        }
+        
+        # Dry-run tracking: simulate issue/PR counter
+        self.next_github_number = 1  # Track next expected GitHub issue/PR number
+        
     def log(self, message: str):
         """Log with timestamp"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -91,6 +108,39 @@ class BitbucketToGitHubMigrator:
             return None
             
         return gh_user
+    
+    def check_branch_exists(self, branch_name: str) -> bool:
+        """Check if a branch exists in the GitHub repository
+        
+        Args:
+            branch_name: Name of the branch to check
+            
+        Returns:
+            True if branch exists, False otherwise
+            
+        Note: This is a read-only operation, safe to run even in dry-run mode
+        """
+        url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/branches/{branch_name}"
+        
+        try:
+            response = self.gh_session.get(url)
+            exists = response.status_code == 200
+            
+            if exists:
+                log_msg = f"    ✓ Branch '{branch_name}' exists on GitHub"
+            else:
+                log_msg = f"    ✗ Branch '{branch_name}' not found on GitHub"
+            
+            if self.dry_run:
+                self.log(f"    [DRY RUN CHECK] {log_msg}")
+            else:
+                self.log(log_msg)
+            
+            self.rate_limit_sleep(0.3)  # Small delay for branch checks
+            return exists
+        except Exception as e:
+            self.log(f"    ✗ Error checking branch '{branch_name}': {e}")
+            return False
     
     def fetch_bb_issues(self) -> List[dict]:
         """Fetch all issues from Bitbucket"""
@@ -166,31 +216,25 @@ class BitbucketToGitHubMigrator:
             return None
     
     def upload_attachment_to_github(self, filepath: Path, issue_number: int) -> Optional[str]:
-        """Upload an attachment to GitHub by creating a comment with it
+        """Create a comment noting the attachment (manual upload required)
         
-        GitHub doesn't have a direct attachment API, but we can upload files
-        through the issue comment interface by using multipart form data.
+        GitHub's API doesn't support direct file uploads, so we create a comment
+        with attachment metadata. Users can then manually upload via web interface.
         """
         if self.dry_run:
-            self.log(f"    [DRY RUN] Would upload {filepath.name} to issue #{issue_number}")
+            self.log(f"    [DRY RUN] Would create attachment comment for {filepath.name} on issue #{issue_number}")
             return f"https://github.com/{self.gh_owner}/{self.gh_repo}/files/{filepath.name}"
         
         try:
-            # GitHub's undocumented way to upload assets via the web interface API
-            # We'll create a comment that references the file
-            url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/issues/{issue_number}/comments"
-            
-            # Read file and create a comment with file info
-            # Note: For actual file uploads, you'd need to use GitHub's upload endpoint
-            # For now, we'll include file info and link to download from Bitbucket
             file_size = filepath.stat().st_size
             size_mb = round(file_size / (1024 * 1024), 2)
             
             comment_body = f"""📎 **Attachment from Bitbucket**: `{filepath.name}` ({size_mb} MB)
 
-*Note: This file was attached to the original Bitbucket issue. Due to GitHub API limitations, the file content is available in the migration artifacts directory.*
+*Note: This file was attached to the original Bitbucket issue. Due to GitHub API limitations, please drag and drop this file from `attachments_temp/{filepath.name}` to embed it in this issue.*
 """
             
+            url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/issues/{issue_number}/comments"
             response = self.gh_session.post(url, json={'body': comment_body})
             response.raise_for_status()
             
@@ -198,8 +242,10 @@ class BitbucketToGitHubMigrator:
             return comment_body
             
         except Exception as e:
-            self.log(f"    ERROR uploading to GitHub: {e}")
+            self.log(f"    ERROR creating attachment comment: {e}")
             return None
+    
+    def fetch_bb_issue_comments(self, issue_id: int) -> List[dict]:
         """Fetch comments for a Bitbucket issue"""
         url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/issues/{issue_id}/comments"
         
@@ -253,13 +299,22 @@ class BitbucketToGitHubMigrator:
             payload['assignees'] = assignees
         
         if self.dry_run:
-            self.log(f"  [DRY RUN] Would create issue: {title}")
-            return {'number': -1}
+            # Simulate issue creation with correct numbering
+            simulated_number = self.next_github_number
+            self.next_github_number += 1
+            self.log(f"  [DRY RUN] Would create issue #{simulated_number}: {title}")
+            if state == 'closed':
+                self.log(f"  [DRY RUN] Would close issue #{simulated_number}")
+            return {'number': simulated_number}
         
         try:
             response = self.gh_session.post(url, json=payload)
             response.raise_for_status()
             issue = response.json()
+            
+            # Update counter for real migrations too
+            if issue['number'] >= self.next_github_number:
+                self.next_github_number = issue['number'] + 1
             
             # Close if needed
             if state == 'closed':
@@ -291,12 +346,19 @@ class BitbucketToGitHubMigrator:
         response.raise_for_status()
         self.rate_limit_sleep(0.5)
     
-    def create_gh_comment(self, issue_number: int, body: str):
-        """Create a comment on a GitHub issue"""
+    def create_gh_comment(self, issue_number: int, body: str, is_pr: bool = False):
+        """Create a comment on a GitHub issue or PR
+        
+        Args:
+            issue_number: The issue or PR number
+            body: Comment text
+            is_pr: Whether this is a PR (for better logging)
+        """
         url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/issues/{issue_number}/comments"
         
         if self.dry_run:
-            self.log(f"  [DRY RUN] Would add comment to issue #{issue_number}")
+            item_type = "PR" if is_pr else "issue"
+            self.log(f"  [DRY RUN] Would add comment to {item_type} #{issue_number}")
             return
         
         response = self.gh_session.post(url, json={'body': body})
@@ -304,7 +366,10 @@ class BitbucketToGitHubMigrator:
         self.rate_limit_sleep(0.5)
     
     def create_gh_pr(self, title: str, body: str, head: str, base: str) -> Optional[dict]:
-        """Create a GitHub pull request"""
+        """Create a GitHub pull request
+        
+        Note: This creates an OPEN PR. Both head and base branches must exist.
+        """
         url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/pulls"
         
         payload = {
@@ -315,18 +380,48 @@ class BitbucketToGitHubMigrator:
         }
         
         if self.dry_run:
-            self.log(f"  [DRY RUN] Would create PR: {title}")
-            return {'number': -1}
+            # Simulate PR creation with correct numbering
+            # PRs and issues share the same numbering sequence on GitHub
+            simulated_number = self.next_github_number
+            self.next_github_number += 1
+            self.log(f"  [DRY RUN] Would create PR #{simulated_number}: {title} ({head} -> {base})")
+            return {'number': simulated_number}
         
         try:
             response = self.gh_session.post(url, json=payload)
             response.raise_for_status()
             pr = response.json()
+            
+            # Update counter for real migrations too
+            if pr['number'] >= self.next_github_number:
+                self.next_github_number = pr['number'] + 1
+            
             self.rate_limit_sleep(1.0)
             return pr
         except requests.exceptions.HTTPError as e:
             self.log(f"  ERROR: Could not create PR: {e}")
+            if hasattr(response, 'text'):
+                self.log(f"  Response: {response.text}")
             return None
+    
+    def close_gh_pr(self, pr_number: int):
+        """Close a GitHub PR without merging
+        
+        This is safe - it just changes the PR state to 'closed' without
+        performing any git operations.
+        """
+        url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/pulls/{pr_number}"
+        
+        if self.dry_run:
+            self.log(f"  [DRY RUN] Would close PR #{pr_number}")
+            return
+        
+        try:
+            response = self.gh_session.patch(url, json={'state': 'closed'})
+            response.raise_for_status()
+            self.rate_limit_sleep(0.5)
+        except Exception as e:
+            self.log(f"  ERROR: Could not close PR #{pr_number}: {e}")
     
     def format_issue_body(self, bb_issue: dict) -> str:
         """Format issue body with metadata"""
@@ -360,7 +455,7 @@ class BitbucketToGitHubMigrator:
         return body
     
     def format_pr_as_issue_body(self, bb_pr: dict) -> str:
-        """Format a closed PR as a GitHub issue with metadata"""
+        """Format a PR (that will be migrated as an issue) with full metadata"""
         author = bb_pr.get('author', {}).get('display_name', 'Unknown') if bb_pr.get('author') else 'Unknown (deleted user)'
         gh_author = self.map_user(author) if author != 'Unknown (deleted user)' else None
         
@@ -379,7 +474,7 @@ class BitbucketToGitHubMigrator:
         source = bb_pr.get('source', {}).get('branch', {}).get('name', 'unknown')
         dest = bb_pr.get('destination', {}).get('branch', {}).get('name', 'unknown')
         
-        body = f"""**⚠️ This was a Pull Request on Bitbucket (now migrated as an issue)**
+        body = f"""⚠️ **This was a Pull Request on Bitbucket (migrated as an issue)**
 
 **Original PR Metadata:**
 - Author: {author_mention}
@@ -398,7 +493,34 @@ class BitbucketToGitHubMigrator:
 
 ---
 
-*Note: This PR was {state.lower()} on Bitbucket. The source branch may no longer exist, so it was migrated as an issue rather than a GitHub PR. All comments and metadata are preserved below.*
+*Note: This PR was {state.lower()} on Bitbucket. It was migrated as a GitHub issue to preserve all metadata and comments. The actual code changes are in the git history.*
+"""
+        return body
+    
+    def format_pr_body(self, bb_pr: dict) -> str:
+        """Format PR body for an actual GitHub PR (for OPEN PRs)"""
+        author = bb_pr.get('author', {}).get('display_name', 'Unknown') if bb_pr.get('author') else 'Unknown (deleted user)'
+        gh_author = self.map_user(author) if author != 'Unknown (deleted user)' else None
+        
+        # Format author mention
+        if gh_author:
+            author_mention = f"@{gh_author}"
+        elif author == 'Unknown (deleted user)':
+            author_mention = f"**{author}**"
+        else:
+            author_mention = f"**{author}** *(no GitHub account)*"
+        
+        created = bb_pr.get('created_on', '')
+        bb_url = bb_pr.get('links', {}).get('html', {}).get('href', '')
+        
+        body = f"""**Migrated from Bitbucket**
+- Original Author: {author_mention}
+- Original Created: {created}
+- Original URL: {bb_url}
+
+---
+
+{bb_pr.get('description', '')}
 """
         return body
     
@@ -496,7 +618,7 @@ class BitbucketToGitHubMigrator:
                         filepath = self.download_attachment(att_url, att_name)
                         
                         if filepath:
-                            self.log(f"    Uploading {att_name} to GitHub...")
+                            self.log(f"    Creating attachment note on GitHub...")
                             self.upload_attachment_to_github(filepath, gh_issue['number'])
                             self.attachments.append({
                                 'issue_number': issue_num,
@@ -515,7 +637,14 @@ class BitbucketToGitHubMigrator:
             expected_num += 1
     
     def migrate_pull_requests(self, bb_prs: List[dict]):
-        """Migrate Bitbucket PRs to GitHub (open as PRs, closed as issues)"""
+        """Migrate Bitbucket PRs to GitHub with intelligent branch checking
+        
+        Strategy:
+        - OPEN PRs: Try to create as GitHub PRs (if branches exist)
+        - MERGED/DECLINED/SUPERSEDED PRs: Always migrate as issues (safest approach)
+        
+        This avoids any risk of re-merging already-merged code.
+        """
         self.log("\n" + "="*80)
         self.log("PHASE 2: Migrating Pull Requests")
         self.log("="*80)
@@ -528,56 +657,82 @@ class BitbucketToGitHubMigrator:
             pr_num = bb_pr['id']
             pr_state = bb_pr.get('state', 'UNKNOWN')
             title = bb_pr.get('title', f'PR #{pr_num}')
+            source_branch = bb_pr.get('source', {}).get('branch', {}).get('name')
+            dest_branch = bb_pr.get('destination', {}).get('branch', {}).get('name', 'main')
             
-            self.log(f"Migrating PR #{pr_num} ({pr_state}): {title}")
+            self.log(f"\nMigrating PR #{pr_num} ({pr_state}): {title}")
+            self.log(f"  Source: {source_branch} -> Destination: {dest_branch}")
             
-            # Decide migration strategy
+            # Strategy: Only OPEN PRs become GitHub PRs (safest approach)
             if pr_state == 'OPEN':
-                # Try to migrate as actual PR
-                source_branch = bb_pr.get('source', {}).get('branch', {}).get('name')
-                dest_branch = bb_pr.get('destination', {}).get('branch', {}).get('name', 'main')
-                
-                if source_branch:
-                    self.log(f"  Attempting to create as GitHub PR: {source_branch} -> {dest_branch}")
+                if source_branch and dest_branch:
+                    # Check if both branches exist on GitHub
+                    self.log(f"  Checking branch existence on GitHub...")
+                    source_exists = self.check_branch_exists(source_branch)
+                    dest_exists = self.check_branch_exists(dest_branch)
                     
-                    # Check if branches exist in GitHub
-                    # Note: This assumes you've already pushed all branches via git
-                    body = self.format_issue_body(bb_pr) if 'content' in bb_pr else bb_pr.get('description', '')
-                    
-                    gh_pr = self.create_gh_pr(
-                        title=title,
-                        body=body,
-                        head=source_branch,
-                        base=dest_branch
-                    )
-                    
-                    if gh_pr:
-                        self.pr_mapping[pr_num] = gh_pr['number']
+                    if source_exists and dest_exists:
+                        # Try to create as actual GitHub PR
+                        self.log(f"  ✓ Both branches exist, creating as GitHub PR")
                         
-                        # Add comments
-                        comments = self.fetch_bb_pr_comments(pr_num)
-                        for comment in comments:
-                            comment_body = self.format_comment_body(comment)
-                            self.create_gh_comment(gh_pr['number'], comment_body)
+                        body = self.format_pr_body(bb_pr)
                         
-                        self.log(f"  ✓ Migrated PR #{pr_num} -> PR #{gh_pr['number']} with {len(comments)} comments")
-                        continue
+                        gh_pr = self.create_gh_pr(
+                            title=title,
+                            body=body,
+                            head=source_branch,
+                            base=dest_branch
+                        )
+                        
+                        if gh_pr:
+                            self.pr_mapping[pr_num] = gh_pr['number']
+                            self.stats['prs_as_prs'] += 1
+                            
+                            # Add comments
+                            comments = self.fetch_bb_pr_comments(pr_num)
+                            for comment in comments:
+                                comment_body = self.format_comment_body(comment)
+                                self.create_gh_comment(gh_pr['number'], comment_body, is_pr=True)
+                            
+                            self.log(f"  ✓ Successfully migrated as PR #{gh_pr['number']} with {len(comments)} comments")
+                            continue
+                        else:
+                            self.log(f"  ✗ Failed to create GitHub PR, falling back to issue migration")
                     else:
-                        self.log(f"  ⚠ Could not create as PR, falling back to issue migration")
+                        # Branches don't exist
+                        self.log(f"  ✗ Cannot create as PR - branches missing on GitHub")
+                        self.stats['pr_branch_missing'] += 1
+                else:
+                    self.log(f"  ✗ Missing branch information in Bitbucket data")
+            else:
+                # MERGED, DECLINED, or SUPERSEDED - always migrate as issue
+                self.log(f"  → Migrating as issue (PR was {pr_state} - safest approach)")
+                if pr_state in ['MERGED', 'SUPERSEDED']:
+                    self.stats['pr_merged_as_issue'] += 1
             
-            # Migrate as issue (for closed/merged/declined PRs or failed PR creation)
-            self.log(f"  Migrating as issue (PR was {pr_state})")
+            # Migrate as issue (for all non-open PRs or failed PR creation)
+            self.log(f"  Creating as GitHub issue...")
             
             body = self.format_pr_as_issue_body(bb_pr)
+            
+            # Determine labels based on original state
+            labels = ['migrated-from-bitbucket', 'original-pr']
+            if pr_state == 'MERGED':
+                labels.append('pr-merged')
+            elif pr_state == 'DECLINED':
+                labels.append('pr-declined')
+            elif pr_state == 'SUPERSEDED':
+                labels.append('pr-superseded')
             
             gh_issue = self.create_gh_issue(
                 title=f"[PR #{pr_num}] {title}",
                 body=body,
-                labels=['migrated-from-bitbucket', 'original-pr', f'pr-{pr_state.lower()}'],
+                labels=labels,
                 state='closed'  # Always close migrated PRs that are now issues
             )
             
             self.pr_mapping[pr_num] = gh_issue['number']
+            self.stats['prs_as_issues'] += 1
             
             # Add comments
             comments = self.fetch_bb_pr_comments(pr_num)
@@ -585,7 +740,7 @@ class BitbucketToGitHubMigrator:
                 comment_body = self.format_comment_body(comment)
                 self.create_gh_comment(gh_issue['number'], comment_body)
             
-            self.log(f"  ✓ Migrated PR #{pr_num} -> Issue #{gh_issue['number']} with {len(comments)} comments")
+            self.log(f"  ✓ Migrated as Issue #{gh_issue['number']} with {len(comments)} comments")
     
     def save_mapping(self, filename: str = 'migration_mapping.json'):
         """Save issue/PR mapping to file"""
@@ -600,6 +755,7 @@ class BitbucketToGitHubMigrator:
             },
             'issue_mapping': self.issue_mapping,
             'pr_mapping': self.pr_mapping,
+            'statistics': self.stats,
             'migration_date': datetime.now().isoformat()
         }
         
@@ -607,25 +763,29 @@ class BitbucketToGitHubMigrator:
             json.dump(mapping, f, indent=2)
         
         self.log(f"\nMapping saved to {filename}")
+    
+    def print_summary(self):
+        """Print migration summary statistics"""
+        self.log("\n" + "="*80)
+        self.log("MIGRATION SUMMARY")
+        self.log("="*80)
+        
+        self.log(f"\nIssues:")
+        self.log(f"  Total migrated: {len(self.issue_mapping)}")
+        
+        self.log(f"\nPull Requests:")
+        self.log(f"  Total processed: {len(self.pr_mapping)}")
+        self.log(f"  Migrated as GitHub PRs: {self.stats['prs_as_prs']}")
+        self.log(f"  Migrated as GitHub Issues: {self.stats['prs_as_issues']}")
+        self.log(f"    - Due to merged/closed state: {self.stats['pr_merged_as_issue']}")
+        self.log(f"    - Due to missing branches: {self.stats['pr_branch_missing']}")
+        
+        self.log(f"\nAttachments:")
+        self.log(f"  Total downloaded: {len(self.attachments)}")
+        self.log(f"  Location: {self.attachment_dir}/")
+        
+        self.log("\n" + "="*80)
 
-    def fetch_bb_issue_comments(self, issue_id: int) -> List[dict]:
-        """Fetch comments for a Bitbucket issue"""
-        url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/issues/{issue_id}/comments"
-        
-        comments = []
-        next_url = url
-        
-        while next_url:
-            response = self.bb_session.get(next_url)
-            if response.status_code == 404:
-                break
-            response.raise_for_status()
-            data = response.json()
-            
-            comments.extend(data.get('values', []))
-            next_url = data.get('next')
-            
-        return comments
 
 def load_config(config_file: str) -> dict:
     """Load configuration from JSON file"""
@@ -657,6 +817,24 @@ Configuration file format (config.json):
     "User Without GitHub": null
   }
 }
+
+IMPROVEMENTS IN THIS VERSION:
+- Branch existence checking before creating PRs
+- Only OPEN PRs are migrated as GitHub PRs (if branches exist)
+- MERGED/CLOSED PRs always become issues (safest - no re-merging!)
+- Better logging showing branch status and migration decisions
+- Migration statistics tracking
+
+PR MIGRATION STRATEGY:
+- OPEN PRs with existing branches → GitHub PRs (remain open)
+- OPEN PRs with missing branches → GitHub Issues
+- MERGED/DECLINED/SUPERSEDED PRs → GitHub Issues (always)
+
+Why this approach?
+- Avoids any risk of re-merging already-merged code
+- Preserves full metadata for closed PRs in issue format
+- Only active (OPEN) PRs become actual GitHub PRs
+- Git history already contains all merged changes
 
 User Mapping Notes:
 - Map Bitbucket display names to GitHub usernames
@@ -717,13 +895,29 @@ Example:
         migrator.log("🔍 DRY RUN MODE ENABLED")
         migrator.log("="*80)
         migrator.log("This is a simulation - NO changes will be made to GitHub")
-        migrator.log("GitHub credentials will not be validated")
+        migrator.log("")
+        migrator.log("What WILL happen (read-only):")
+        migrator.log("  ✓ Fetch all issues and PRs from Bitbucket")
+        migrator.log("  ✓ Check if branches exist on GitHub")
+        migrator.log("  ✓ Download attachments to local folder")
+        migrator.log("  ✓ Validate user mappings")
+        migrator.log("  ✓ Show exactly which PRs become GitHub PRs vs Issues")
+        migrator.log("")
+        migrator.log("What WON'T happen (no writes):")
+        migrator.log("  ✗ No issues created on GitHub")
+        migrator.log("  ✗ No PRs created on GitHub")
+        migrator.log("  ✗ No comments added to GitHub")
+        migrator.log("  ✗ No labels applied")
+        migrator.log("")
         migrator.log("Use this to verify:")
-        migrator.log("  ✓ Bitbucket connection works")
-        migrator.log("  ✓ User mappings are correct")
-        migrator.log("  ✓ Issues/PRs are detected properly")
-        migrator.log("  ✓ Attachment downloads work")
-        migrator.log("\nAfter successful dry-run, remove --dry-run flag to migrate")
+        migrator.log("  • Bitbucket connection works")
+        migrator.log("  • GitHub connection works (read-only check)")
+        migrator.log("  • User mappings are correct")
+        migrator.log("  • Branch existence (actual check)")
+        migrator.log("  • PR migration strategy (which become PRs vs issues)")
+        migrator.log("  • Exact GitHub issue/PR numbers that will be created")
+        migrator.log("")
+        migrator.log("After successful dry-run, remove --dry-run flag to migrate")
         migrator.log("="*80 + "\n")
     
     try:
@@ -731,29 +925,29 @@ Example:
         bb_issues = migrator.fetch_bb_issues() if not args.skip_issues else []
         bb_prs = migrator.fetch_bb_prs() if not args.skip_prs else []
         
-        # Test GitHub connection (for non-dry-run)
-        if not args.dry_run:
-            migrator.log("Testing GitHub connection...")
-            try:
-                # Test API access
-                test_url = f"https://api.github.com/repos/{config['github']['owner']}/{config['github']['repo']}"
-                test_response = migrator.gh_session.get(test_url)
-                test_response.raise_for_status()
+        # Test GitHub connection (read-only, safe for dry-run)
+        migrator.log("Testing GitHub connection...")
+        try:
+            # Test API access (read-only)
+            test_url = f"https://api.github.com/repos/{config['github']['owner']}/{config['github']['repo']}"
+            test_response = migrator.gh_session.get(test_url)
+            test_response.raise_for_status()
+            
+            if args.dry_run:
+                migrator.log("  ✓ GitHub connection successful (read-only check)")
+            else:
                 migrator.log("  ✓ GitHub connection successful")
-            except requests.exceptions.HTTPError as e:
-                if test_response.status_code == 401:
-                    migrator.log("  ✗ ERROR: GitHub authentication failed")
-                    migrator.log("  Please check your GitHub token in migration_config.json")
-                    sys.exit(1)
-                elif test_response.status_code == 404:
-                    migrator.log(f"  ✗ ERROR: Repository not found: {config['github']['owner']}/{config['github']['repo']}")
-                    migrator.log("  Please verify the repository exists and you have access")
-                    sys.exit(1)
-                else:
-                    raise
-        else:
-            migrator.log("⚠️  DRY RUN MODE: Skipping GitHub connection test")
-            migrator.log("   GitHub credentials will not be validated")
+        except requests.exceptions.HTTPError as e:
+            if test_response.status_code == 401:
+                migrator.log("  ✗ ERROR: GitHub authentication failed")
+                migrator.log("  Please check your GitHub token in migration_config.json")
+                sys.exit(1)
+            elif test_response.status_code == 404:
+                migrator.log(f"  ✗ ERROR: Repository not found: {config['github']['owner']}/{config['github']['repo']}")
+                migrator.log("  Please verify the repository exists and you have access")
+                sys.exit(1)
+            else:
+                raise
         
         # Perform migration
         if not args.skip_issues:
@@ -765,11 +959,8 @@ Example:
         # Save mapping
         migrator.save_mapping()
         
-        migrator.log("\n" + "="*80)
-        migrator.log("MIGRATION COMPLETE!")
-        migrator.log("="*80)
-        migrator.log(f"Migrated {len(migrator.issue_mapping)} issues")
-        migrator.log(f"Migrated {len(migrator.pr_mapping)} PRs")
+        # Print summary
+        migrator.print_summary()
         
         # Print post-migration instructions
         if not args.dry_run and len(migrator.attachments) > 0:
@@ -788,6 +979,22 @@ Example:
             migrator.log("  - File will appear in comment with URL")
             migrator.log("\nNote: Comments already note which attachments belonged to each issue.")
             migrator.log(f"\nKeep {migrator.attachment_dir}/ folder as backup until all important files are uploaded.")
+            migrator.log("="*80 + "\n")
+        
+        # Print PR migration explanation
+        if not args.dry_run and not args.skip_prs:
+            migrator.log("\n" + "="*80)
+            migrator.log("ABOUT PR MIGRATION")
+            migrator.log("="*80)
+            migrator.log("\nPR Migration Strategy:")
+            migrator.log(f"  - OPEN PRs with existing branches → GitHub PRs ({migrator.stats['prs_as_prs']} migrated)")
+            migrator.log(f"  - All other PRs → GitHub Issues ({migrator.stats['prs_as_issues']} migrated)")
+            migrator.log("\nWhy merged PRs become issues:")
+            migrator.log("  - Prevents re-merging already-merged code")
+            migrator.log("  - Git history already contains all merged changes")
+            migrator.log("  - Full metadata preserved in issue description")
+            migrator.log("  - Safer approach - no risk of repository corruption")
+            migrator.log("\nMerged PRs are labeled 'pr-merged' so you can easily identify them.")
             migrator.log("="*80 + "\n")
         
     except KeyboardInterrupt:
