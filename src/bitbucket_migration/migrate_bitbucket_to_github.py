@@ -82,6 +82,137 @@ class BitbucketToGitHubMigrator:
         # Dry-run tracking: simulate issue/PR counter
         self.next_github_number = 1  # Track next expected GitHub issue/PR number
         
+        # Detailed migration records for report generation
+        self.issue_records = []  # Detailed issue migration records
+        self.pr_records = []  # Detailed PR migration records
+        
+        # Link rewriting tracking
+        self.link_rewrites = {
+            'issues': 0,
+            'prs': 0,
+            'total_links': 0
+        }
+    
+    def rewrite_bitbucket_links(self, text: str, item_type: str = 'issue', item_number: int = None) -> tuple:
+        """Rewrite Bitbucket issue/PR references to point to GitHub
+        
+        Args:
+            text: The text to rewrite (issue body or comment)
+            item_type: 'issue' or 'pr' for logging purposes
+            item_number: The current item number for logging
+            
+        Returns:
+            Tuple of (rewritten_text, links_found_count)
+            
+        Strategy:
+            - Make GitHub link primary: [#123](github_url) (was [BB #123](bitbucket_url))
+            - This makes it easy to click to GitHub while preserving history
+        """
+        if not text:
+            return text, 0
+        
+        original_text = text
+        links_found = 0
+        
+        # Pattern 1: Full Bitbucket issue URLs
+        # https://bitbucket.org/workspace/repo/issues/123
+        pattern_issue_url = rf'https://bitbucket\.org/{self.bb_workspace}/{self.bb_repo}/issues/(\d+)'
+        
+        def replace_issue_url(match):
+            nonlocal links_found
+            bb_num = int(match.group(1))
+            gh_num = self.issue_mapping.get(bb_num)
+            
+            if gh_num:
+                links_found += 1
+                gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_num}"
+                bb_url = match.group(0)
+                return f"[#{gh_num}]({gh_url}) *(was [BB #{bb_num}]({bb_url}))*"
+            return match.group(0)
+        
+        text = re.sub(pattern_issue_url, replace_issue_url, text)
+        
+        # Pattern 2: Full Bitbucket PR URLs
+        # https://bitbucket.org/workspace/repo/pull-requests/45
+        pattern_pr_url = rf'https://bitbucket\.org/{self.bb_workspace}/{self.bb_repo}/pull-requests/(\d+)'
+        
+        def replace_pr_url(match):
+            nonlocal links_found
+            bb_num = int(match.group(1))
+            gh_num = self.pr_mapping.get(bb_num)
+            
+            if gh_num:
+                links_found += 1
+                # Check if it became a PR or issue
+                pr_record = next((r for r in self.pr_records if r['bb_number'] == bb_num), None)
+                if pr_record and pr_record['gh_type'] == 'PR':
+                    gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/pull/{gh_num}"
+                    return f"[PR #{gh_num}]({gh_url}) *(was [BB PR #{bb_num}]({match.group(0)}))*"
+                else:
+                    gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_num}"
+                    return f"[#{gh_num}]({gh_url}) *(was [BB PR #{bb_num}]({match.group(0)}))*"
+            return match.group(0)
+        
+        text = re.sub(pattern_pr_url, replace_pr_url, text)
+        
+        # Pattern 3: Short issue references: #123 or issue #123
+        # Be careful not to match markdown headers or already-processed links
+        pattern_short_issue = r'(?<!\[)(?<!BB )#(\d+)(?!\])'
+        
+        def replace_short_issue(match):
+            nonlocal links_found
+            bb_num = int(match.group(1))
+            gh_num = self.issue_mapping.get(bb_num)
+            
+            if gh_num and bb_num != gh_num:  # Only rewrite if numbers differ
+                links_found += 1
+                gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_num}"
+                return f"[#{gh_num}]({gh_url}) *(was BB #{bb_num})*"
+            elif gh_num and bb_num == gh_num:
+                # Numbers match, just make it a clickable link
+                gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_num}"
+                return f"[#{gh_num}]({gh_url})"
+            return match.group(0)
+        
+        text = re.sub(pattern_short_issue, replace_short_issue, text)
+        
+        # Pattern 4: PR references: PR #45, pull request #45
+        pattern_pr_ref = r'(?:PR|pull request)\s*#(\d+)'
+        
+        def replace_pr_ref(match):
+            nonlocal links_found
+            bb_num = int(match.group(1))
+            gh_num = self.pr_mapping.get(bb_num)
+            
+            if gh_num:
+                links_found += 1
+                # Check if it became a PR or issue
+                pr_record = next((r for r in self.pr_records if r['bb_number'] == bb_num), None)
+                if pr_record and pr_record['gh_type'] == 'PR':
+                    gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/pull/{gh_num}"
+                    return f"[PR #{gh_num}]({gh_url}) *(was BB PR #{bb_num})*"
+                else:
+                    gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_num}"
+                    return f"[#{gh_num}]({gh_url}) *(was BB PR #{bb_num}, migrated as issue)*"
+            return match.group(0)
+        
+        text = re.sub(pattern_pr_ref, replace_pr_ref, text, flags=re.IGNORECASE)
+        
+        # Log if links were found
+        if links_found > 0:
+            self.link_rewrites['total_links'] += links_found
+            if item_type == 'issue':
+                self.link_rewrites['issues'] += 1
+            elif item_type == 'pr':
+                self.link_rewrites['prs'] += 1
+            
+            if self.dry_run:
+                self.log(f"  [DRY RUN] Would rewrite {links_found} link(s) in {item_type} #{item_number}")
+            else:
+                self.log(f"  → Rewrote {links_found} link(s) in {item_type} #{item_number}")
+        
+        return text, links_found
+        
     def log(self, message: str):
         """Log with timestamp"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -423,8 +554,12 @@ class BitbucketToGitHubMigrator:
         except Exception as e:
             self.log(f"  ERROR: Could not close PR #{pr_number}: {e}")
     
-    def format_issue_body(self, bb_issue: dict) -> str:
-        """Format issue body with metadata"""
+    def format_issue_body(self, bb_issue: dict) -> tuple:
+        """Format issue body with metadata
+        
+        Returns:
+            Tuple of (formatted_body, links_rewritten_count)
+        """
         reporter = bb_issue.get('reporter', {}).get('display_name', 'Unknown') if bb_issue.get('reporter') else 'Unknown (deleted user)'
         gh_reporter = self.map_user(reporter) if reporter != 'Unknown (deleted user)' else None
         
@@ -441,6 +576,10 @@ class BitbucketToGitHubMigrator:
         kind = bb_issue.get('kind', 'bug')
         priority = bb_issue.get('priority', 'major')
         
+        # Rewrite links in the issue content
+        content = bb_issue.get('content', {}).get('raw', '')
+        content, links_count = self.rewrite_bitbucket_links(content, 'issue', bb_issue['id'])
+        
         body = f"""**Migrated from Bitbucket**
 - Original Author: {reporter_mention}
 - Original Created: {created}
@@ -450,12 +589,16 @@ class BitbucketToGitHubMigrator:
 
 ---
 
-{bb_issue.get('content', {}).get('raw', '')}
+{content}
 """
-        return body
+        return body, links_count
     
-    def format_pr_as_issue_body(self, bb_pr: dict) -> str:
-        """Format a PR (that will be migrated as an issue) with full metadata"""
+    def format_pr_as_issue_body(self, bb_pr: dict) -> tuple:
+        """Format a PR (that will be migrated as an issue) with full metadata
+        
+        Returns:
+            Tuple of (formatted_body, links_rewritten_count)
+        """
         author = bb_pr.get('author', {}).get('display_name', 'Unknown') if bb_pr.get('author') else 'Unknown (deleted user)'
         gh_author = self.map_user(author) if author != 'Unknown (deleted user)' else None
         
@@ -474,6 +617,10 @@ class BitbucketToGitHubMigrator:
         source = bb_pr.get('source', {}).get('branch', {}).get('name', 'unknown')
         dest = bb_pr.get('destination', {}).get('branch', {}).get('name', 'unknown')
         
+        # Rewrite links in the PR description
+        description = bb_pr.get('description', '')
+        description, links_count = self.rewrite_bitbucket_links(description, 'pr', bb_pr['id'])
+        
         body = f"""⚠️ **This was a Pull Request on Bitbucket (migrated as an issue)**
 
 **Original PR Metadata:**
@@ -489,16 +636,20 @@ class BitbucketToGitHubMigrator:
 
 **Description:**
 
-{bb_pr.get('description', '')}
+{description}
 
 ---
 
 *Note: This PR was {state.lower()} on Bitbucket. It was migrated as a GitHub issue to preserve all metadata and comments. The actual code changes are in the git history.*
 """
-        return body
+        return body, links_count
     
-    def format_pr_body(self, bb_pr: dict) -> str:
-        """Format PR body for an actual GitHub PR (for OPEN PRs)"""
+    def format_pr_body(self, bb_pr: dict) -> tuple:
+        """Format PR body for an actual GitHub PR (for OPEN PRs)
+        
+        Returns:
+            Tuple of (formatted_body, links_rewritten_count)
+        """
         author = bb_pr.get('author', {}).get('display_name', 'Unknown') if bb_pr.get('author') else 'Unknown (deleted user)'
         gh_author = self.map_user(author) if author != 'Unknown (deleted user)' else None
         
@@ -513,6 +664,10 @@ class BitbucketToGitHubMigrator:
         created = bb_pr.get('created_on', '')
         bb_url = bb_pr.get('links', {}).get('html', {}).get('href', '')
         
+        # Rewrite links in the PR description
+        description = bb_pr.get('description', '')
+        description, links_count = self.rewrite_bitbucket_links(description, 'pr', bb_pr['id'])
+        
         body = f"""**Migrated from Bitbucket**
 - Original Author: {author_mention}
 - Original Created: {created}
@@ -520,12 +675,21 @@ class BitbucketToGitHubMigrator:
 
 ---
 
-{bb_pr.get('description', '')}
+{description}
 """
-        return body
+        return body, links_count
     
-    def format_comment_body(self, bb_comment: dict) -> str:
-        """Format a comment with original author and timestamp"""
+    def format_comment_body(self, bb_comment: dict, item_type: str = 'issue', item_number: int = None) -> tuple:
+        """Format a comment with original author and timestamp
+        
+        Args:
+            bb_comment: Bitbucket comment data
+            item_type: 'issue' or 'pr' for link rewriting context
+            item_number: The issue/PR number for link rewriting context
+            
+        Returns:
+            Tuple of (formatted_comment, links_rewritten_count)
+        """
         author = bb_comment.get('user', {}).get('display_name', 'Unknown') if bb_comment.get('user') else 'Unknown (deleted user)'
         gh_author = self.map_user(author) if author != 'Unknown (deleted user)' else None
         
@@ -540,10 +704,14 @@ class BitbucketToGitHubMigrator:
         created = bb_comment.get('created_on', '')
         content = bb_comment.get('content', {}).get('raw', '')
         
-        return f"""**Comment by {author_mention} on {created}:**
+        # Rewrite links in the comment
+        content, links_count = self.rewrite_bitbucket_links(content, item_type, item_number)
+        
+        comment_body = f"""**Comment by {author_mention} on {created}:**
 
 {content}
 """
+        return comment_body, links_count
     
     def migrate_issues(self, bb_issues: List[dict]):
         """Migrate all Bitbucket issues to GitHub"""
@@ -577,12 +745,35 @@ class BitbucketToGitHubMigrator:
                     state='closed'
                 )
                 self.issue_mapping[expected_num] = placeholder['number']
+                
+                # Record placeholder for report
+                self.issue_records.append({
+                    'bb_number': expected_num,
+                    'gh_number': placeholder['number'],
+                    'title': '[Placeholder - Deleted Issue]',
+                    'reporter': 'N/A',
+                    'gh_reporter': None,
+                    'state': 'deleted',
+                    'kind': 'N/A',
+                    'priority': 'N/A',
+                    'comments': 0,
+                    'attachments': 0,
+                    'links_rewritten': 0,
+                    'bb_url': '',
+                    'gh_url': f"https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{placeholder['number']}",
+                    'remarks': ['Placeholder for deleted/missing issue']
+                })
+                
                 expected_num += 1
             
             # Migrate actual issue
             self.log(f"Migrating issue #{issue_num}: {bb_issue.get('title', 'No title')}")
             
-            body = self.format_issue_body(bb_issue)
+            # Extract reporter info (needed for both body and record)
+            reporter = bb_issue.get('reporter', {}).get('display_name', 'Unknown') if bb_issue.get('reporter') else 'Unknown (deleted user)'
+            gh_reporter = self.map_user(reporter) if reporter != 'Unknown (deleted user)' else None
+            
+            body, links_in_body = self.format_issue_body(bb_issue)
             
             # Map assignee
             assignees = []
@@ -629,9 +820,29 @@ class BitbucketToGitHubMigrator:
             
             # Migrate comments
             comments = self.fetch_bb_issue_comments(issue_num)
+            links_in_comments = 0
             for comment in comments:
-                comment_body = self.format_comment_body(comment)
+                comment_body, comment_links = self.format_comment_body(comment, 'issue', issue_num)
+                links_in_comments += comment_links
                 self.create_gh_comment(gh_issue['number'], comment_body)
+            
+            # Record migration details for report (after we have all the data)
+            self.issue_records.append({
+                'bb_number': issue_num,
+                'gh_number': gh_issue['number'],
+                'title': bb_issue.get('title', f'Issue #{issue_num}'),
+                'reporter': reporter,
+                'gh_reporter': gh_reporter,
+                'state': bb_issue.get('state', 'unknown'),
+                'kind': bb_issue.get('kind', 'bug'),
+                'priority': bb_issue.get('priority', 'major'),
+                'comments': len(comments),
+                'attachments': len(attachments),
+                'links_rewritten': links_in_body + links_in_comments,
+                'bb_url': bb_issue.get('links', {}).get('html', {}).get('href', ''),
+                'gh_url': f"https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_issue['number']}",
+                'remarks': []
+            })
             
             self.log(f"  ✓ Migrated issue #{issue_num} -> #{gh_issue['number']} with {len(comments)} comments and {len(attachments)} attachments")
             expected_num += 1
@@ -675,7 +886,7 @@ class BitbucketToGitHubMigrator:
                         # Try to create as actual GitHub PR
                         self.log(f"  ✓ Both branches exist, creating as GitHub PR")
                         
-                        body = self.format_pr_body(bb_pr)
+                        body, links_in_body = self.format_pr_body(bb_pr)
                         
                         gh_pr = self.create_gh_pr(
                             title=title,
@@ -688,10 +899,30 @@ class BitbucketToGitHubMigrator:
                             self.pr_mapping[pr_num] = gh_pr['number']
                             self.stats['prs_as_prs'] += 1
                             
+                            # Record PR migration details
+                            author = bb_pr.get('author', {}).get('display_name', 'Unknown') if bb_pr.get('author') else 'Unknown (deleted user)'
+                            gh_author = self.map_user(author) if author != 'Unknown (deleted user)' else None
+                            
+                            self.pr_records.append({
+                                'bb_number': pr_num,
+                                'gh_number': gh_pr['number'],
+                                'gh_type': 'PR',
+                                'title': title,
+                                'author': author,
+                                'gh_author': gh_author,
+                                'state': pr_state,
+                                'source_branch': source_branch,
+                                'dest_branch': dest_branch,
+                                'comments': len(self.fetch_bb_pr_comments(pr_num)),
+                                'bb_url': bb_pr.get('links', {}).get('html', {}).get('href', ''),
+                                'gh_url': f"https://github.com/{self.gh_owner}/{self.gh_repo}/pull/{gh_pr['number']}",
+                                'remarks': ['Migrated as GitHub PR', 'Branches exist on GitHub']
+                            })
+                            
                             # Add comments
                             comments = self.fetch_bb_pr_comments(pr_num)
                             for comment in comments:
-                                comment_body = self.format_comment_body(comment)
+                                comment_body = self.format_comment_body(comment, 'pr', pr_num)
                                 self.create_gh_comment(gh_pr['number'], comment_body, is_pr=True)
                             
                             self.log(f"  ✓ Successfully migrated as PR #{gh_pr['number']} with {len(comments)} comments")
@@ -713,7 +944,7 @@ class BitbucketToGitHubMigrator:
             # Migrate as issue (for all non-open PRs or failed PR creation)
             self.log(f"  Creating as GitHub issue...")
             
-            body = self.format_pr_as_issue_body(bb_pr)
+            body, links_in_body = self.format_pr_as_issue_body(bb_pr)
             
             # Determine labels based on original state
             labels = ['migrated-from-bitbucket', 'original-pr']
@@ -736,9 +967,43 @@ class BitbucketToGitHubMigrator:
             
             # Add comments
             comments = self.fetch_bb_pr_comments(pr_num)
+            links_in_comments = 0
             for comment in comments:
-                comment_body = self.format_comment_body(comment)
+                comment_body, comment_links = self.format_comment_body(comment, 'pr', pr_num)
+                links_in_comments += comment_links
                 self.create_gh_comment(gh_issue['number'], comment_body)
+            
+            # Record PR-as-issue migration details (after comments are fetched)
+            author = bb_pr.get('author', {}).get('display_name', 'Unknown') if bb_pr.get('author') else 'Unknown (deleted user)'
+            gh_author = self.map_user(author) if author != 'Unknown (deleted user)' else None
+            
+            # Determine remarks
+            remarks = ['Migrated as GitHub Issue']
+            if pr_state in ['MERGED', 'SUPERSEDED']:
+                remarks.append('Original PR was merged - safer as issue to avoid re-merge')
+            elif pr_state == 'DECLINED':
+                remarks.append('Original PR was declined')
+            if not source_branch or not dest_branch:
+                remarks.append('Branch information missing')
+            elif not self.check_branch_exists(source_branch) or not self.check_branch_exists(dest_branch):
+                remarks.append('One or both branches do not exist on GitHub')
+            
+            self.pr_records.append({
+                'bb_number': pr_num,
+                'gh_number': gh_issue['number'],
+                'gh_type': 'Issue',
+                'title': title,
+                'author': author,
+                'gh_author': gh_author,
+                'state': pr_state,
+                'source_branch': source_branch or 'unknown',
+                'dest_branch': dest_branch or 'unknown',
+                'comments': len(comments),
+                'links_rewritten': links_in_body + links_in_comments,
+                'bb_url': bb_pr.get('links', {}).get('html', {}).get('href', ''),
+                'gh_url': f"https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_issue['number']}",
+                'remarks': remarks
+            })
             
             self.log(f"  ✓ Migrated as Issue #{gh_issue['number']} with {len(comments)} comments")
     
@@ -764,6 +1029,248 @@ class BitbucketToGitHubMigrator:
         
         self.log(f"\nMapping saved to {filename}")
     
+    def generate_migration_report(self, filename: str = 'migration_report.md'):
+        """Generate a comprehensive markdown migration report"""
+        
+        report = []
+        report.append("# Bitbucket to GitHub Migration Report")
+        report.append("")
+        report.append(f"**Migration Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        report.append(f"**Source:** Bitbucket `{self.bb_workspace}/{self.bb_repo}`")
+        report.append(f"**Destination:** GitHub `{self.gh_owner}/{self.gh_repo}`")
+        report.append("")
+        
+        if self.dry_run:
+            report.append("**⚠️ DRY RUN MODE** - This is a simulation report")
+            report.append("")
+        
+        # Executive Summary
+        report.append("## Executive Summary")
+        report.append("")
+        report.append(f"- **Total Issues Migrated:** {len(self.issue_records)}")
+        report.append(f"  - Real Issues: {len([r for r in self.issue_records if r['state'] != 'deleted'])}")
+        report.append(f"  - Placeholders: {len([r for r in self.issue_records if r['state'] == 'deleted'])}")
+        report.append(f"- **Total Pull Requests Migrated:** {len(self.pr_records)}")
+        report.append(f"  - As GitHub PRs: {self.stats['prs_as_prs']}")
+        report.append(f"  - As GitHub Issues: {self.stats['prs_as_issues']}")
+        report.append(f"- **Total Attachments:** {len(self.attachments)}")
+        report.append(f"- **Link Rewriting:**")
+        report.append(f"  - Issues with rewritten links: {self.link_rewrites['issues']}")
+        report.append(f"  - PRs with rewritten links: {self.link_rewrites['prs']}")
+        report.append(f"  - Total links rewritten: {self.link_rewrites['total_links']}")
+        report.append("")
+        
+        # Table of Contents
+        report.append("## Table of Contents")
+        report.append("")
+        report.append("1. [Issues Migration](#issues-migration)")
+        report.append("2. [Pull Requests Migration](#pull-requests-migration)")
+        report.append("3. [Attachments](#attachments)")
+        report.append("4. [User Mapping](#user-mapping)")
+        report.append("5. [Migration Statistics](#migration-statistics)")
+        report.append("")
+        
+        # Issues Migration
+        report.append("---")
+        report.append("")
+        report.append("## Issues Migration")
+        report.append("")
+        report.append(f"**Total Issues:** {len(self.issue_records)}")
+        report.append("")
+        
+        # Issues table
+        report.append("| BB # | GH # | Title | Reporter | State | Kind | Comments | Attachments | Links | Remarks |")
+        report.append("|------|------|-------|----------|-------|------|----------|-------------|-------|---------|")
+        
+        for record in sorted(self.issue_records, key=lambda x: x['bb_number']):
+            bb_num = record['bb_number']
+            gh_num = record['gh_number']
+            title = record['title'][:50] + ('...' if len(record['title']) > 50 else '')
+            reporter = record['reporter'][:20] if record['reporter'] != 'N/A' else 'N/A'
+            state = record['state']
+            kind = record['kind']
+            comments = record['comments']
+            attachments = record['attachments']
+            links = record.get('links_rewritten', 0)  # Use .get() with default
+            remarks = ', '.join(record['remarks']) if record['remarks'] else '-'
+            
+            # Create links
+            if record['bb_url']:
+                bb_link = f"[#{bb_num}]({record['bb_url']})"
+            else:
+                bb_link = f"#{bb_num}"
+            
+            gh_link = f"[#{gh_num}]({record['gh_url']})"
+            
+            report.append(f"| {bb_link} | {gh_link} | {title} | {reporter} | {state} | {kind} | {comments} | {attachments} | {links} | {remarks} |")
+        
+        report.append("")
+        
+        # Pull Requests Migration
+        report.append("---")
+        report.append("")
+        report.append("## Pull Requests Migration")
+        report.append("")
+        report.append(f"**Total Pull Requests:** {len(self.pr_records)}")
+        report.append("")
+        
+        # PRs table
+        report.append("| BB PR # | GH # | Type | Title | Author | State | Source → Dest | Comments | Links | Remarks |")
+        report.append("|---------|------|------|-------|--------|-------|---------------|----------|-------|---------|")
+        
+        for record in sorted(self.pr_records, key=lambda x: x['bb_number']):
+            bb_num = record['bb_number']
+            gh_num = record['gh_number']
+            gh_type = record['gh_type']
+            title = record['title'][:40] + ('...' if len(record['title']) > 40 else '')
+            author = record['author'][:20]
+            state = record['state']
+            branches = f"`{record['source_branch'][:15]}` → `{record['dest_branch'][:15]}`"
+            comments = record['comments']
+            links = record.get('links_rewritten', 0)  # Use .get() with default
+            remarks = '<br>'.join(record['remarks'])
+            
+            # Create links
+            bb_link = f"[PR #{bb_num}]({record['bb_url']})"
+            
+            if gh_type == 'PR':
+                gh_link = f"[PR #{gh_num}]({record['gh_url']})"
+            else:
+                gh_link = f"[Issue #{gh_num}]({record['gh_url']})"
+            
+            report.append(f"| {bb_link} | {gh_link} | {gh_type} | {title} | {author} | {state} | {branches} | {comments} | {links} | {remarks} |")
+        
+        report.append("")
+        
+        # Attachments
+        report.append("---")
+        report.append("")
+        report.append("## Attachments")
+        report.append("")
+        report.append(f"**Total Attachments Downloaded:** {len(self.attachments)}")
+        report.append("")
+        
+        if self.attachments:
+            report.append("| Issue/PR | GitHub # | Filename | Local Path |")
+            report.append("|----------|----------|----------|------------|")
+            
+            for att in sorted(self.attachments, key=lambda x: x['issue_number']):
+                issue_num = att['issue_number']
+                gh_num = att['github_issue']
+                filename = att['filename']
+                filepath = att['filepath']
+                
+                report.append(f"| Issue #{issue_num} | [#{gh_num}](https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_num}) | `{filename}` | `{filepath}` |")
+            
+            report.append("")
+            report.append("**Note:** Attachments have been downloaded to the local `attachments_temp/` directory.")
+            report.append("They need to be manually uploaded to the corresponding GitHub issues.")
+        else:
+            report.append("No attachments were found in the migration.")
+        
+        report.append("")
+        
+        # User Mapping
+        report.append("---")
+        report.append("")
+        report.append("## User Mapping")
+        report.append("")
+        report.append("The following user mappings were used during migration:")
+        report.append("")
+        report.append("| Bitbucket User | GitHub User | Status |")
+        report.append("|----------------|-------------|--------|")
+        
+        # Collect all unique users from records
+        all_users = set()
+        for record in self.issue_records:
+            if record['reporter'] not in ['N/A', 'Unknown (deleted user)']:
+                all_users.add((record['reporter'], record['gh_reporter']))
+        for record in self.pr_records:
+            if record['author'] not in ['Unknown (deleted user)']:
+                all_users.add((record['author'], record['gh_author']))
+        
+        for bb_user, gh_user in sorted(all_users, key=lambda x: x[0]):
+            if gh_user:
+                status = "✓ Mapped"
+                gh_display = f"@{gh_user}"
+            else:
+                status = "⚠️ No GitHub account"
+                gh_display = "-"
+            
+            report.append(f"| {bb_user} | {gh_display} | {status} |")
+        
+        report.append("")
+        
+        # Migration Statistics
+        report.append("---")
+        report.append("")
+        report.append("## Migration Statistics")
+        report.append("")
+        
+        report.append("### Issues")
+        report.append("")
+        report.append(f"- Total issues processed: {len(self.issue_records)}")
+        report.append(f"- Real issues: {len([r for r in self.issue_records if r['state'] != 'deleted'])}")
+        report.append(f"- Placeholder issues: {len([r for r in self.issue_records if r['state'] == 'deleted'])}")
+        report.append(f"- Open issues: {len([r for r in self.issue_records if r['state'] in ['new', 'open']])}")
+        report.append(f"- Closed issues: {len([r for r in self.issue_records if r['state'] not in ['new', 'open', 'deleted']])}")
+        report.append(f"- Total comments: {sum(r['comments'] for r in self.issue_records)}")
+        report.append(f"- Total attachments: {sum(r['attachments'] for r in self.issue_records)}")
+        report.append("")
+        
+        report.append("### Pull Requests")
+        report.append("")
+        report.append(f"- Total PRs processed: {len(self.pr_records)}")
+        report.append(f"- Migrated as GitHub PRs: {self.stats['prs_as_prs']}")
+        report.append(f"- Migrated as GitHub Issues: {self.stats['prs_as_issues']}")
+        report.append(f"  - Due to merged/closed state: {self.stats['pr_merged_as_issue']}")
+        report.append(f"  - Due to missing branches: {self.stats['pr_branch_missing']}")
+        report.append(f"- Total PR comments: {sum(r['comments'] for r in self.pr_records)}")
+        report.append("")
+        
+        # State breakdown for PRs
+        pr_states = {}
+        for record in self.pr_records:
+            state = record['state']
+            pr_states[state] = pr_states.get(state, 0) + 1
+        
+        report.append("### Pull Request States")
+        report.append("")
+        for state, count in sorted(pr_states.items()):
+            report.append(f"- {state}: {count}")
+        report.append("")
+        
+        # Footer
+        report.append("---")
+        report.append("")
+        report.append("## Notes")
+        report.append("")
+        report.append("- All issues maintain their original numbering from Bitbucket (with placeholders for gaps)")
+        report.append("- Pull requests share the same numbering sequence as issues on GitHub")
+        report.append("- Merged/closed PRs were migrated as issues to avoid re-merging code")
+        report.append("- Original metadata (dates, authors, URLs) are preserved in issue/PR descriptions")
+        report.append("- All comments include original author and timestamp information")
+        report.append("- **Links to other issues/PRs have been rewritten:**")
+        report.append("  - GitHub links are now primary (clickable)")
+        report.append("  - Original Bitbucket references preserved in italics")
+        report.append(f"  - Format: [#123](github_url) *(was [BB #123](bitbucket_url))*")
+        report.append(f"  - Total of {self.link_rewrites['total_links']} cross-references updated")
+        report.append("")
+        report.append(f"**Migration completed:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        report.append("")
+        report.append("---")
+        report.append("")
+        report.append("*This report was automatically generated by the Bitbucket to GitHub migration script.*")
+        
+        # Write report to file
+        report_content = '\n'.join(report)
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(report_content)
+        
+        self.log(f"\nMigration report saved to {filename}")
+        
+        return filename
+    
     def print_summary(self):
         """Print migration summary statistics"""
         self.log("\n" + "="*80)
@@ -783,6 +1290,15 @@ class BitbucketToGitHubMigrator:
         self.log(f"\nAttachments:")
         self.log(f"  Total downloaded: {len(self.attachments)}")
         self.log(f"  Location: {self.attachment_dir}/")
+        
+        self.log(f"\nLink Rewriting:")
+        self.log(f"  Issues with rewritten links: {self.link_rewrites['issues']}")
+        self.log(f"  PRs with rewritten links: {self.link_rewrites['prs']}")
+        self.log(f"  Total links rewritten: {self.link_rewrites['total_links']}")
+        
+        self.log(f"\nReports Generated:")
+        self.log(f"  ✓ migration_mapping.json - Machine-readable mapping")
+        self.log(f"  ✓ migration_report.md - Comprehensive migration report")
         
         self.log("\n" + "="*80)
 
@@ -824,6 +1340,8 @@ IMPROVEMENTS IN THIS VERSION:
 - MERGED/CLOSED PRs always become issues (safest - no re-merging!)
 - Better logging showing branch status and migration decisions
 - Migration statistics tracking
+- **Automatic link rewriting** - References to other issues/PRs are rewritten to point to GitHub
+- Comprehensive migration report in Markdown format
 
 PR MIGRATION STRATEGY:
 - OPEN PRs with existing branches → GitHub PRs (remain open)
@@ -835,6 +1353,14 @@ Why this approach?
 - Preserves full metadata for closed PRs in issue format
 - Only active (OPEN) PRs become actual GitHub PRs
 - Git history already contains all merged changes
+
+LINK REWRITING:
+- References to Bitbucket issues/PRs are automatically rewritten
+- GitHub links become primary (clickable)
+- Original Bitbucket references preserved for context
+- Handles: Full URLs, #123 references, PR #45 references
+- Works in: Issue descriptions, PR descriptions, all comments
+- Example: #5 becomes [#8](github_url) *(was BB #5)*
 
 User Mapping Notes:
 - Map Bitbucket display names to GitHub usernames
@@ -958,6 +1484,12 @@ Example:
         
         # Save mapping
         migrator.save_mapping()
+        
+        # Generate comprehensive migration report
+        if args.dry_run:
+            migrator.generate_migration_report(filename = "migration_report_dry_run.md")
+        else:
+            migrator.generate_migration_report()
         
         # Print summary
         migrator.print_summary()
