@@ -78,9 +78,7 @@
     
       
 
-  
-
-<header class="md-header md-header--shadow" data-md-component="header">
+<header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="Bitbucket → GitHub Migration" class="md-header__button md-logo" aria-label="Bitbucket → GitHub Migration" data-md-component="logo">
       
@@ -176,6 +174,137 @@
       
         
           
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../migration_guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Migration Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../attachment_upload/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Attachments
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../troubleshooting/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Troubleshooting
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../checklists/pre_migration/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Checklists
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../migration_config/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
         
       
       <main class="md-main" data-md-component="main">
@@ -189,8 +318,10 @@
                     
 
 
+  
 
-<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="Bitbucket → GitHub Migration" class="md-nav__button md-logo" aria-label="Bitbucket → GitHub Migration" data-md-component="logo">
       
@@ -311,14 +442,27 @@
   
     
     
+      
+        
+      
+        
+      
+        
+      
     
+    
+    
+      
+      
     
     
     <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
         
           
           <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
@@ -427,17 +571,33 @@
   
     
     
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
         <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
         
           
-          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
             
   
   
@@ -728,11 +888,11 @@
 <li>Copy the token immediately – it won’t be shown again.</li>
 </ol>
 <p><strong>Example usage in config:</strong></p>
-<pre><code class="language-json">&quot;bitbucket&quot;: {
-  &quot;email&quot;: &quot;you@example.com&quot;,
-  &quot;token&quot;: &quot;ATAT1234...&quot;
-}
-</code></pre>
+<div class="highlight"><pre><span></span><code><span class="nt">&quot;bitbucket&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;email&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;you@example.com&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ATAT1234...&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
 <hr />
 <h2 id="github-personal-access-token-pat">🔑 GitHub Personal Access Token (PAT)</h2>
 <ol>
@@ -743,12 +903,12 @@
 <li>Click <strong>Generate token</strong> and copy it.</li>
 </ol>
 <p><strong>Example usage in config:</strong></p>
-<pre><code class="language-json">&quot;github&quot;: {
-  &quot;owner&quot;: &quot;my-org&quot;,
-  &quot;repo&quot;: &quot;my-repo&quot;,
-  &quot;token&quot;: &quot;ghp_abcd123...&quot;
-}
-</code></pre>
+<div class="highlight"><pre><span></span><code><span class="nt">&quot;github&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;owner&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my-org&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;repo&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my-repo&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ghp_abcd123...&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
 <hr />
 <h2 id="token-security-best-practices">🔧 Token Security Best Practices</h2>
 <ul>
@@ -761,13 +921,13 @@
 <hr />
 <h2 id="verification">💡 Verification</h2>
 <p>Test your tokens before running the migration:</p>
-<pre><code class="language-bash"># Test Bitbucket token
-curl -u you@example.com:ATAT1234... https://api.bitbucket.org/2.0/user
+<div class="highlight"><pre><span></span><code><span class="c1"># Test Bitbucket token</span>
+curl<span class="w"> </span>-u<span class="w"> </span>you@example.com:ATAT1234...<span class="w"> </span>https://api.bitbucket.org/2.0/user
 
-# Test GitHub PAT
-token=ghp_abcd123...
-curl -H &quot;Authorization: token $token&quot; https://api.github.com/user
-</code></pre>
+<span class="c1"># Test GitHub PAT</span>
+<span class="nv">token</span><span class="o">=</span>ghp_abcd123...
+curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$token</span><span class="s2">&quot;</span><span class="w"> </span>https://api.github.com/user
+</code></pre></div>
 <p>If both commands return your user info, the tokens are valid.</p>
 <hr />
 
@@ -787,8 +947,16 @@ curl -H &quot;Authorization: token $token&quot; https://api.github.com/user
             </div>
           
           
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
 <script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
         </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
         
       </main>
       
@@ -834,7 +1002,7 @@ curl -H &quot;Authorization: token $token&quot; https://api.github.com/user
     
     
       
-      <script id="__config" type="application/json">{"base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.annotate", "content.code.copy", "content.tabs.link", "content.tooltips", "navigation.tabs", "navigation.top", "navigation.expand", "navigation.indexes", "content.code.fences", "content.code.mermaid"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>

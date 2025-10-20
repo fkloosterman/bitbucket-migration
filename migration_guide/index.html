@@ -78,9 +78,7 @@
     
       
 
-  
-
-<header class="md-header md-header--shadow" data-md-component="header">
+<header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href=".." title="Bitbucket → GitHub Migration" class="md-header__button md-logo" aria-label="Bitbucket → GitHub Migration" data-md-component="logo">
       
@@ -176,6 +174,137 @@
       
         
           
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Migration Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../attachment_upload/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Attachments
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../troubleshooting/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Troubleshooting
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../checklists/pre_migration/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Checklists
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference/migration_config/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
         
       
       <main class="md-main" data-md-component="main">
@@ -189,8 +318,10 @@
                     
 
 
+  
 
-<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
     <a href=".." title="Bitbucket → GitHub Migration" class="md-nav__button md-logo" aria-label="Bitbucket → GitHub Migration" data-md-component="logo">
       
@@ -536,14 +667,27 @@
   
     
     
+      
+        
+      
+        
+      
+        
+      
     
+    
+    
+      
+      
     
     
     <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
         
           
           <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
@@ -650,14 +794,29 @@
   
     
     
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
+    
+    
+      
+      
     
     
     <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
         
           
           <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
@@ -1020,13 +1179,12 @@
 </ul>
 <hr />
 <h2 id="migration-phases">🧱 Migration Phases</h2>
-<pre><code class="language-mermaid">flowchart TD
+<pre class="mermaid"><code>flowchart TD
 A[1. Audit Bitbucket Repo] --&gt; B[2. Push Git Mirror]
 B --&gt; C[3. Dry Run Migration]
 C --&gt; D[4. Run Full Migration]
 D --&gt; E[5. Upload Attachments]
-E --&gt; F[6. Verify &amp; Clean Up]
-</code></pre>
+E --&gt; F[6. Verify &amp; Clean Up]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1083,22 +1241,22 @@ E --&gt; F[6. Verify &amp; Clean Up]
   → <a href="https://github.com/settings/tokens">Create PAT</a></li>
 </ul>
 <h3 id="local-setup">Local Setup</h3>
-<pre><code class="language-bash">git --version
-python3 --version
-pip install requests
-</code></pre>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>--version
+python3<span class="w"> </span>--version
+pip<span class="w"> </span>install<span class="w"> </span>requests
+</code></pre></div>
 <hr />
 <h2 id="step-by-step-migration">⚙️ Step-by-Step Migration</h2>
 <h3 id="step-1-run-audit">Step 1 — Run Audit</h3>
 <p>Generates the initial configuration and user mapping.</p>
-<pre><code class="language-bash">python audit_bitbucket.py \
-  --workspace WORKSPACE \
-  --repo REPO \
-  --email YOU@DOMAIN \
-  --generate-config \
-  --gh-owner GITHUB_USER \
-  --gh-repo REPO
-</code></pre>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--workspace<span class="w"> </span>WORKSPACE<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--repo<span class="w"> </span>REPO<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--email<span class="w"> </span>YOU@DOMAIN<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--generate-config<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--gh-owner<span class="w"> </span>GITHUB_USER<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--gh-repo<span class="w"> </span>REPO
+</code></pre></div>
 <p><strong>Outputs</strong></p>
 <ul>
 <li><code>audit_report.md</code> – summary of repo data</li>
@@ -1116,20 +1274,20 @@ See <a href="../reference/user_mapping/">User Mapping Reference</a>.</p>
 </ol>
 <hr />
 <h3 id="step-3-migrate-git-history">Step 3 — Migrate Git History</h3>
-<pre><code class="language-bash">git clone --mirror https://bitbucket.org/WORKSPACE/REPO.git
-cd REPO.git
-git remote add github https://github.com/OWNER/REPO.git
-git push --mirror github
-</code></pre>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>--mirror<span class="w"> </span>https://bitbucket.org/WORKSPACE/REPO.git
+<span class="nb">cd</span><span class="w"> </span>REPO.git
+git<span class="w"> </span>remote<span class="w"> </span>add<span class="w"> </span>github<span class="w"> </span>https://github.com/OWNER/REPO.git
+git<span class="w"> </span>push<span class="w"> </span>--mirror<span class="w"> </span>github
+</code></pre></div>
 <p>Verify:</p>
-<pre><code class="language-bash">git ls-remote github
-</code></pre>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>ls-remote<span class="w"> </span>github
+</code></pre></div>
 <hr />
 <h3 id="step-4-dry-run-migration">Step 4 — Dry Run Migration</h3>
-<pre><code class="language-bash">python migrate_bitbucket_to_github.py \
-  --config migration_config.json \
-  --dry-run
-</code></pre>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>migrate_bitbucket_to_github.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--dry-run
+</code></pre></div>
 <p>Check for:</p>
 <ul>
 <li>Token authentication success</li>
@@ -1139,9 +1297,9 @@ git push --mirror github
 </ul>
 <hr />
 <h3 id="step-5-run-full-migration">Step 5 — Run Full Migration</h3>
-<pre><code class="language-bash">python migrate_bitbucket_to_github.py \
-  --config migration_config.json
-</code></pre>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>migrate_bitbucket_to_github.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--config<span class="w"> </span>migration_config.json
+</code></pre></div>
 <p><strong>Outputs</strong></p>
 <ul>
 <li>Migrated issues and PRs (open PRs remain PRs; closed PRs become issues)</li>
@@ -1305,8 +1463,16 @@ git push --mirror github
             </div>
           
           
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
 <script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
         </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
         
       </main>
       
@@ -1352,7 +1518,7 @@ git push --mirror github
     
     
       
-      <script id="__config" type="application/json">{"base": "..", "features": [], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "..", "features": ["content.code.annotate", "content.code.copy", "content.tabs.link", "content.tooltips", "navigation.tabs", "navigation.top", "navigation.expand", "navigation.indexes", "content.code.fences", "content.code.mermaid"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>

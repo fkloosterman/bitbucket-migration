@@ -78,9 +78,7 @@
     
       
 
-  
-
-<header class="md-header md-header--shadow" data-md-component="header">
+<header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href=".." title="Bitbucket → GitHub Migration" class="md-header__button md-logo" aria-label="Bitbucket → GitHub Migration" data-md-component="logo">
       
@@ -176,6 +174,137 @@
       
         
           
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../migration_guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Migration Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Attachments
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../troubleshooting/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Troubleshooting
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../checklists/pre_migration/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Checklists
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference/migration_config/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
         
       
       <main class="md-main" data-md-component="main">
@@ -189,8 +318,10 @@
                     
 
 
+  
 
-<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
     <a href=".." title="Bitbucket → GitHub Migration" class="md-nav__button md-logo" aria-label="Bitbucket → GitHub Migration" data-md-component="logo">
       
@@ -500,14 +631,27 @@
   
     
     
+      
+        
+      
+        
+      
+        
+      
     
+    
+    
+      
+      
     
     
     <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
         
           
           <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
@@ -614,14 +758,29 @@
   
     
     
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
+    
+    
+      
+      
     
     
     <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
         
           
           <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
@@ -940,7 +1099,7 @@
 <p>This guide explains how to locate, upload, and verify migrated attachments.</p>
 <hr />
 <h2 id="quick-start">🚀 Quick Start</h2>
-<pre><code>POST-MIGRATION: Attachment Handling
+<div class="highlight"><pre><span></span><code>POST-MIGRATION: Attachment Handling
 ===================================
 
 8 attachments were downloaded to: attachments_temp/
@@ -950,28 +1109,28 @@ To upload attachments to GitHub issues:
 2. Click the comment box
 3. Drag and drop the file from attachments_temp/
 4. The file will be uploaded and embedded
-</code></pre>
+</code></pre></div>
 <hr />
 <h2 id="step-by-step-instructions">🔧 Step-by-Step Instructions</h2>
 <h3 id="1-locate-the-attachment-files">1. Locate the Attachment Files</h3>
-<pre><code class="language-bash">cd attachments_temp/
-ls -lh
-</code></pre>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>attachments_temp/
+ls<span class="w"> </span>-lh
+</code></pre></div>
 <p>Example output:</p>
-<pre><code>screenshot.png          2.3M
+<div class="highlight"><pre><span></span><code>screenshot.png          2.3M
 design-mockup.pdf       5.1M
 error-log.txt           150K
-</code></pre>
+</code></pre></div>
 <hr />
 <h3 id="2-identify-the-target-issue-or-pr">2. Identify the Target Issue or PR</h3>
 <p>Check your GitHub repository for comments added by the migration script. Each issue with attachments includes:</p>
-<pre><code class="language-markdown">📎 **Attachment from Bitbucket**: `screenshot.png` (2.3 MB)
+<div class="highlight"><pre><span></span><code>📎 <span class="gs">**Attachment from Bitbucket**</span>: <span class="sb">`screenshot.png`</span> (2.3 MB)
 
-*Note: This file was attached to the original Bitbucket issue.*
-</code></pre>
+<span class="ge">*Note: This file was attached to the original Bitbucket issue.*</span>
+</code></pre></div>
 <p>You can also search your migration logs:</p>
-<pre><code class="language-bash">grep &quot;Attachment from Bitbucket&quot; migration.log
-</code></pre>
+<div class="highlight"><pre><span></span><code>grep<span class="w"> </span><span class="s2">&quot;Attachment from Bitbucket&quot;</span><span class="w"> </span>migration.log
+</code></pre></div>
 <hr />
 <h3 id="3-upload-the-file">3. Upload the File</h3>
 <h4 id="option-a-add-a-new-comment-with-the-file">Option A — Add a New Comment with the File</h4>
@@ -1000,24 +1159,24 @@ error-log.txt           150K
 <hr />
 <h2 id="bulk-upload-with-github-cli">🛠️ Bulk Upload with GitHub CLI</h2>
 <p>If you have many attachments, you can automate uploads.</p>
-<pre><code class="language-bash"># Install GitHub CLI
-brew install gh  # macOS
-# or download from https://cli.github.com
+<div class="highlight"><pre><span></span><code><span class="c1"># Install GitHub CLI</span>
+brew<span class="w"> </span>install<span class="w"> </span>gh<span class="w">  </span><span class="c1"># macOS</span>
+<span class="c1"># or download from https://cli.github.com</span>
 
-# Authenticate
-gh auth login
+<span class="c1"># Authenticate</span>
+gh<span class="w"> </span>auth<span class="w"> </span>login
 
-# Bulk upload script
-cd attachments_temp
-while IFS=',' read -r file issue_num; do
-  echo &quot;Uploading $file to issue #$issue_num&quot;
-  gh issue comment &quot;$issue_num&quot; \
-    --repo OWNER/REPO \
-    --body &quot;**Attachment:** $file&quot; \
-    --attach &quot;$file&quot;
-  sleep 2
-done &lt; attachment_mapping.csv
-</code></pre>
+<span class="c1"># Bulk upload script</span>
+<span class="nb">cd</span><span class="w"> </span>attachments_temp
+<span class="k">while</span><span class="w"> </span><span class="nv">IFS</span><span class="o">=</span><span class="s1">&#39;,&#39;</span><span class="w"> </span><span class="nb">read</span><span class="w"> </span>-r<span class="w"> </span>file<span class="w"> </span>issue_num<span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Uploading </span><span class="nv">$file</span><span class="s2"> to issue #</span><span class="nv">$issue_num</span><span class="s2">&quot;</span>
+<span class="w">  </span>gh<span class="w"> </span>issue<span class="w"> </span>comment<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$issue_num</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--repo<span class="w"> </span>OWNER/REPO<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--body<span class="w"> </span><span class="s2">&quot;**Attachment:** </span><span class="nv">$file</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--attach<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$file</span><span class="s2">&quot;</span>
+<span class="w">  </span>sleep<span class="w"> </span><span class="m">2</span>
+<span class="k">done</span><span class="w"> </span>&lt;<span class="w"> </span>attachment_mapping.csv
+</code></pre></div>
 <p>The file <code>attachment_mapping.csv</code> should list each file and its associated issue number.</p>
 <hr />
 <h2 id="prioritization">📈 Prioritization</h2>
@@ -1055,21 +1214,21 @@ done &lt; attachment_mapping.csv
 <hr />
 <h2 id="tracking-upload-progress">📄 Tracking Upload Progress</h2>
 <p>Create <code>attachment-status.md</code> to track progress:</p>
-<pre><code class="language-markdown"># Attachment Upload Status
+<div class="highlight"><pre><span></span><code><span class="gh"># Attachment Upload Status</span>
 
-## Summary
-- Total: 8
-- Uploaded: 3
-- Pending: 5
-- Skipped: 0
+<span class="gu">## Summary</span>
+<span class="k">-</span><span class="w"> </span>Total: 8
+<span class="k">-</span><span class="w"> </span>Uploaded: 3
+<span class="k">-</span><span class="w"> </span>Pending: 5
+<span class="k">-</span><span class="w"> </span>Skipped: 0
 
-### Critical
-- [x] #5 screenshot.png (2.3 MB)
-- [ ] #12 design-mockup.pdf (5.1 MB)
+<span class="gu">### Critical</span>
+<span class="k">- [x]</span> <span class="ni">#5</span> screenshot.png (2.3 MB)
+<span class="k">- [ ]</span> <span class="ni">#12</span> design-mockup.pdf (5.1 MB)
 
-### Important
-- [ ] #23 error-log.txt (150 KB)
-</code></pre>
+<span class="gu">### Important</span>
+<span class="k">- [ ]</span> <span class="ni">#23</span> error-log.txt (150 KB)
+</code></pre></div>
 <hr />
 <h2 id="tips-best-practices">🔧 Tips &amp; Best Practices</h2>
 <ul>
@@ -1081,32 +1240,32 @@ done &lt; attachment_mapping.csv
 <hr />
 <h2 id="cleanup-and-backup">🔧 Cleanup and Backup</h2>
 <p>After verifying uploads:</p>
-<pre><code class="language-bash">cd ..
-tar -czf migration_attachments_$(date +%Y%m%d).tar.gz attachments_temp/
-mv migration_attachments_*.tar.gz ~/backups/
-rm -rf attachments_temp/
-</code></pre>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>..
+tar<span class="w"> </span>-czf<span class="w"> </span>migration_attachments_<span class="k">$(</span>date<span class="w"> </span>+%Y%m%d<span class="k">)</span>.tar.gz<span class="w"> </span>attachments_temp/
+mv<span class="w"> </span>migration_attachments_*.tar.gz<span class="w"> </span>~/backups/
+rm<span class="w"> </span>-rf<span class="w"> </span>attachments_temp/
+</code></pre></div>
 <p>Keep the backup archive and mapping files (<code>migration_mapping.json</code>, <code>audit_report.md</code>) for future reference.</p>
 <hr />
 <h2 id="team-communication-template">📣 Team Communication Template</h2>
-<pre><code class="language-markdown">Subject: Action Required – Upload Attachments After Migration
+<div class="highlight"><pre><span></span><code>Subject: Action Required – Upload Attachments After Migration
 
 Hi Team,
 
-The migration to GitHub is complete! Please upload attachments from `attachments_temp/` to their corresponding GitHub issues.
+The migration to GitHub is complete! Please upload attachments from <span class="sb">`attachments_temp/`</span> to their corresponding GitHub issues.
 
-**Priority:**
-- Critical: This week
-- Important: Within 2 weeks
-- Optional: As time permits
+<span class="gs">**Priority:**</span>
+<span class="k">-</span><span class="w"> </span>Critical: This week
+<span class="k">-</span><span class="w"> </span>Important: Within 2 weeks
+<span class="k">-</span><span class="w"> </span>Optional: As time permits
 
 Steps:
-1. Open the target issue on GitHub
-2. Drag the file into a new or existing comment
-3. Check it displays correctly
+<span class="k">1.</span> Open the target issue on GitHub
+<span class="k">2.</span> Drag the file into a new or existing comment
+<span class="k">3.</span> Check it displays correctly
 
 Thanks for helping complete the migration.
-</code></pre>
+</code></pre></div>
 <hr />
 <h2 id="success-criteria">✅ Success Criteria</h2>
 <ul>
@@ -1133,8 +1292,16 @@ Thanks for helping complete the migration.
             </div>
           
           
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
 <script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
         </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
         
       </main>
       
@@ -1180,7 +1347,7 @@ Thanks for helping complete the migration.
     
     
       
-      <script id="__config" type="application/json">{"base": "..", "features": [], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "..", "features": ["content.code.annotate", "content.code.copy", "content.tabs.link", "content.tooltips", "navigation.tabs", "navigation.top", "navigation.expand", "navigation.indexes", "content.code.fences", "content.code.mermaid"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>
