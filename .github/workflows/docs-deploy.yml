@@ -5,6 +5,11 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write      # Needed to push to gh-pages
+  pages: write         # (optional) Needed for new Pages builds
+  id-token: write      # (optional) For OpenID authentication if required
+
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
