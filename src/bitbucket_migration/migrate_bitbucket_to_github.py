@@ -147,6 +147,9 @@ class BitbucketToGitHubMigrator:
             'prs': 0,
             'total_links': 0
         }
+        
+        # Track unhandled Bitbucket links for warning
+        self.unhandled_bb_links = []
     
     def rewrite_bitbucket_links(self, text: str, item_type: str = 'issue', item_number: int = None) -> tuple:
         """Rewrite Bitbucket issue/PR references to point to GitHub
@@ -210,6 +213,53 @@ class BitbucketToGitHubMigrator:
         
         text = re.sub(pattern_pr_url, replace_pr_url, text)
         
+        # Pattern 5: Bitbucket commit URLs
+        # https://bitbucket.org/workspace/repo/commits/abc123def456...
+        pattern_commit_url = rf'https://bitbucket\.org/{self.bb_workspace}/{self.bb_repo}/commits/([0-9a-f]{{7,40}})'
+        
+        def replace_commit_url(match):
+            nonlocal links_found
+            commit_sha = match.group(1)
+            
+            links_found += 1
+            gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/commit/{commit_sha}"
+            bb_url = match.group(0)
+            return f"[`{commit_sha[:7]}`]({gh_url}) *(was [Bitbucket]({bb_url}))*"
+        
+        text = re.sub(pattern_commit_url, replace_commit_url, text)
+        
+        # Pattern 6: Bitbucket branch/tag commit URLs
+        # https://bitbucket.org/workspace/repo/commits/branch/branch-name
+        pattern_branch_url = rf'https://bitbucket\.org/{self.bb_workspace}/{self.bb_repo}/commits/branch/([^/\s\)]+)'
+        
+        def replace_branch_url(match):
+            nonlocal links_found
+            branch_name = match.group(1)
+            
+            links_found += 1
+            gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/commits/{branch_name}"
+            bb_url = match.group(0)
+            return f"[commits on `{branch_name}`]({gh_url}) *(was [Bitbucket]({bb_url}))*"
+        
+        text = re.sub(pattern_branch_url, replace_branch_url, text)
+        
+        # Pattern 7: Bitbucket compare URLs
+        # https://bitbucket.org/workspace/repo/compare/abc123..def456
+        pattern_compare_url = rf'https://bitbucket\.org/{self.bb_workspace}/{self.bb_repo}/compare/([0-9a-f]{{7,40}})\.\.([0-9a-f]{{7,40}})'
+        
+        def replace_compare_url(match):
+            nonlocal links_found
+            sha1 = match.group(1)
+            sha2 = match.group(2)
+            
+            links_found += 1
+            # GitHub uses triple dots for compare
+            gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/compare/{sha1}...{sha2}"
+            bb_url = match.group(0)
+            return f"[compare `{sha1[:7]}`...`{sha2[:7]}`]({gh_url}) *(was [Bitbucket]({bb_url}))*"
+        
+        text = re.sub(pattern_compare_url, replace_compare_url, text)
+
         # Pattern 3: Short issue references: #123 or issue #123
         # Be careful not to match markdown headers or already-processed links
         pattern_short_issue = r'(?<!\[)(?<!BB )#(\d+)(?!\])'
@@ -253,6 +303,28 @@ class BitbucketToGitHubMigrator:
         
         text = re.sub(pattern_pr_ref, replace_pr_ref, text, flags=re.IGNORECASE)
         
+        # Pattern 8: Catch any remaining Bitbucket links that we haven't handled
+        # This helps identify links that might need manual attention
+        remaining_bb_pattern = r'https?://(?:www\.)?bitbucket\.org/[^\s\)"\'>]+'
+        
+        remaining_matches = re.findall(remaining_bb_pattern, text)
+        for unhandled_url in remaining_matches:
+            # Check if this URL was already handled by previous patterns
+            # (It might still exist in the text due to our "was Bitbucket" notes)
+            if '*(was' not in text[max(0, text.find(unhandled_url)-50):text.find(unhandled_url)+len(unhandled_url)+50]:
+                # This is a genuinely unhandled link
+                self.unhandled_bb_links.append({
+                    'url': unhandled_url,
+                    'item_type': item_type,
+                    'item_number': item_number,
+                    'context': text[max(0, text.find(unhandled_url)-50):min(len(text), text.find(unhandled_url)+len(unhandled_url)+50)]
+                })
+                
+                if self.dry_run:
+                    self.log(f"  ⚠️  [DRY RUN] Found unhandled Bitbucket link in {item_type} #{item_number}: {unhandled_url}")
+                else:
+                    self.log(f"  ⚠️  Warning: Unhandled Bitbucket link in {item_type} #{item_number}: {unhandled_url}")
+ 
         # Log if links were found
         if links_found > 0:
             self.link_rewrites['total_links'] += links_found
@@ -485,6 +557,79 @@ class BitbucketToGitHubMigrator:
         url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/pullrequests/{pr_id}/comments"
         return self.fetch_bb_comments(url)
     
+    def extract_and_download_inline_images(self, text: str, item_type: str, item_number: int) -> tuple:
+        """Extract Bitbucket-hosted inline images from markdown and download them
+        
+        Args:
+            text: Markdown text containing images
+            item_type: 'issue' or 'pr' for context
+            item_number: Issue/PR number for logging
+            
+        Returns:
+            Tuple of (updated_text, list_of_downloaded_image_info)
+        """
+        if not text:
+            return text, []
+        
+        import re
+        
+        # Pattern to match markdown images: ![alt](url)
+        image_pattern = r'!\[([^\]]*)\]\(([^\)]+)\)'
+        
+        downloaded_images = []
+        images_found = 0
+        
+        def replace_image(match):
+            nonlocal images_found
+            alt_text = match.group(1)
+            image_url = match.group(2)
+            
+            # Only process Bitbucket-hosted images
+            if 'bitbucket.org' in image_url or 'bytebucket.org' in image_url or f'/{self.bb_workspace}/{self.bb_repo}' in image_url:
+                images_found += 1
+                
+                # Extract filename from URL
+                filename = image_url.split('/')[-1].split('?')[0]
+                if not filename or filename == '':
+                    filename = f"image_{images_found}.png"
+                
+                if self.dry_run:
+                    self.log(f"    [DRY RUN] Would download inline image: {filename}")
+                    downloaded_images.append({
+                        'filename': filename,
+                        'url': image_url,
+                        'filepath': f"attachments_temp/{filename}"
+                    })
+                    # Return modified markdown with note
+                    return f"![{alt_text}]({image_url})\n\n📷 *Inline image: `{filename}` (will be downloaded)*"
+                else:
+                    # Download the image
+                    filepath = self.download_attachment(image_url, filename)
+                    if filepath:
+                        downloaded_images.append({
+                            'filename': filename,
+                            'url': image_url,
+                            'filepath': str(filepath)
+                        })
+                        self.log(f"    Downloaded inline image: {filename}")
+                        # Return modified markdown with note about manual upload
+                        return f"![{alt_text}]({image_url})\n\n📷 *Original Bitbucket image (download from `{filepath}` and drag-and-drop here)*"
+                    else:
+                        self.log(f"    Failed to download inline image: {filename}")
+            
+            # Return unchanged for non-Bitbucket images or failed downloads
+            return match.group(0)
+        
+        updated_text = re.sub(image_pattern, replace_image, text)
+        
+        if images_found > 0:
+            if self.dry_run:
+                self.log(f"    [DRY RUN] Found {images_found} inline image(s) in {item_type} #{item_number}")
+            else:
+                self.log(f"    Found and downloaded {len(downloaded_images)} inline image(s) in {item_type} #{item_number}")
+        
+        return updated_text, downloaded_images
+
     def create_gh_issue(self, title: str, body: str, labels: List[str] = None, 
                        state: str = 'open', assignees: List[str] = None) -> dict:
         """Create a GitHub issue"""
@@ -649,8 +794,11 @@ class BitbucketToGitHubMigrator:
         
         # Rewrite links in the issue content
         content = bb_issue.get('content', {}).get('raw', '')
-        content, links_count = self.rewrite_bitbucket_links(content, 'issue', bb_issue['id'])
+        content, links_count = self.rewrite_bitbucket_links(content, 'issue', bb_issue['id'])        
         
+        # Extract and download inline images
+        content, inline_images = self.extract_and_download_inline_images(content, 'issue', bb_issue['id'])
+
         body = f"""**Migrated from Bitbucket**
 - Original Author: {reporter_mention}
 - Original Created: {created}
@@ -662,7 +810,7 @@ class BitbucketToGitHubMigrator:
 
 {content}
 """
-        return body, links_count
+        return body, links_count, inline_images
     
     def format_pr_as_issue_body(self, bb_pr: dict) -> tuple:
         """Format a PR (that will be migrated as an issue) with full metadata
@@ -692,6 +840,9 @@ class BitbucketToGitHubMigrator:
         description = bb_pr.get('description', '')
         description, links_count = self.rewrite_bitbucket_links(description, 'pr', bb_pr['id'])
         
+        # Extract and download inline images
+        description, inline_images = self.extract_and_download_inline_images(description, 'pr', bb_pr['id'])
+
         body = f"""⚠️ **This was a Pull Request on Bitbucket (migrated as an issue)**
 
 **Original PR Metadata:**
@@ -713,7 +864,7 @@ class BitbucketToGitHubMigrator:
 
 *Note: This PR was {state.lower()} on Bitbucket. It was migrated as a GitHub issue to preserve all metadata and comments. The actual code changes are in the git history.*
 """
-        return body, links_count
+        return body, links_count, inline_images
     
     def format_pr_body(self, bb_pr: dict) -> tuple:
         """Format PR body for an actual GitHub PR (for OPEN PRs)
@@ -739,6 +890,9 @@ class BitbucketToGitHubMigrator:
         description = bb_pr.get('description', '')
         description, links_count = self.rewrite_bitbucket_links(description, 'pr', bb_pr['id'])
         
+        # Extract and download inline images
+        description, inline_images = self.extract_and_download_inline_images(description, 'pr', bb_pr['id'])
+
         body = f"""**Migrated from Bitbucket**
 - Original Author: {author_mention}
 - Original Created: {created}
@@ -748,7 +902,7 @@ class BitbucketToGitHubMigrator:
 
 {description}
 """
-        return body, links_count
+        return body, links_count, inline_images
     
     def format_comment_body(self, bb_comment: dict, item_type: str = 'issue', item_number: int = None) -> tuple:
         """Format a comment with original author and timestamp
@@ -778,15 +932,18 @@ class BitbucketToGitHubMigrator:
         # Rewrite links in the comment
         content, links_count = self.rewrite_bitbucket_links(content, item_type, item_number)
         
+        # Extract and download inline images
+        content, inline_images = self.extract_and_download_inline_images(content, item_type, item_number)
+
         comment_body = f"""**Comment by {author_mention} on {created}:**
 
 {content}
 """
-        return comment_body, links_count
+        return comment_body, links_count, inline_images
     
     def migrate_issues(self, bb_issues: List[dict]):
         """Migrate all Bitbucket issues to GitHub"""
-        self.log("\n" + "="*80)
+        self.log("="*80)
         self.log("PHASE 1: Migrating Issues")
         self.log("="*80)
         
@@ -844,8 +1001,18 @@ class BitbucketToGitHubMigrator:
             reporter = bb_issue.get('reporter', {}).get('display_name', 'Unknown') if bb_issue.get('reporter') else 'Unknown (deleted user)'
             gh_reporter = self.map_user(reporter) if reporter != 'Unknown (deleted user)' else None
             
-            body, links_in_body = self.format_issue_body(bb_issue)
+            body, links_in_body, inline_images_body = self.format_issue_body(bb_issue)
             
+            # Track inline images as attachments
+            for img in inline_images_body:
+                self.attachments.append({
+                    'issue_number': issue_num,
+                    'github_issue': gh_issue['number'],
+                    'filename': img['filename'],
+                    'filepath': img['filepath'],
+                    'type': 'inline_image'
+                })
+
             # Map assignee
             assignees = []
             if bb_issue.get('assignee'):
@@ -902,8 +1069,19 @@ class BitbucketToGitHubMigrator:
             comments = self.fetch_bb_issue_comments(issue_num)
             links_in_comments = 0
             for comment in comments:
-                comment_body, comment_links = self.format_comment_body(comment, 'issue', issue_num)
+                comment_body, comment_links, inline_images_comment = self.format_comment_body(comment, 'issue', issue_num)
                 links_in_comments += comment_links
+
+                # Track inline images from comments
+                for img in inline_images_comment:
+                    self.attachments.append({
+                        'issue_number': issue_num,
+                        'github_issue': gh_issue['number'],
+                        'filename': img['filename'],
+                        'filepath': img['filepath'],
+                        'type': 'inline_image_comment'
+                    })
+
                 self.create_gh_comment(gh_issue['number'], comment_body)
             
             # Record migration details for report (after we have all the data)
@@ -936,7 +1114,7 @@ class BitbucketToGitHubMigrator:
         
         This avoids any risk of re-merging already-merged code.
         """
-        self.log("\n" + "="*80)
+        self.log("="*80)
         self.log("PHASE 2: Migrating Pull Requests")
         self.log("="*80)
         
@@ -951,7 +1129,7 @@ class BitbucketToGitHubMigrator:
             source_branch = bb_pr.get('source', {}).get('branch', {}).get('name')
             dest_branch = bb_pr.get('destination', {}).get('branch', {}).get('name', 'main')
             
-            self.log(f"\nMigrating PR #{pr_num} ({pr_state}): {title}")
+            self.log(f"Migrating PR #{pr_num} ({pr_state}): {title}")
             self.log(f"  Source: {source_branch} -> Destination: {dest_branch}")
             
             # Strategy: Only OPEN PRs become GitHub PRs (safest approach)
@@ -966,8 +1144,18 @@ class BitbucketToGitHubMigrator:
                         # Try to create as actual GitHub PR
                         self.log(f"  ✓ Both branches exist, creating as GitHub PR")
                         
-                        body, links_in_body = self.format_pr_body(bb_pr)
+                        body, links_in_body, inline_images_body = self.format_pr_body(bb_pr)
                         
+                        # Track inline images
+                        for img in inline_images_body:
+                            self.attachments.append({
+                                'pr_number': pr_num,
+                                'github_pr': gh_pr['number'],
+                                'filename': img['filename'],
+                                'filepath': img['filepath'],
+                                'type': 'inline_image'
+                            })
+
                         gh_pr = self.create_gh_pr(
                             title=title,
                             body=body,
@@ -1052,7 +1240,17 @@ class BitbucketToGitHubMigrator:
             # Migrate as issue (for all non-open PRs or failed PR creation)
             self.log(f"  Creating as GitHub issue...")
             
-            body, links_in_body = self.format_pr_as_issue_body(bb_pr)
+            body, links_in_body, inline_images_body = self.format_pr_as_issue_body(bb_pr)
+
+            # Track inline images
+            for img in inline_images_body:
+                self.attachments.append({
+                    'pr_number': pr_num,
+                    'github_issue': gh_issue['number'],
+                    'filename': img['filename'],
+                    'filepath': img['filepath'],
+                    'type': 'inline_image'
+                })
             
             # Determine labels based on original state
             labels = ['migrated-from-bitbucket', 'original-pr']
@@ -1077,8 +1275,19 @@ class BitbucketToGitHubMigrator:
             comments = self.fetch_bb_pr_comments(pr_num)
             links_in_comments = 0
             for comment in comments:
-                comment_body, comment_links = self.format_comment_body(comment, 'pr', pr_num)
+                comment_body, comment_links, inline_images_comment = self.format_comment_body(comment, 'pr', pr_num)
                 links_in_comments += comment_links
+
+                # Track inline images from PR comments
+                for img in inline_images_comment:
+                    self.attachments.append({
+                        'pr_number': pr_num,
+                        'github_pr': gh_pr['number'],  # or gh_issue['number'] depending on path
+                        'filename': img['filename'],
+                        'filepath': img['filepath'],
+                        'type': 'inline_image_comment'
+                    })
+
                 self.create_gh_comment(gh_issue['number'], comment_body)
             
             # Record PR-as-issue migration details (after comments are fetched)
@@ -1114,6 +1323,38 @@ class BitbucketToGitHubMigrator:
             })
             
             self.log(f"  ✓ Migrated as Issue #{gh_issue['number']} with {len(comments)} comments")
+
+            # Migrate PR attachments  
+            pr_attachments = self.fetch_bb_pr_attachments(pr_num)
+            if pr_attachments:
+                self.log(f"  Migrating {len(pr_attachments)} PR attachments...")
+                for attachment in pr_attachments:
+                    att_name = attachment.get('name', 'unknown')
+                    att_url = attachment.get('links', {}).get('self', {}).get('href')
+                    
+                    if att_url:
+                        if self.dry_run:
+                            self.attachments.append({
+                                'pr_number': pr_num,
+                                'github_issue': gh_issue['number'],
+                                'filename': att_name,
+                                'filepath': f"attachments_temp/{att_name}",
+                                'type': 'pr_attachment'
+                            })
+                            self.log(f"    [DRY RUN] Would download {att_name}")
+                        else:
+                            self.log(f"    Downloading {att_name}...")
+                            filepath = self.download_attachment(att_url, att_name)
+                            if filepath:
+                                self.log(f"    Creating attachment note...")
+                                self.upload_attachment_to_github(filepath, gh_issue['number'])
+                                self.attachments.append({
+                                    'pr_number': pr_num,
+                                    'github_issue': gh_issue['number'],
+                                    'filename': att_name,
+                                    'filepath': str(filepath),
+                                    'type': 'pr_attachment'
+                                })           
     
     def save_mapping(self, filename: str = 'migration_mapping.json'):
         """Save issue/PR mapping to file"""
@@ -1135,7 +1376,7 @@ class BitbucketToGitHubMigrator:
         with open(filename, 'w') as f:
             json.dump(mapping, f, indent=2)
         
-        self.log(f"\nMapping saved to {filename}")
+        self.log(f"Mapping saved to {filename}")
     
     def generate_migration_report(self, report_filename: str = 'migration_report.md'):
         """Generate a comprehensive markdown migration report"""
@@ -1259,16 +1500,18 @@ class BitbucketToGitHubMigrator:
         report.append("")
         
         if self.attachments:
-            report.append("| Issue/PR | GitHub # | Filename | Local Path |")
-            report.append("|----------|----------|----------|------------|")
+            report.append("| Issue/PR | GitHub # | Type | Filename | Local Path |")
+            report.append("|----------|----------|------|----------|------------|")
             
-            for att in sorted(self.attachments, key=lambda x: x['issue_number']):
-                issue_num = att['issue_number']
-                gh_num = att['github_issue']
+            for att in sorted(self.attachments, key=lambda x: x.get('issue_number', x.get('pr_number', 0))):
+                issue_num = att.get('issue_number', att.get('pr_number', 'N/A'))
+                gh_num = att.get('github_issue', att.get('github_pr', 'N/A'))
                 filename = att['filename']
                 filepath = att['filepath']
+                att_type = att.get('type', 'attachment')
                 
-                report.append(f"| Issue #{issue_num} | [#{gh_num}](https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_num}) | `{filename}` | `{filepath}` |")
+                item_label = f"Issue #{issue_num}" if 'issue_number' in att else f"PR #{issue_num}"
+                report.append(f"| {item_label} | [#{gh_num}](https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_num}) | {att_type} | `{filename}` | `{filepath}` |")
             
             report.append("")
             report.append("**Note:** Attachments have been downloaded to the local `attachments_temp/` directory.")
@@ -1288,6 +1531,45 @@ class BitbucketToGitHubMigrator:
         report.append("| Bitbucket User | GitHub User | Status |")
         report.append("|----------------|-------------|--------|")
         
+        # Unhandled Bitbucket Links
+        if self.unhandled_bb_links:
+            report.append("---")
+            report.append("")
+            report.append("## ⚠️ Unhandled Bitbucket Links")
+            report.append("")
+            report.append(f"**Total Unhandled Links:** {len(self.unhandled_bb_links)}")
+            report.append("")
+            report.append("The following Bitbucket links were found but not automatically migrated. These may require manual attention:")
+            report.append("")
+            report.append("| Item | URL | Context |")
+            report.append("|------|-----|---------|")
+            
+            for link_info in self.unhandled_bb_links:
+                item_label = f"{link_info['item_type'].capitalize()} #{link_info['item_number']}"
+                url = link_info['url']
+                # Truncate context and escape pipe characters
+                context = link_info['context'][:100].replace('|', '\\|').replace('\n', ' ')
+                if len(link_info['context']) > 100:
+                    context += '...'
+                
+                report.append(f"| {item_label} | `{url}` | {context} |")
+            
+            report.append("")
+            report.append("**Common types of unhandled links:**")
+            report.append("- Download links (`/downloads/`)")
+            report.append("- Wiki pages (`/wiki/`)")
+            report.append("- Repository settings/admin pages")
+            report.append("- User profile links")
+            report.append("- Branch comparison pages (complex formats)")
+            report.append("- Snippet/gist links")
+            report.append("")
+            report.append("**Recommended actions:**")
+            report.append("1. Review each link and determine if it needs migration")
+            report.append("2. For downloads, consider hosting files elsewhere (GitHub Releases, etc.)")
+            report.append("3. For wiki pages, migrate wiki separately")
+            report.append("4. Update links manually in the migrated issues/PRs if needed")
+            report.append("")        
+
         # Collect all unique users from records
         all_users = set()
         for record in self.issue_records:
@@ -1375,40 +1657,48 @@ class BitbucketToGitHubMigrator:
         with open(report_filename, 'w', encoding='utf-8') as f:
             f.write(report_content)
         
-        self.log(f"\nMigration report saved to {report_filename}")
+        self.log(f"Migration report saved to {report_filename}")
         
         return report_filename
     
     def print_summary(self):
         """Print migration summary statistics"""
-        self.log("\n" + "="*80)
+        self.log("="*80)
         self.log("MIGRATION SUMMARY")
         self.log("="*80)
         
-        self.log(f"\nIssues:")
+        self.log(f"Issues:")
         self.log(f"  Total migrated: {len(self.issue_mapping)}")
         
-        self.log(f"\nPull Requests:")
+        self.log(f"Pull Requests:")
         self.log(f"  Total processed: {len(self.pr_mapping)}")
         self.log(f"  Migrated as GitHub PRs: {self.stats['prs_as_prs']}")
         self.log(f"  Migrated as GitHub Issues: {self.stats['prs_as_issues']}")
         self.log(f"    - Due to merged/closed state: {self.stats['pr_merged_as_issue']}")
         self.log(f"    - Due to missing branches: {self.stats['pr_branch_missing']}")
         
-        self.log(f"\nAttachments:")
+        self.log(f"Attachments:")
         self.log(f"  Total downloaded: {len(self.attachments)}")
         self.log(f"  Location: {self.attachment_dir}/")
         
-        self.log(f"\nLink Rewriting:")
+        self.log(f"Link Rewriting:")
         self.log(f"  Issues with rewritten links: {self.link_rewrites['issues']}")
         self.log(f"  PRs with rewritten links: {self.link_rewrites['prs']}")
         self.log(f"  Total links rewritten: {self.link_rewrites['total_links']}")
         
-        self.log(f"\nReports Generated:")
+        if self.unhandled_bb_links:
+            self.log(f"⚠️  Unhandled Bitbucket Links:")
+            self.log(f"  Found {len(self.unhandled_bb_links)} Bitbucket link(s) that were not automatically migrated")
+            self.log(f"  See migration report for details")
+
+        self.log(f"Reports Generated:")
         self.log(f"  ✓ migration_mapping.json - Machine-readable mapping")
-        self.log(f"  ✓ migration_report.md - Comprehensive migration report")
+        if self.dry_run:
+            self.log(f"  ✓ migration_report_dry_run.md - Comprehensive migration report")
+        else:
+            self.log(f"  ✓ migration_report.md - Comprehensive migration report")
         
-        self.log("\n" + "="*80)
+        self.log("="*80)
 
 
 def load_config(config_file: str) -> dict:
@@ -1604,45 +1894,45 @@ Example:
         
         # Print post-migration instructions
         if not args.dry_run and len(migrator.attachments) > 0:
-            migrator.log("\n" + "="*80)
+            migrator.log("="*80)
             migrator.log("POST-MIGRATION: Attachment Handling")
             migrator.log("="*80)
-            migrator.log(f"\n{len(migrator.attachments)} attachments were downloaded to: {migrator.attachment_dir}")
-            migrator.log("\nTo upload attachments to GitHub issues:")
+            migrator.log(f"{len(migrator.attachments)} attachments were downloaded to: {migrator.attachment_dir}")
+            migrator.log("To upload attachments to GitHub issues:")
             migrator.log("1. Navigate to the issue on GitHub")
             migrator.log("2. Click the comment box")
             migrator.log("3. Drag and drop the file from attachments_temp/")
             migrator.log("4. The file will be uploaded and embedded")
-            migrator.log("\nExample:")
+            migrator.log("Example:")
             migrator.log(f"  - Open: https://github.com/{config['github']['owner']}/{config['github']['repo']}/issues/1")
             migrator.log(f"  - Drag: {migrator.attachment_dir}/screenshot.png")
             migrator.log("  - File will appear in comment with URL")
-            migrator.log("\nNote: Comments already note which attachments belonged to each issue.")
-            migrator.log(f"\nKeep {migrator.attachment_dir}/ folder as backup until all important files are uploaded.")
+            migrator.log("Note: Comments already note which attachments belonged to each issue.")
+            migrator.log(f"Keep {migrator.attachment_dir}/ folder as backup until all important files are uploaded.")
             migrator.log("="*80 + "\n")
         
         # Print PR migration explanation
         if not args.dry_run and not args.skip_prs:
-            migrator.log("\n" + "="*80)
+            migrator.log("="*80)
             migrator.log("ABOUT PR MIGRATION")
             migrator.log("="*80)
-            migrator.log("\nPR Migration Strategy:")
+            migrator.log("PR Migration Strategy:")
             migrator.log(f"  - OPEN PRs with existing branches → GitHub PRs ({migrator.stats['prs_as_prs']} migrated)")
             migrator.log(f"  - All other PRs → GitHub Issues ({migrator.stats['prs_as_issues']} migrated)")
-            migrator.log("\nWhy merged PRs become issues:")
+            migrator.log("Why merged PRs become issues:")
             migrator.log("  - Prevents re-merging already-merged code")
             migrator.log("  - Git history already contains all merged changes")
             migrator.log("  - Full metadata preserved in issue description")
             migrator.log("  - Safer approach - no risk of repository corruption")
-            migrator.log("\nMerged PRs are labeled 'pr-merged' so you can easily identify them.")
+            migrator.log("Merged PRs are labeled 'pr-merged' so you can easily identify them.")
             migrator.log("="*80 + "\n")
         
     except KeyboardInterrupt:
-        migrator.log("\nMigration interrupted by user")
+        migrator.log("Migration interrupted by user")
         migrator.save_mapping('migration_mapping_partial.json')
         sys.exit(1)
     except Exception as e:
-        migrator.log(f"\nERROR: {e}")
+        migrator.log(f"ERROR: {e}")
         import traceback
         traceback.print_exc()
         migrator.save_mapping('migration_mapping_partial.json')
