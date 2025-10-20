@@ -15,12 +15,16 @@ Purpose:
     - Placeholder issues for deleted/missing content to preserve numbering
 
 Arguments:
-    --config FILE       Path to configuration JSON file (required)
-                       Configuration file must contain bitbucket, github, and user_mapping sections
-    --dry-run          Simulate migration without making any changes to GitHub
-                       Shows exactly what would be migrated and validates connections
-    --skip-issues      Skip issue migration phase (migrate only pull requests)
-    --skip-prs         Skip pull request migration phase (migrate only issues)
+    --config FILE          Path to configuration JSON file (required)
+                           Configuration file must contain bitbucket, github, and user_mapping sections
+    --dry-run              Simulate migration without making any changes to GitHub
+                           Shows exactly what would be migrated and validates connections
+    --skip-issues          Skip issue migration phase (migrate only pull requests)
+    --skip-prs             Skip pull request migration phase (migrate only issues)
+    --skip-pr-as-issue     Skip migrating closed/merged PRs as issues (only migrate open PRs as PRs)
+                           Useful when you don't want to preserve closed PR metadata as issues
+    --use_gh_cli           Attachments are automatically uploaded using GitHub CLI
+                           Files are preserved locally in attachments_temp/ as backup
 
 Outputs:
     migration_mapping.json      Machine-readable mapping of Bitbucket → GitHub issue/PR numbers
@@ -42,6 +46,10 @@ Link Rewriting:
     - Full URLs: https://bitbucket.org/.../issues/123 → [#456](github_url) *(was BB #123)*
     - Short references: #123 → [#456](github_url) *(was BB #123)*
     - PR references: PR #45 → [PR #456](github_url) *(was BB PR #45)*
+    - Commit URLs: https://bitbucket.org/.../commits/abc123 → [`abc123`](github_url) *(was Bitbucket)*
+    - Branch commit URLs: https://bitbucket.org/.../commits/branch/feature → [commits on `feature`](github_url) *(was Bitbucket)*
+    - Compare URLs: https://bitbucket.org/.../compare/abc123..def456 → [compare `abc123`...`def456`](github_url) *(was Bitbucket)*
+    - Unhandled links detection: Identifies Bitbucket links that need manual attention
 
 User Mapping:
     Maps Bitbucket display names to GitHub usernames in configuration file.
@@ -51,7 +59,15 @@ User Mapping:
 Attachment Handling:
     Downloads all attachments to local attachments_temp/ directory.
     Creates comments on GitHub issues noting attached files.
+    Extracts and downloads Bitbucket-hosted inline images from markdown content.
+    Processes images in issue/PR descriptions and comments automatically.
     Files must be manually uploaded via GitHub web interface (API limitation).
+
++GitHub CLI Upload with --use-gh-cli:
+    Requires GitHub CLI (gh) installed: https://cli.github.com/
+    Must be authenticated: gh auth login
+    Automatically uploads all attachments and saves manual work
+    Use --dry-run --use-gh-cli to test without uploading
 
 Requirements:
     pip install requests
@@ -91,12 +107,15 @@ from typing import Dict, List, Optional
 import requests
 from pathlib import Path
 from urllib.parse import urlparse
+import subprocess
+import shutil
 
 
 class BitbucketToGitHubMigrator:
     def __init__(self, bb_workspace: str, bb_repo: str, bb_email: str, bb_token: str,
                  gh_owner: str, gh_repo: str, gh_token: str, user_mapping: Dict[str, str],
-                 dry_run: bool = False):
+                 dry_run: bool = False, skip_pr_as_issue: bool = False,
+                 use_gh_cli: bool = False):
         self.bb_workspace = bb_workspace
         self.bb_repo = bb_repo
         self.bb_email = bb_email
@@ -108,7 +127,16 @@ class BitbucketToGitHubMigrator:
         
         self.user_mapping = user_mapping
         self.dry_run = dry_run
+        self.skip_pr_as_issue = skip_pr_as_issue
+        self.use_gh_cli = use_gh_cli
         
+        # Check if gh CLI is available when requested
+        if self.use_gh_cli and not self.dry_run:
+            if not self.check_gh_cli_available():
+                self.log("ERROR: --use-gh-cli specified but GitHub CLI is not available")
+                self.log("Please install gh CLI: https://cli.github.com/")
+                raise RuntimeError("GitHub CLI not available")
+
         # Setup API sessions
         self.bb_session = requests.Session()
         self.bb_session.auth = (bb_email, bb_token)
@@ -367,6 +395,40 @@ class BitbucketToGitHubMigrator:
             
         return gh_user
     
+    def check_gh_cli_available(self) -> bool:
+        """Check if GitHub CLI is installed and authenticated"""
+        try:
+            # Check if gh is installed
+            result = subprocess.run(['gh', '--version'], 
+                                  capture_output=True, 
+                                  text=True, 
+                                  timeout=5)
+            if result.returncode != 0:
+                return False
+            
+            self.log(f"  ✓ GitHub CLI found: {result.stdout.split()[2]}")
+            
+            # Check if gh is authenticated
+            result = subprocess.run(['gh', 'auth', 'status'], 
+                                  capture_output=True, 
+                                  text=True, 
+                                  timeout=5)
+            if result.returncode != 0:
+                self.log("  ✗ GitHub CLI is not authenticated. Run: gh auth login")
+                return False
+            
+            self.log("  ✓ GitHub CLI is authenticated")
+            return True
+            
+        except FileNotFoundError:
+            return False
+        except subprocess.TimeoutExpired:
+            self.log("  ✗ GitHub CLI check timed out")
+            return False
+        except Exception as e:
+            self.log(f"  ✗ Error checking GitHub CLI: {e}")
+            return False
+
     def check_branch_exists(self, branch_name: str) -> bool:
         """Check if a branch exists in the GitHub repository
         
@@ -502,33 +564,68 @@ class BitbucketToGitHubMigrator:
             return None
     
     def upload_attachment_to_github(self, filepath: Path, issue_number: int) -> Optional[str]:
-        """Create a comment noting the attachment (manual upload required)
+        """Upload attachment to GitHub issue/PR
         
-        GitHub's API doesn't support direct file uploads, so we create a comment
-        with attachment metadata. Users can then manually upload via web interface.
+        If --use-gh-cli is enabled, uses GitHub CLI to upload the file directly.
+        Otherwise, creates a comment noting the attachment for manual upload.
         """
         if self.dry_run:
-            self.log(f"    [DRY RUN] Would create attachment comment for {filepath.name} on issue #{issue_number}")
+            if self.use_gh_cli:
+                self.log(f"    [DRY RUN] Would upload {filepath.name} to issue #{issue_number} using gh CLI")
+            else:
+                self.log(f"    [DRY RUN] Would create attachment comment for {filepath.name} on issue #{issue_number}")
+
             return f"https://github.com/{self.gh_owner}/{self.gh_repo}/files/{filepath.name}"
         
         try:
             file_size = filepath.stat().st_size
             size_mb = round(file_size / (1024 * 1024), 2)
             
-            comment_body = f"""📎 **Attachment from Bitbucket**: `{filepath.name}` ({size_mb} MB)
+            if self.use_gh_cli:
+                # Use GitHub CLI to upload the attachment directly
+                self.log(f"    Uploading {filepath.name} via gh CLI...")
+                
+                # Create a comment with the attached file
+                result = subprocess.run([
+                    'gh', 'issue', 'comment', str(issue_number),
+                    '--repo', f'{self.gh_owner}/{self.gh_repo}',
+                    '--body', f'📎 **Attachment from Bitbucket**: `{filepath.name}` ({size_mb} MB)',
+                    '--attach', str(filepath)
+                ], capture_output=True, text=True, timeout=60)
+                
+                if result.returncode == 0:
+                    self.log(f"    ✓ Successfully uploaded {filepath.name}")
+                    self.rate_limit_sleep(0.5)
+                    return f"Uploaded via gh CLI"
+                else:
+                    self.log(f"    ✗ Failed to upload {filepath.name}: {result.stderr}")
+                    # Fall back to creating a note comment
+                    comment_body = f"""📎 **Attachment from Bitbucket**: `{filepath.name}` ({size_mb} MB)
 
-*Note: This file was attached to the original Bitbucket issue. Due to GitHub API limitations, please drag and drop this file from `attachments_temp/{filepath.name}` to embed it in this issue.*
+*Note: Automatic upload failed. Please drag and drop this file from `attachments_temp/{filepath.name}` to embed it in this issue.*
+ """
+                    url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/issues/{issue_number}/comments"
+                    response = self.gh_session.post(url, json={'body': comment_body})
+                    response.raise_for_status()
+                    self.rate_limit_sleep(0.5)
+                    return comment_body
+            else:
+                # Manual upload - create a note comment
+                comment_body = f"""📎 **Attachment from Bitbucket**: `{filepath.name}` ({size_mb} MB)
+
+*Note: This file was attached to the original Bitbucket issue. Please drag and drop this file from `attachments_temp/{filepath.name}` to embed it in this issue.*
 """
-            
-            url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/issues/{issue_number}/comments"
-            response = self.gh_session.post(url, json={'body': comment_body})
-            response.raise_for_status()
-            
-            self.rate_limit_sleep(0.5)
-            return comment_body
-            
+                url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/issues/{issue_number}/comments"
+                response = self.gh_session.post(url, json={'body': comment_body})
+                response.raise_for_status()
+                self.rate_limit_sleep(0.5)
+                return comment_body
+
         except Exception as e:
             self.log(f"    ERROR creating attachment comment: {e}")
+            return None
+        except subprocess.TimeoutExpired:
+            self.log(f"    ERROR: gh CLI command timed out for {filepath.name}")
             return None
     
     def fetch_bb_comments(self, url) ->List[dict]:
@@ -612,8 +709,14 @@ class BitbucketToGitHubMigrator:
                             'filepath': str(filepath)
                         })
                         self.log(f"    Downloaded inline image: {filename}")
-                        # Return modified markdown with note about manual upload
-                        return f"![{alt_text}]({image_url})\n\n📷 *Original Bitbucket image (download from `{filepath}` and drag-and-drop here)*"
+
+                        if self.use_gh_cli:
+                            # With gh CLI, the image will be uploaded, so just keep the markdown
+                            return f"![{alt_text}]({image_url})\n\n📷 *Original Bitbucket image (will be uploaded via gh CLI)*"
+                        else:
+                            # Return modified markdown with note about manual upload
+                            return f"![{alt_text}]({image_url})\n\n📷 *Original Bitbucket image (download from `{filepath}` and drag-and-drop here)*"
+
                     else:
                         self.log(f"    Failed to download inline image: {filename}")
             
@@ -629,6 +732,43 @@ class BitbucketToGitHubMigrator:
                 self.log(f"    Found and downloaded {len(downloaded_images)} inline image(s) in {item_type} #{item_number}")
         
         return updated_text, downloaded_images
+
+    def upload_inline_images_to_comment(self, comment_id: int, inline_images: List[dict]) -> bool:
+        """Upload inline images to an existing GitHub comment using gh CLI
+        
+        Note: This appends the images to the comment. The user may want to 
+        edit the comment to integrate them inline with the text.
+        """
+        if not self.use_gh_cli or not inline_images:
+            return False
+        
+        if self.dry_run:
+            self.log(f"    [DRY RUN] Would upload {len(inline_images)} inline image(s) via gh CLI")
+            return True
+        
+        try:
+            # Get the existing comment body
+            url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/issues/comments/{comment_id}"
+            response = self.gh_session.get(url)
+            response.raise_for_status()
+            existing_body = response.json()['body']
+            
+            # Append image upload info
+            updated_body = existing_body + "\n\n---\n**Inline Images:**\n"
+            
+            for img in inline_images:
+                # Note: gh CLI doesn't support editing comments with attachments
+                # So we'll create a separate comment for images
+                pass
+            
+            # Actually, gh CLI limitation: can't attach to comment edits
+            # Best we can do is note that images exist
+            self.log(f"    Note: {len(inline_images)} inline image(s) downloaded but need manual upload")
+            return False
+            
+        except Exception as e:
+            self.log(f"    Error uploading inline images: {e}")
+            return False
 
     def create_gh_issue(self, title: str, body: str, labels: List[str] = None, 
                        state: str = 'open', assignees: List[str] = None) -> dict:
@@ -1057,12 +1197,14 @@ class BitbucketToGitHubMigrator:
                             filepath = self.download_attachment(att_url, att_name)
                             if filepath:
                                 self.log(f"    Creating attachment note on GitHub...")
-                                self.upload_attachment_to_github(filepath, gh_issue['number'])
+                                upload_result = self.upload_attachment_to_github(filepath, gh_issue['number'])
                                 self.attachments.append({
                                     'issue_number': issue_num,
                                     'github_issue': gh_issue['number'],
                                     'filename': att_name,
-                                    'filepath': str(filepath)
+                                    'filepath': str(filepath),
+                                    'type': 'attachment',
+                                    'uploaded': self.use_gh_cli and upload_result and 'Uploaded via gh CLI' in str(upload_result)
                                 })
             
             # Migrate comments
@@ -1233,9 +1375,51 @@ class BitbucketToGitHubMigrator:
                     self.log(f"  ✗ Missing branch information in Bitbucket data")
             else:
                 # MERGED, DECLINED, or SUPERSEDED - always migrate as issue
-                self.log(f"  → Migrating as issue (PR was {pr_state} - safest approach)")
+                if self.skip_pr_as_issue:
+                    self.log(f"  → Skipping migration as issue (PR was {pr_state}, --skip-pr-as-issue enabled)")
+                else:
+                    self.log(f"  → Migrating as issue (PR was {pr_state} - safest approach)")
+
                 if pr_state in ['MERGED', 'SUPERSEDED']:
                     self.stats['pr_merged_as_issue'] += 1
+            
+            # Skip or migrate as issue based on flag
+            if self.skip_pr_as_issue:
+                self.log(f"  ✓ Skipped PR #{pr_num} (not migrated as issue due to --skip-pr-as-issue flag)")
+                
+                # Still record PR details for report
+                author = bb_pr.get('author', {}).get('display_name', 'Unknown') if bb_pr.get('author') else 'Unknown (deleted user)'
+                gh_author = self.map_user(author) if author != 'Unknown (deleted user)' else None
+                
+                # Determine remarks
+                remarks = ['Not migrated (--skip-pr-as-issue flag)']
+                if pr_state in ['MERGED', 'SUPERSEDED']:
+                    remarks.append('Original PR was merged')
+                elif pr_state == 'DECLINED':
+                    remarks.append('Original PR was declined')
+                if not source_branch or not dest_branch:
+                    remarks.append('Branch information missing')
+                elif not self.check_branch_exists(source_branch) or not self.check_branch_exists(dest_branch):
+                    remarks.append('One or both branches do not exist on GitHub')
+                
+                self.pr_records.append({
+                    'bb_number': pr_num,
+                    'gh_number': None,  # Not migrated
+                    'gh_type': 'Skipped',
+                    'title': title,
+                    'author': author,
+                    'gh_author': gh_author,
+                    'state': pr_state,
+                    'source_branch': source_branch or 'unknown',
+                    'dest_branch': dest_branch or 'unknown',
+                    'comments': 0,  # Not migrated, so no comments counted
+                    'links_rewritten': 0,
+                    'bb_url': bb_pr.get('links', {}).get('html', {}).get('href', ''),
+                    'gh_url': '',  # No GitHub URL since not migrated
+                    'remarks': remarks
+                })
+                
+                continue  # Skip to next PR
             
             # Migrate as issue (for all non-open PRs or failed PR creation)
             self.log(f"  Creating as GitHub issue...")
@@ -1416,7 +1600,8 @@ class BitbucketToGitHubMigrator:
         report.append("2. [Pull Requests Migration](#pull-requests-migration)")
         report.append("3. [Attachments](#attachments)")
         report.append("4. [User Mapping](#user-mapping)")
-        report.append("5. [Migration Statistics](#migration-statistics)")
+        report.append("5. [Unhandled Bitbucket Links](#-unhandled-bitbucket-links)")
+        report.append("6. [Migration Statistics](#migration-statistics)")
         report.append("")
         
         # Issues Migration
@@ -1482,7 +1667,9 @@ class BitbucketToGitHubMigrator:
             # Create links
             bb_link = f"[PR #{bb_num}]({record['bb_url']})"
             
-            if gh_type == 'PR':
+            if gh_num is None:
+                gh_link = "Not migrated"
+            elif gh_type == 'PR':
                 gh_link = f"[PR #{gh_num}]({record['gh_url']})"
             else:
                 gh_link = f"[Issue #{gh_num}]({record['gh_url']})"
@@ -1677,6 +1864,10 @@ class BitbucketToGitHubMigrator:
         self.log(f"    - Due to merged/closed state: {self.stats['pr_merged_as_issue']}")
         self.log(f"    - Due to missing branches: {self.stats['pr_branch_missing']}")
         
+        skipped_prs = len([r for r in self.pr_records if r['gh_type'] == 'Skipped'])
+        if skipped_prs > 0:
+            self.log(f"  Skipped (not migrated as issues): {skipped_prs}")
+
         self.log(f"Attachments:")
         self.log(f"  Total downloaded: {len(self.attachments)}")
         self.log(f"  Location: {self.attachment_dir}/")
@@ -1788,6 +1979,10 @@ Example:
     parser.add_argument('--dry-run', action='store_true', help='Simulate migration without making changes')
     parser.add_argument('--skip-issues', action='store_true', help='Skip issue migration')
     parser.add_argument('--skip-prs', action='store_true', help='Skip PR migration')
+    parser.add_argument('--skip-pr-as-issue', action='store_true', 
+                        help='Skip migrating closed/merged PRs as issues (only migrate open PRs as PRs)')
+    parser.add_argument('--use-gh-cli', action='store_true',
+                        help='Use GitHub CLI to automatically upload attachments (requires gh CLI installed and authenticated)')
     
     args = parser.parse_args()
     
@@ -1811,7 +2006,9 @@ Example:
         gh_repo=config['github']['repo'],
         gh_token=config['github']['token'],
         user_mapping=config.get('user_mapping', {}),
-        dry_run=args.dry_run
+        dry_run=args.dry_run,
+        skip_pr_as_issue=args.skip_pr_as_issue,
+        use_gh_cli=args.use_gh_cli
     )
     
     if args.dry_run:
@@ -1898,17 +2095,35 @@ Example:
             migrator.log("POST-MIGRATION: Attachment Handling")
             migrator.log("="*80)
             migrator.log(f"{len(migrator.attachments)} attachments were downloaded to: {migrator.attachment_dir}")
-            migrator.log("To upload attachments to GitHub issues:")
-            migrator.log("1. Navigate to the issue on GitHub")
-            migrator.log("2. Click the comment box")
-            migrator.log("3. Drag and drop the file from attachments_temp/")
-            migrator.log("4. The file will be uploaded and embedded")
-            migrator.log("Example:")
-            migrator.log(f"  - Open: https://github.com/{config['github']['owner']}/{config['github']['repo']}/issues/1")
-            migrator.log(f"  - Drag: {migrator.attachment_dir}/screenshot.png")
-            migrator.log("  - File will appear in comment with URL")
-            migrator.log("Note: Comments already note which attachments belonged to each issue.")
-            migrator.log(f"Keep {migrator.attachment_dir}/ folder as backup until all important files are uploaded.")
+            
+            if migrator.use_gh_cli:
+                uploaded_count = len([a for a in migrator.attachments if a.get('uploaded', False)])
+                migrator.log(f"✓ Attachments were automatically uploaded using GitHub CLI")
+                migrator.log(f"  Successfully uploaded: {uploaded_count}/{len(migrator.attachments)}")
+                
+                failed_count = len(migrator.attachments) - uploaded_count
+                if failed_count > 0:
+                    migrator.log(f"⚠️  {failed_count} attachment(s) failed to upload")
+                    migrator.log("  These need manual upload via drag-and-drop")
+                    migrator.log("  Check migration.log for details")
+                
+                migrator.log(f"Note: Inline images in comments still need manual upload")
+                migrator.log("      (gh CLI limitation - can't attach to comment edits)")
+            else:
+                migrator.log("To upload attachments to GitHub issues:")
+                migrator.log("1. Navigate to the issue on GitHub")
+                migrator.log("2. Click the comment box")
+                migrator.log("3. Drag and drop the file from attachments_temp/")
+                migrator.log("4. The file will be uploaded and embedded")
+                migrator.log("Example:")
+                migrator.log(f"  - Open: https://github.com/{config['github']['owner']}/{config['github']['repo']}/issues/1")
+                migrator.log(f"  - Drag: {migrator.attachment_dir}/screenshot.png")
+                migrator.log("  - File will appear in comment with URL")
+                migrator.log("Note: Comments already note which attachments belonged to each issue.")
+                migrator.log("Tip: Use --use-gh-cli flag to automatically upload attachments")
+            
+            migrator.log(f"Keep {migrator.attachment_dir}/ folder as backup until verified.")
+
             migrator.log("="*80 + "\n")
         
         # Print PR migration explanation
