@@ -1,0 +1,34 @@
+site_name: "Bitbucket → GitHub Migration"
+site_description: "Migration tooling and step-by-step guides"
+site_author: "F Kloosterman"
+repo_url: https://github.com/fkloosterman/bitbucket-migration
+edit_uri: blob/main/docs/
+
+theme:
+  name: material
+
+nav:
+  - Home: index.md
+  - Migration Guide: migration_guide.md
+  - Attachments: attachment_upload.md
+  - Troubleshooting: troubleshooting.md
+  - Checklists:
+    - Pre-migration: checklists/pre_migration.md
+    - Verification: checklists/verification.md
+    - Post-migration: checklists/post_migration.md
+  - Reference:
+    - Migration Config: reference/migration_config.md
+    - User Mapping: reference/user_mapping.md
+    - API Tokens: reference/api_tokens.md
+    - Glossary: reference/glossary.md
+
+docs_dir: docs
+site_dir: site
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/fkloosterman/bitbucket-migration

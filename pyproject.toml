@@ -23,6 +23,11 @@ include = ["bitbucket_migration*"]
 dev = [
     "twine>=6.2.0",
 ]
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.6.22",
+    "pymdown-extensions>=10.16.1",
+]
 
 [project.scripts]
     migrate_bitbucket_to_github = "bitbucket_migration.migrate_bitbucket_to_github:main"
