@@ -2,6 +2,9 @@
 """
 Bitbucket to GitHub Migration Script
 
+⚠️  DISCLAIMER: This migration tool was developed with assistance from Claude.ai, an AI language model.
+   Use at your own risk. Always perform dry runs and verify results before production use.
+
 Comprehensive migration tool that transfers a Bitbucket repository to GitHub while preserving
 all metadata, comments, attachments, and cross-references between issues and pull requests.
 

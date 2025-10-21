@@ -2,6 +2,9 @@
 """
 Bitbucket to GitHub Migration Audit Script
 
+⚠️  DISCLAIMER: This audit tool was developed with assistance from Claude.ai, an AI language model.
+   Use at your own risk. Always verify audit results and API permissions before migration.
+
 This script performs a comprehensive audit of a Bitbucket repository to assess migration
 readiness and requirements for GitHub migration. It analyzes all repository content
 and generates detailed reports to help plan and execute a successful migration.
