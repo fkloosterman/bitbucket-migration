@@ -1583,9 +1583,19 @@ class BitbucketToGitHubMigrator:
         report.append(f"- **Total Issues Migrated:** {len(self.issue_records)}")
         report.append(f"  - Real Issues: {len([r for r in self.issue_records if r['state'] != 'deleted'])}")
         report.append(f"  - Placeholders: {len([r for r in self.issue_records if r['state'] == 'deleted'])}")
-        report.append(f"- **Total Pull Requests Migrated:** {len(self.pr_records)}")
+
+        # Calculate PR statistics
+        total_prs = len(self.pr_records)
+        skipped_prs = len([r for r in self.pr_records if r['gh_type'] == 'Skipped'])
+        migrated_prs = total_prs - skipped_prs
+        
+        report.append(f"- **Total Pull Requests Processed:** {total_prs}")
+        report.append(f"  - Migrated: {migrated_prs}")
         report.append(f"  - As GitHub PRs: {self.stats['prs_as_prs']}")
         report.append(f"  - As GitHub Issues: {self.stats['prs_as_issues']}")
+        if skipped_prs > 0:
+            report.append(f"  - Skipped (not migrated): {skipped_prs}")
+
         report.append(f"- **Total Attachments:** {len(self.attachments)}")
         report.append(f"- **Link Rewriting:**")
         report.append(f"  - Issues with rewritten links: {self.link_rewrites['issues']}")
