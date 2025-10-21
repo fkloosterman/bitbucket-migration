@@ -56,8 +56,63 @@ Link Rewriting:
 
 User Mapping:
     Maps Bitbucket display names to GitHub usernames in configuration file.
+    For @mentions, also map Bitbucket usernames (see formats below)
     Users without GitHub accounts are mentioned as "Name (no GitHub account)".
     Supports null values for users who shouldn't be mapped.
+    Unmapped @mentions preserved as: "@user *(Bitbucket user, needs GitHub mapping)*"
+
+User Mapping Formats:
+
+Format 1 - Simple (works for authors/assignees):
+  "user_mapping": {
+    "Alice Smith": "alice-github"
+  }
+
+Format 2 - Enhanced (works for @mentions AND account IDs):
+  "user_mapping": {
+    "Alice Smith": {
+      "github": "alice-github",
+      "bitbucket_username": "asmith"
+    }
+  }
+
+Format 3 - Direct username mapping (works for @mentions):
+  "user_mapping": {
+    "asmith": "alice-github"
+  }
+
+Format 4 - No GitHub account:
+  "user_mapping": {
+    "External User": null
+  }
+
+Format 5 - Account ID mentions (auto-resolved):
+  Account IDs like @557058:c250d1e9-df76-4236-bc2f-a98d056b56b5 are 
+  automatically resolved to Bitbucket usernames, then mapped to GitHub.
+  You don't need to map account IDs directly - just map the username.
+
+You can mix formats in the same config. Enhanced format is recommended
+if your team uses @mentions frequently or if you see account ID mentions
+in the dry-run report.
+
+EXAMPLE:
+  "user_mapping": {
+    "Alice Smith": {
+      "github": "alice-gh",
+      "bitbucket_username": "asmith"
+    },
+    "Bob Jones": "bjones",
+    "charlie": "charlie-dev",
+    "old-employee": null
+  }
+
+This handles:
+- Alice as issue author (by display name "Alice Smith")
+- Alice in @asmith mentions (by username)
+- Alice in @557058:abc... account ID mentions (auto-resolved to "asmith")
+- Bob as issue author OR in @bjones mentions
+- charlie in @charlie mentions  
+- old-employee won't be mentioned (null = no GitHub account)
 
 Attachment Handling:
     Downloads all attachments to local attachments_temp/ directory.
@@ -132,7 +187,11 @@ class BitbucketToGitHubMigrator:
         self.dry_run = dry_run
         self.skip_pr_as_issue = skip_pr_as_issue
         self.use_gh_cli = use_gh_cli
-        
+
+       # Build account ID to username mapping (for @mention resolution)
+        self.account_id_to_username = {}  # Maps account_id -> bitbucket_username
+        self.account_id_to_display_name = {}  # Maps account_id -> display_name
+
         # Check if gh CLI is available when requested
         if self.use_gh_cli and not self.dry_run:
             if not self.check_gh_cli_available():
@@ -181,6 +240,9 @@ class BitbucketToGitHubMigrator:
         
         # Track unhandled Bitbucket links for warning
         self.unhandled_bb_links = []
+    
+        # Track unmapped mentions
+        self.unmapped_mentions = {}  # {bb_username: count}
     
     def rewrite_bitbucket_links(self, text: str, item_type: str = 'issue', item_number: int = None) -> tuple:
         """Rewrite Bitbucket issue/PR references to point to GitHub
@@ -291,6 +353,77 @@ class BitbucketToGitHubMigrator:
         
         text = re.sub(pattern_compare_url, replace_compare_url, text)
 
+        # Pattern 9: Bitbucket @mentions
+        # Matches: @username, @{username-with-dashes}, @{user name with spaces}
+        # Must be careful not to match email addresses or markdown
+        pattern_mention = r'(?<![a-zA-Z0-9_.])@(\{[^}]+\}|[a-zA-Z0-9_][a-zA-Z0-9_-]*)'
+        
+        mentions_replaced = 0
+        mentions_unmapped = 0
+        
+        def replace_mention(match):
+            nonlocal mentions_replaced, mentions_unmapped
+            bb_mention = match.group(1)
+            
+            # Remove braces if present: @{user name} -> user name
+            if bb_mention.startswith('{') and bb_mention.endswith('}'):
+                bb_username = bb_mention[1:-1]
+                # Bitbucket allows spaces in braced mentions, normalize for GitHub
+                bb_username_normalized = bb_username.replace(' ', '-')
+            else:
+                bb_username = bb_mention
+                bb_username_normalized = bb_username
+            
+            # Try to map to GitHub username
+            gh_username = self.map_mention(bb_username)
+            
+            if gh_username:
+                # Successfully mapped
+                mentions_replaced += 1
+                return f"@{gh_username}"
+            else:
+                # No mapping found - check if this is an account ID that we can make readable
+                is_account_id = ':' in bb_username or (len(bb_username) == 24 and all(c in '0123456789abcdef' for c in bb_username.lower()))
+                
+                if is_account_id:
+                    # Try to get display name for this account ID
+                    display_name = self.account_id_to_display_name.get(bb_username)
+                    
+                    if display_name:
+                        # Replace account ID with readable display name
+                        mentions_unmapped += 1
+                        
+                        # Track for warning/report (use display name as key for better reporting)
+                        if display_name not in self.unmapped_mentions:
+                            self.unmapped_mentions[display_name] = 0
+                        self.unmapped_mentions[display_name] += 1
+                        
+                        # Return display name with note
+                        return f"**{display_name}** *(Bitbucket user, no GitHub account)*"
+                    # else: fall through to default handling below
+
+                # No mapping found
+                mentions_unmapped += 1
+                
+                # Track for warning/report
+                if bb_username not in self.unmapped_mentions:
+                    self.unmapped_mentions[bb_username] = 0
+                self.unmapped_mentions[bb_username] += 1
+                
+                # KEEP THE ORIGINAL MENTION - don't break it
+                # Add a note so it's visible that this needs attention
+                return f"@{bb_username_normalized} *(Bitbucket user, needs GitHub mapping)*"
+        
+        text = re.sub(pattern_mention, replace_mention, text)
+        
+        if mentions_replaced > 0 or mentions_unmapped > 0:
+            if self.dry_run:
+                self.log(f"  [DRY RUN] @mentions: {mentions_replaced} mapped, {mentions_unmapped} unmapped/replaced")
+            else:
+                self.log(f"  → @mentions: {mentions_replaced} mapped, {mentions_unmapped} unmapped/replaced")
+                if mentions_unmapped > 0:
+                    self.log(f"     (Account IDs replaced with display names where available)")  
+
         # Pattern 3: Short issue references: #123 or issue #123
         # Be careful not to match markdown headers or already-processed links
         pattern_short_issue = r'(?<!\[)(?<!BB )#(\d+)(?!\])'
@@ -382,7 +515,12 @@ class BitbucketToGitHubMigrator:
             time.sleep(duration)
     
     def map_user(self, bb_username: str) -> Optional[str]:
-        """Map Bitbucket username to GitHub username
+        """Map Bitbucket display name or username to GitHub username
+        
+        Supports two config formats:
+        1. Simple: "Display Name": "github-username"
+        2. Enhanced: "Display Name": {"github": "github-username", "bitbucket_username": "bbuser"}
+        3. Direct: "bitbucket-username": "github-username"
         
         Returns:
             GitHub username if mapped, None if user doesn't have GitHub account
@@ -391,13 +529,207 @@ class BitbucketToGitHubMigrator:
             return None
         
         gh_user = self.user_mapping.get(bb_username)
+
+        # Check if it's enhanced format (dict)
+        if isinstance(gh_user, dict):
+            gh_user = gh_user.get('github')
         
         # Return None if explicitly mapped to None or empty string
         if gh_user == "" or gh_user is None:
             return None
             
         return gh_user
-    
+
+    def map_mention(self, bb_username: str) -> Optional[str]:
+        """Map Bitbucket username (from @mention) to GitHub username
+        
+        This specifically handles @mentions which use Bitbucket usernames,
+        not display names. Searches through all mapping formats.
+        
+        Also handles account IDs by first resolving them to usernames.
+
+        Args:
+            bb_username: Bitbucket username (from @mention) or account ID
+            
+        Returns:
+            GitHub username if mapped, None if no mapping found
+        """
+        if not bb_username:
+            return None
+        
+        # First, check if this is an account ID and resolve it to a username
+        resolved_username = bb_username
+        if bb_username in self.account_id_to_username or bb_username in self.account_id_to_display_name:
+            # Try username first (if available)
+            username = self.account_id_to_username.get(bb_username)
+            display_name = self.account_id_to_display_name.get(bb_username)
+            
+            # Prefer username, but fall back to display_name if username is None
+            if username:
+                resolved_username = username
+            elif display_name:
+                resolved_username = display_name
+            
+            # If the resolved value doesn't map, try the other one
+            if resolved_username not in self.user_mapping:
+                # Try the alternative
+                if username and display_name and display_name in self.user_mapping:
+                    resolved_username = display_name
+                elif display_name and username and username in self.user_mapping:
+                    resolved_username = username
+        
+        # Try direct mapping (username as key)
+        gh_user = self.user_mapping.get(resolved_username)
+        
+        # Check if it's enhanced format
+        if isinstance(gh_user, dict):
+            return gh_user.get('github')
+        elif gh_user is not None and gh_user != "":
+            return gh_user
+        
+        # Second, search through enhanced format entries for matching bitbucket_username
+        for key, value in self.user_mapping.items():
+            if isinstance(value, dict):
+                if value.get('bitbucket_username') == resolved_username:
+                    github_user = value.get('github')
+                    # Return None if explicitly set to null (no GitHub account)
+                    return github_user if github_user != "" else None
+        
+        # No mapping found
+        return None
+
+    def build_account_id_mappings(self, bb_issues: List[dict], bb_prs: List[dict]):
+        """Build mappings from account IDs to usernames by scanning all Bitbucket data
+        
+        This extracts account_id -> username mappings from user objects in the API responses.
+        These are needed because @mentions in content sometimes use account IDs instead of usernames.
+        """
+        self.log("Building account ID to username mappings...")
+        
+        users_found = {}  # account_id -> (username, display_name)
+        
+        # Scan issues for user information
+        for issue in bb_issues:
+            # Reporter
+            if issue.get('reporter'):
+                reporter = issue['reporter']
+                account_id = reporter.get('account_id')
+                username = reporter.get('username')
+                display_name = reporter.get('display_name')
+                
+                if account_id:
+                    if username:
+                        self.account_id_to_username[account_id] = username
+                    if display_name:
+                        self.account_id_to_display_name[account_id] = display_name
+                    if account_id not in users_found:
+                        users_found[account_id] = (username, display_name)
+            
+            # Assignee
+            if issue.get('assignee'):
+                assignee = issue['assignee']
+                account_id = assignee.get('account_id')
+                username = assignee.get('username')
+                display_name = assignee.get('display_name')
+                
+                if account_id:
+                    if username:
+                        self.account_id_to_username[account_id] = username
+                    if display_name:
+                        self.account_id_to_display_name[account_id] = display_name
+                    if account_id not in users_found:
+                        users_found[account_id] = (username, display_name)
+        
+        # Scan PRs for user information
+        for pr in bb_prs:
+            # Author
+            if pr.get('author'):
+                author = pr['author']
+                account_id = author.get('account_id')
+                username = author.get('username')
+                display_name = author.get('display_name')
+                
+                if account_id:
+                    if username:
+                        self.account_id_to_username[account_id] = username
+                    if display_name:
+                        self.account_id_to_display_name[account_id] = display_name
+                    if account_id not in users_found:
+                        users_found[account_id] = (username, display_name)
+            
+            # Participants
+            for participant in pr.get('participants', []):
+                if participant.get('user'):
+                    user = participant['user']
+                    account_id = user.get('account_id')
+                    username = user.get('username')
+                    display_name = user.get('display_name')
+                    
+                    if account_id:
+                        if username:
+                            self.account_id_to_username[account_id] = username
+                        if display_name:
+                            self.account_id_to_display_name[account_id] = display_name
+                        if account_id not in users_found:
+                            users_found[account_id] = (username, display_name)
+            
+            # Reviewers
+            for reviewer in pr.get('reviewers', []):
+                account_id = reviewer.get('account_id')
+                username = reviewer.get('username')
+                display_name = reviewer.get('display_name')
+                
+                if account_id:
+                    if username:
+                        self.account_id_to_username[account_id] = username
+                    if display_name:
+                        self.account_id_to_display_name[account_id] = display_name
+                    if account_id not in users_found:
+                        users_found[account_id] = (username, display_name)
+        
+        self.log(f"  Found {len(users_found)} unique account IDs with username mappings")
+        
+        # Log sample mappings for verification
+        if users_found:
+            self.log("  Sample account ID mappings:")
+            for account_id, (username, display_name) in list(users_found.items())[:5]:
+                self.log(f"    {account_id[:40]}... -> {username} ({display_name})")
+        
+        return len(users_found)
+
+    def lookup_account_id_via_api(self, account_id: str) -> Optional[dict]:
+        """Look up a Bitbucket account ID using the API
+        
+        Args:
+            account_id: The account ID to look up (e.g., "557058:c250d1e9-df76-4236-bc2f-a98d056b56b5")
+            
+        Returns:
+            Dict with 'username' and 'display_name' if found, None otherwise
+        """
+        # Bitbucket API endpoint for user lookup
+        url = f"https://api.bitbucket.org/2.0/users/{account_id}"
+        
+        try:
+            response = self.bb_session.get(url, timeout=5)
+            if response.status_code == 200:
+                user_data = response.json()
+                return {
+                    'username': user_data.get('username'),
+                    'nickname': user_data.get('nickname'),  # Often same as username
+                    'display_name': user_data.get('display_name'),
+                    'account_id': user_data.get('account_id')
+                }
+            elif response.status_code == 404:
+                # User not found (deleted account, etc.)
+                return None
+            else:
+                self.log(f"  Warning: Could not lookup account ID {account_id[:40]}... (HTTP {response.status_code})")
+                return None
+        except Exception as e:
+            self.log(f"  Warning: Error looking up account ID {account_id[:40]}...: {e}")
+            return None
+
+
     def check_gh_cli_available(self) -> bool:
         """Check if GitHub CLI is installed and authenticated"""
         try:
@@ -1614,7 +1946,8 @@ class BitbucketToGitHubMigrator:
         report.append("3. [Attachments](#attachments)")
         report.append("4. [User Mapping](#user-mapping)")
         report.append("5. [Unhandled Bitbucket Links](#-unhandled-bitbucket-links)")
-        report.append("6. [Migration Statistics](#migration-statistics)")
+        report.append("6. [Unmapped @Mentions](#-unmapped-mentions)")
+        report.append("7. [Migration Statistics](#migration-statistics)")
         report.append("")
         
         # Issues Migration
@@ -1791,6 +2124,125 @@ class BitbucketToGitHubMigrator:
         
         report.append("")
         
+        # Unmapped Mentions
+        if self.unmapped_mentions:
+            report.append("---")
+            report.append("")
+            report.append("## ⚠️ Unmapped @Mentions")
+            report.append("")
+            report.append(f"**Total Unmapped Mentions:** {len(self.unmapped_mentions)} unique usernames")
+            report.append(f"**Total Occurrences:** {sum(self.unmapped_mentions.values())}")
+            report.append("")
+            report.append("The following Bitbucket @mentions could not be mapped to GitHub usernames:")
+            report.append("")
+            report.append("- **Account IDs with display names** have been replaced with: `**Display Name** *(Bitbucket user, no GitHub account)*`")
+            report.append("- **Usernames/Account IDs without display names** are preserved as: `@username *(Bitbucket user, needs GitHub mapping)*`")
+            report.append("")
+            report.append("| Bitbucket Username | Type | Resolved To | Occurrences | Suggested Mapping |")
+            report.append("|--------------------|------|-------------|-------------|-------------------|")
+
+
+            
+            for bb_username, count in sorted(self.unmapped_mentions.items(), key=lambda x: x[1], reverse=True):
+                # Check if this is an account ID
+                is_account_id = ':' in bb_username or (len(bb_username) == 24 and all(c in '0123456789abcdef' for c in bb_username.lower()))
+
+                # Check if this is a display name (from account ID resolution)
+                # These are tracked under display name rather than account ID
+                is_display_name_entry = not is_account_id and bb_username in self.account_id_to_display_name.values()
+                
+                if is_display_name_entry:
+                    # This is a display name entry (account ID was already resolved and replaced)
+                    mention_type = "Display Name"
+                    resolved_to = "-"
+                    suggestion = f'`"{bb_username}": "github-user"` (if they get a GitHub account)'
+                    display_username = bb_username
+                elif is_account_id:
+                    # Check if we resolved it
+                    resolved_username = self.account_id_to_username.get(bb_username)
+                    display_name = self.account_id_to_display_name.get(bb_username)
+                    
+                    mention_type = "Account ID"
+                    if resolved_username:
+                        # Have username
+                        resolved_to = f"`{resolved_username}`"
+                        suggestion = f'`"{resolved_username}": "github-user"`'
+                    elif display_name:
+                        # Have display name but not username
+                        resolved_to = f"`{display_name}` (display only)"
+                        suggestion = f'`"{display_name}": "github-user"`'
+                    else:
+                        # Try API lookup as last resort
+                        user_info = self.lookup_account_id_via_api(bb_username)
+                        if user_info:
+                            username = user_info.get('username') or user_info.get('nickname')
+                            display = user_info.get('display_name')
+                            
+                            if username:
+                                resolved_to = f"`{username}` (via API)"
+                                suggestion = f'`"{username}": "github-user"`'
+                            elif display:
+                                resolved_to = f"`{display}` (via API)"
+                                suggestion = f'`"{display}": "github-user"`'
+                            else:
+                                resolved_to = "❌ Not found"
+                                suggestion = "User may be deleted"
+                            
+                            # Cache it
+                            if username:
+                                self.account_id_to_username[bb_username] = username
+                            if display:
+                                self.account_id_to_display_name[bb_username] = display
+                        else:
+                            resolved_to = "❌ Not found"
+                            suggestion = "User may be deleted"
+                else:
+                    mention_type = "Username"
+                    resolved_to = "-"
+                    suggestion = f'`"{bb_username}": "github-user"`'
+                    display_username = bb_username
+                
+                # Truncate long account IDs for display
+                display_username = bb_username if len(bb_username) <= 40 else bb_username[:37] + '...'
+                report.append(f"| `@{display_username}` | {mention_type} | {resolved_to} | {count} | {suggestion} |")
+
+            
+            report.append("")
+            report.append("### How to Fix Unmapped Mentions")
+            report.append("")
+            report.append("**For Display Names (account IDs that were made readable):**")
+            report.append("")
+            report.append("These mentions have already been converted from cryptic account IDs to readable names.")
+            report.append("They appear as `**Name** *(Bitbucket user, no GitHub account)*` in the migrated content.")
+            report.append("")
+            report.append("- If the user creates a GitHub account later, add: `\"Display Name\": \"their-github-username\"`")
+            report.append("- Otherwise, no action needed - the readable format is already user-friendly")
+            report.append("")
+            report.append("**For Usernames and Unresolved Account IDs:**")
+            report.append("")
+            report.append("**Option 1: Add direct username mappings**")
+            report.append("")
+            report.append("```json")
+            report.append('"user_mapping": {')
+            # Only show non-display-name entries as examples
+            non_display_entries = [u for u in self.unmapped_mentions.keys() 
+                                  if u not in self.account_id_to_display_name.values()]
+            for bb_username in non_display_entries[:3]:
+                report.append(f'  "{bb_username}": "their-github-username",')
+            if len(non_display_entries) > 3:
+                report.append('  ...')
+            report.append('}')
+            report.append("```")
+            report.append("")
+            report.append("**Option 2: Manually fix on GitHub**")
+            report.append("")
+            report.append("Search for the pattern `*(Bitbucket user, needs GitHub mapping)*` in your issues/PRs")
+            report.append("and edit the mentions directly on GitHub.")
+            report.append("")
+            report.append("**Note:** Display names from account IDs are already human-readable and don't need fixing")
+            report.append("unless those users later get GitHub accounts.")
+            report.append("")
+
         # Migration Statistics
         report.append("---")
         report.append("")
@@ -1895,6 +2347,12 @@ class BitbucketToGitHubMigrator:
             self.log(f"  Found {len(self.unhandled_bb_links)} Bitbucket link(s) that were not automatically migrated")
             self.log(f"  See migration report for details")
 
+        if self.unmapped_mentions:
+            self.log(f"⚠️  Unmapped @Mentions:")
+            self.log(f"  Found {len(self.unmapped_mentions)} Bitbucket username(s) in @mentions")
+            self.log(f"  Total occurrences: {sum(self.unmapped_mentions.values())}")
+            self.log(f"  These have been preserved with notes - see migration report")
+
         self.log(f"Reports Generated:")
         self.log(f"  ✓ migration_mapping.json - Machine-readable mapping")
         if self.dry_run:
@@ -1904,6 +2362,275 @@ class BitbucketToGitHubMigrator:
         
         self.log("="*80)
 
+    def diagnose_mentions(self, bb_issues: List[dict], bb_prs: List[dict]):
+        """Diagnostic: scan all content for @ symbols and account IDs
+        
+        This helps identify where account ID mentions are coming from.
+        """
+        self.log("\n" + "="*80)
+        self.log("DIAGNOSTIC: Scanning for @ mentions and account IDs")
+        self.log("="*80)
+        
+        import re
+        
+        total_at_symbols = 0
+        account_ids_found = []
+        mentions_to_test = {}  # Track all unique mentions found
+
+        # Scan issues
+        self.log(f"Scanning {len(bb_issues)} issues...")
+        for issue in bb_issues:
+            content = issue.get('content', {}).get('raw', '')
+            
+            if content and '@' in content:
+                # Extract all @mentions using same pattern as actual migration
+                pattern_mention = r'(?<![a-zA-Z0-9_.])@(\{[^}]+\}|[a-zA-Z0-9_][a-zA-Z0-9_-]*)'
+                mentions = re.findall(pattern_mention, content)
+                
+                for mention_match in mentions:
+                    # Remove braces if present
+                    if mention_match.startswith('{') and mention_match.endswith('}'):
+                        mention = mention_match[1:-1]
+                    else:
+                        mention = mention_match
+                    
+                    total_at_symbols += 1
+                    
+                    # Track this mention
+                    if mention not in mentions_to_test:
+                        mentions_to_test[mention] = {'count': 0, 'locations': []}
+                    mentions_to_test[mention]['count'] += 1
+                    mentions_to_test[mention]['locations'].append(('issue', issue['id']))
+                    
+                    # Check if account ID
+                    if ':' in mention:
+                        account_ids_found.append(('issue', issue['id'], mention, 'AAID'))
+                    elif len(mention) == 24 and all(c in '0123456789abcdef' for c in mention.lower()):
+                        account_ids_found.append(('issue', issue['id'], mention, 'Legacy'))
+
+            # Also scan comments for this issue
+            comments = self.fetch_bb_issue_comments(issue['id'])
+            for comment in comments:
+                comment_content = comment.get('content', {}).get('raw', '')
+                if comment_content and '@' in comment_content:
+                    pattern_mention = r'(?<![a-zA-Z0-9_.])@(\{[^}]+\}|[a-zA-Z0-9_][a-zA-Z0-9_-]*)'
+                    mentions = re.findall(pattern_mention, comment_content)
+                    
+                    for mention_match in mentions:
+                        if mention_match.startswith('{') and mention_match.endswith('}'):
+                            mention = mention_match[1:-1]
+                        else:
+                            mention = mention_match
+                        
+                        total_at_symbols += 1
+                        
+                        if mention not in mentions_to_test:
+                            mentions_to_test[mention] = {'count': 0, 'locations': []}
+                        mentions_to_test[mention]['count'] += 1
+                        mentions_to_test[mention]['locations'].append(('issue_comment', issue['id']))
+                        
+                        if ':' in mention:
+                            account_ids_found.append(('issue_comment', issue['id'], mention, 'AAID'))
+                        elif len(mention) == 24 and all(c in '0123456789abcdef' for c in mention.lower()):
+                            account_ids_found.append(('issue_comment', issue['id'], mention, 'Legacy'))
+
+        # Scan PRs
+        self.log(f"Scanning {len(bb_prs)} pull requests...")
+        for pr in bb_prs:
+            description = pr.get('description', '')
+            
+            if description and '@' in description:
+                pattern_mention = r'(?<![a-zA-Z0-9_.])@(\{[^}]+\}|[a-zA-Z0-9_][a-zA-Z0-9_-]*)'
+                mentions = re.findall(pattern_mention, description)
+                
+                for mention_match in mentions:
+                    if mention_match.startswith('{') and mention_match.endswith('}'):
+                        mention = mention_match[1:-1]
+                    else:
+                        mention = mention_match
+                    
+                    total_at_symbols += 1
+                    
+                    if mention not in mentions_to_test:
+                        mentions_to_test[mention] = {'count': 0, 'locations': []}
+                    mentions_to_test[mention]['count'] += 1
+                    mentions_to_test[mention]['locations'].append(('pr', pr['id']))
+                    
+                    # Check if account ID
+                    if ':' in mention:
+                        account_ids_found.append(('pr', pr['id'], mention, 'AAID'))
+                    elif len(mention) == 24 and all(c in '0123456789abcdef' for c in mention.lower()):
+                        account_ids_found.append(('pr', pr['id'], mention, 'Legacy'))
+
+            # Also scan PR comments
+            pr_comments = self.fetch_bb_pr_comments(pr['id'])
+            for comment in pr_comments:
+                comment_content = comment.get('content', {}).get('raw', '')
+                if comment_content and '@' in comment_content:
+                    pattern_mention = r'(?<![a-zA-Z0-9_.])@(\{[^}]+\}|[a-zA-Z0-9_][a-zA-Z0-9_-]*)'
+                    mentions = re.findall(pattern_mention, comment_content)
+                    
+                    for mention_match in mentions:
+                        if mention_match.startswith('{') and mention_match.endswith('}'):
+                            mention = mention_match[1:-1]
+                        else:
+                            mention = mention_match
+                        
+                        total_at_symbols += 1
+                        
+                        if mention not in mentions_to_test:
+                            mentions_to_test[mention] = {'count': 0, 'locations': []}
+                        mentions_to_test[mention]['count'] += 1
+                        mentions_to_test[mention]['locations'].append(('pr_comment', pr['id']))
+                        
+                        if ':' in mention:
+                            account_ids_found.append(('pr_comment', pr['id'], mention, 'AAID'))
+                        elif len(mention) == 24 and all(c in '0123456789abcdef' for c in mention.lower()):
+                            account_ids_found.append(('pr_comment', pr['id'], mention, 'Legacy'))
+
+        self.log(f"\n" + "="*80)
+        self.log(f"DIAGNOSTIC SUMMARY")
+        self.log(f"="*80)
+        self.log(f"Total @ symbols found: {total_at_symbols}")
+        self.log(f"Unique @mentions found: {len(mentions_to_test)}")
+        self.log(f"Account IDs detected: {len(account_ids_found)}")
+        self.log("")
+        
+        # Test which mentions would be mapped/unmapped
+        self.log("Testing mention mapping...")
+        mapped_mentions = []
+        unmapped_mentions = []
+        
+        for mention, data in sorted(mentions_to_test.items(), key=lambda x: x[1]['count'], reverse=True):
+            gh_user = self.map_mention(mention)
+            
+            if gh_user:
+                mapped_mentions.append((mention, gh_user, data['count']))
+            else:
+                unmapped_mentions.append((mention, data['count'], data['locations'][:3]))  # First 3 locations
+        
+        self.log("")
+        self.log(f"✓ Mentions that WILL be mapped: {len(mapped_mentions)}")
+        if mapped_mentions:
+            for bb_mention, gh_user, count in mapped_mentions[:10]:
+                self.log(f"  @{bb_mention} → @{gh_user} ({count} occurrences)")
+            if len(mapped_mentions) > 10:
+                self.log(f"  ... and {len(mapped_mentions) - 10} more")
+        
+        self.log("")
+        self.log(f"⚠️  Mentions that will be UNMAPPED: {len(unmapped_mentions)}")
+        if unmapped_mentions:
+            for mention, count, locations in unmapped_mentions[:20]:
+                loc_str = ', '.join([f"{t} #{n}" for t, n in locations])
+                self.log(f"  @{mention} ({count} occurrences) - e.g. {loc_str}")
+            if len(unmapped_mentions) > 20:
+                self.log(f"  ... and {len(unmapped_mentions) - 20} more")
+         
+        self.log("")
+
+        if account_ids_found:
+            self.log(f"⚠️  Account IDs found: {len(account_ids_found)}")
+            # Group by account ID
+            from collections import defaultdict
+            ids_by_value = defaultdict(list)
+            for item_type, item_num, account_id, id_type in account_ids_found:
+                ids_by_value[account_id].append((item_type, item_num, id_type))
+
+            self.log("")
+            self.log("  Account ID Resolution:")
+
+            unresolved_ids = []  # Track IDs that need API lookup
+
+            for account_id, occurrences in sorted(ids_by_value.items(), key=lambda x: len(x[1]), reverse=True)[:20]:
+                # Try to resolve this account ID from our mappings
+                resolved_username = self.account_id_to_username.get(account_id)
+                display_name = self.account_id_to_display_name.get(account_id)
+                gh_username = self.map_mention(account_id)
+                
+                self.log(f"  @{account_id} ({len(occurrences)} occurrences)")
+                
+                # Check what we have
+                has_username = resolved_username is not None
+                has_display = display_name is not None
+                
+                if has_username or has_display:
+                    # We have some info from the repo data
+                    if has_username:
+                        self.log(f"    ├─ Bitbucket username: {resolved_username}")
+                    else:
+                        self.log(f"    ├─ Bitbucket username: None (not in API response)")
+                    
+                    if has_display:
+                        self.log(f"    ├─ Display name: {display_name}")
+                    
+                    if gh_username:
+                        self.log(f"    └─ ✓ GitHub: @{gh_username}")
+                    else:
+                        self.log(f"    └─ ⚠️  Not mapped to GitHub")
+                        # Give specific suggestion based on what we have
+                        if has_username:
+                            self.log(f"       Add to config: \"{resolved_username}\": \"github-username\"")
+                        elif has_display:
+                            self.log(f"       Add to config: \"{display_name}\": \"github-username\"")
+
+                else:
+                    # Not resolved from existing data - will need API lookup
+                    unresolved_ids.append(account_id)
+                    self.log(f"    └─ ⚠️  Not found in repo data (will lookup via API)")
+
+                
+                # Show sample locations (just first 2)
+                for item_type, item_num, _ in occurrences[:2]:
+                    self.log(f"       Found in: {item_type} #{item_num}")
+            
+            if len(ids_by_value) > 20:
+                self.log(f"  ... and {len(ids_by_value) - 20} more account IDs")
+            
+            # Now lookup unresolved IDs via API
+            if unresolved_ids:
+                self.log("")
+                self.log(f"  Looking up {len(unresolved_ids)} unresolved account ID(s) via Bitbucket API...")
+                self.log(f"  Note: This requires user lookup permissions on your API token")
+
+                for account_id in unresolved_ids[:10]:  # Limit to first 10 to avoid too many API calls
+                    user_info = self.lookup_account_id_via_api(account_id)
+                    
+                    if user_info:
+                        username = user_info.get('username') or user_info.get('nickname')
+                        display = user_info.get('display_name', 'Unknown')
+                        
+                        self.log(f"    ✓ {account_id[:40]}...")
+                        self.log(f"      → Username: {username or 'None'}")
+                        self.log(f"      → Display: {display}")
+                        
+                        if username:
+                            self.log(f"      Add to config: \"{username}\": \"github-username\"")
+                        elif display:
+                            self.log(f"      Add to config: \"{display}\": \"github-username\"")
+                        
+                        # Save this for future use
+                        if username:
+                            self.account_id_to_username[account_id] = username
+                        if display:
+                            self.account_id_to_display_name[account_id] = display
+                    else:
+                        self.log(f"    ✗ {account_id[:40]}... - Could not lookup (permission denied or deleted)")
+                
+                if len(unresolved_ids) > 10:
+                    self.log(f"    ... and {len(unresolved_ids) - 10} more (not looked up)")
+
+                self.log("")
+                self.log(f"  If you see 403 errors, your API token may lack user lookup permissions")
+                self.log(f"  This is OK - the display names from repo data are usually sufficient")
+
+            self.log("")
+            self.log(f"  NOTE: Account IDs are Bitbucket's internal identifiers")
+            self.log(f"        The script will resolve them to usernames automatically")
+            self.log(f"        Add username mappings to your config for unmapped accounts")
+        else:
+            self.log(f"✓ No account IDs found")
+        
+        self.log("="*80 + "\n")
 
 def load_config(config_file: str) -> dict:
     """Load configuration from JSON file"""
@@ -2059,6 +2786,13 @@ Example:
         bb_issues = migrator.fetch_bb_issues() if not args.skip_issues else []
         bb_prs = migrator.fetch_bb_prs() if not args.skip_prs else []
         
+        # Build account ID mappings from the fetched data
+        migrator.build_account_id_mappings(bb_issues, bb_prs)
+
+        # Diagnostic: check for account IDs in raw data
+        if args.dry_run:
+            migrator.diagnose_mentions(bb_issues, bb_prs)
+
         # Test GitHub connection (read-only, safe for dry-run)
         migrator.log("Testing GitHub connection...")
         try:

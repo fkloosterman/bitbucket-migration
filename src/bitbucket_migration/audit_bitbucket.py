@@ -132,9 +132,67 @@ class BitbucketAuditor:
             'issue_comments': 0,
             'pr_comments': 0,
             'pr_reviews': 0,
-            'commits': 0
+            'commits': 0,
+            'bitbucket_username': None,
+            'account_id': None
         })
+        # Track account ID mentions (these appear in content but aren't real usernames)
+        self.account_id_mentions = []
+
+    def extract_account_id_mentions(self, text: str, item_type: str, item_number: int):
+        """Extract Bitbucket account ID mentions from text
         
+        These are internal IDs that appear in content, not real usernames.
+        Formats:
+        - @557058:c250d1e9-df76-4236-bc2f-a98d056b56b5 (AAID format)
+        - @5d80e691b29eab0c3cba6a2e (legacy format, 24 hex chars)
+        
+        Args:
+            text: Text to scan for account IDs
+            item_type: 'issue' or 'pr'
+            item_number: Issue or PR number
+        """
+        if not text:
+            return
+        
+        import re
+        
+        # Pattern to match @mentions (same as migration script)
+        mention_pattern = r'(?<![a-zA-Z0-9_.])@(\{[^}]+\}|[a-zA-Z0-9_:][a-zA-Z0-9_:-]*)'
+
+        matches = re.findall(mention_pattern, text)
+        
+        for mention in matches:
+            # Remove braces if present
+            if mention.startswith('{') and mention.endswith('}'):
+                mention = mention[1:-1]
+
+            # Check if this is an account ID
+            is_account_id = False
+            id_type = None
+            
+            # Format 1: Contains colon (AAID)
+            if ':' in mention:
+                is_account_id = True
+                id_type = 'AAID'
+            # Format 2: Exactly 24 hex characters (legacy)
+            elif len(mention) == 24 and all(c in '0123456789abcdef' for c in mention.lower()):
+                is_account_id = True
+                id_type = 'Legacy'
+            # Format 3: Very long hex string
+            elif len(mention) > 20 and all(c in '0123456789abcdef' for c in mention.lower()):
+                is_account_id = True
+                id_type = 'Hex'
+            
+            if is_account_id:
+                self.account_id_mentions.append({
+                    'item_type': item_type,
+                    'item_number': item_number,
+                    'account_id': f'@{mention}',
+                    'id_type': id_type,
+                    'context': text[max(0, text.find(mention)-30):text.find(mention)+len(mention)+30]
+                })
+
     def _paginate(self, url: str, params: dict = None) -> List[dict]:
         """Fetch all pages of results from Bitbucket API"""
         results = []
@@ -209,19 +267,36 @@ class BitbucketAuditor:
                 'votes': issue.get('votes', 0),
             }
             
+            # Scan issue description for account ID mentions
+            issue_content = issue.get('content', {}).get('raw', '')
+            if issue_content:
+                self.extract_account_id_mentions(issue_content, 'issue', issue['id'])
+
             # Collect users - handle deleted/missing users gracefully
             if issue.get('reporter') and issue.get('reporter', {}).get('display_name'):
                 reporter_name = issue['reporter'].get('display_name', 'Unknown')
+                reporter_username = issue['reporter'].get('username')
+                reporter_account_id = issue['reporter'].get('account_id')
                 self.users.add(reporter_name)
                 self.user_stats[reporter_name]['issues_created'] += 1
+                if reporter_username:
+                    self.user_stats[reporter_name]['bitbucket_username'] = reporter_username
+                if reporter_account_id:
+                    self.user_stats[reporter_name]['account_id'] = reporter_account_id
             else:
                 # User account deleted or missing
                 self.users.add('Unknown (deleted user)')
                 
             if issue.get('assignee') and issue.get('assignee', {}).get('display_name'):
                 assignee_name = issue['assignee'].get('display_name')
+                assignee_username = issue['assignee'].get('username')
+                assignee_account_id = issue['assignee'].get('account_id')
                 self.users.add(assignee_name)
                 self.user_stats[assignee_name]['issues_assigned'] += 1
+                if assignee_username:
+                    self.user_stats[assignee_name]['bitbucket_username'] = assignee_username
+                if assignee_account_id:
+                    self.user_stats[assignee_name]['account_id'] = assignee_account_id
             
             # Collect milestone
             if issue.get('milestone'):
@@ -235,10 +310,21 @@ class BitbucketAuditor:
             for comment in comments:
                 if comment.get('user') and comment.get('user', {}).get('display_name'):
                     commenter_name = comment['user'].get('display_name', 'Unknown')
+                    commenter_username = comment['user'].get('username')
+                    commenter_account_id = comment['user'].get('account_id')
                     self.users.add(commenter_name)
                     self.user_stats[commenter_name]['issue_comments'] += 1
+                    if commenter_username:
+                        self.user_stats[commenter_name]['bitbucket_username'] = commenter_username
+                    if commenter_account_id:
+                        self.user_stats[commenter_name]['account_id'] = commenter_account_id
                 else:
                     self.users.add('Unknown (deleted user)')
+                
+                # Scan comment content for account ID mentions
+                comment_content = comment.get('content', {}).get('raw', '')
+                if comment_content:
+                    self.extract_account_id_mentions(comment_content, 'issue', issue['id'])
             
             # Fetch attachments
             attachments_url = f"{self.base_url}/repositories/{self.workspace}/{self.repo}/issues/{issue['id']}/attachments"
@@ -302,7 +388,12 @@ class BitbucketAuditor:
                 'migratable': True,  # Can we migrate this PR?
                 'migration_issues': []  # What problems might we encounter?
             }
-            
+
+            # Scan PR description for account ID mentions
+            pr_description = pr.get('description', '')
+            if pr_description:
+                self.extract_account_id_mentions(pr_description, 'pr', pr['id'])
+
             # Check if source branch still exists
             if pr_data['source_branch']:
                 # We'll assume branch exists for now - checking every branch would be too slow
@@ -318,19 +409,38 @@ class BitbucketAuditor:
             # Collect users
             if pr.get('author'):
                 author_name = pr['author'].get('display_name', 'Unknown')
+                author_username = pr['author'].get('username')
+                author_account_id = pr['author'].get('account_id')
                 self.users.add(author_name)
                 self.user_stats[author_name]['prs_created'] += 1
+                if author_username:
+                    self.user_stats[author_name]['bitbucket_username'] = author_username
+                if author_account_id:
+                    self.user_stats[author_name]['account_id'] = author_account_id
             
             for participant in pr.get('participants', []):
                 if participant.get('user'):
                     participant_name = participant['user'].get('display_name', 'Unknown')
+                    participant_username = participant['user'].get('username')
+                    participant_account_id = participant['user'].get('account_id')
                     self.users.add(participant_name)
+                    if participant_username:
+                        self.user_stats[participant_name]['bitbucket_username'] = participant_username
+                    if participant_account_id:
+                        self.user_stats[participant_name]['account_id'] = participant_account_id
+
             
             for reviewer in pr.get('reviewers', []):
                 if reviewer.get('display_name'):
                     reviewer_name = reviewer.get('display_name')
+                    reviewer_username = reviewer.get('username')
+                    reviewer_account_id = reviewer.get('account_id')
                     self.users.add(reviewer_name)
                     self.user_stats[reviewer_name]['pr_reviews'] += 1
+                    if reviewer_username:
+                        self.user_stats[reviewer_name]['bitbucket_username'] = reviewer_username
+                    if reviewer_account_id:
+                        self.user_stats[reviewer_name]['account_id'] = reviewer_account_id
             
             # Fetch comments
             comments_url = f"{self.base_url}/repositories/{self.workspace}/{self.repo}/pullrequests/{pr['id']}/comments"
@@ -344,6 +454,11 @@ class BitbucketAuditor:
                     self.user_stats[commenter_name]['pr_comments'] += 1
                 else:
                     self.users.add('Unknown (deleted user)')
+                
+                # Scan comment content for account ID mentions
+                comment_content = comment.get('content', {}).get('raw', '')
+                if comment_content:
+                    self.extract_account_id_mentions(comment_content, 'pr', pr['id'])
             
             # Fetch commits in this PR
             commits_url = f"{self.base_url}/repositories/{self.workspace}/{self.repo}/pullrequests/{pr['id']}/commits"
@@ -354,8 +469,14 @@ class BitbucketAuditor:
                 for commit in commits:
                     if commit.get('author') and commit['author'].get('user'):
                         commit_author = commit['author']['user'].get('display_name', 'Unknown')
+                        commit_username = commit['author']['user'].get('username')
+                        commit_account_id = commit['author']['user'].get('account_id')
                         self.users.add(commit_author)
                         self.user_stats[commit_author]['commits'] += 1
+                        if commit_username:
+                            self.user_stats[commit_author]['bitbucket_username'] = commit_username
+                        if commit_account_id:
+                            self.user_stats[commit_author]['account_id'] = commit_account_id
             except Exception as e:
                 # Some PRs may not have accessible commits (declined, branch deleted, etc.)
                 pr_data['commit_count'] = 0
@@ -447,6 +568,31 @@ class BitbucketAuditor:
         
         return gaps, len(gaps)
     
+    def _summarize_account_ids(self) -> dict:
+        """Summarize account ID mentions by item"""
+        from collections import defaultdict
+        
+        by_item = defaultdict(lambda: {'count': 0, 'types': set()})
+        
+        for mention in self.account_id_mentions:
+            key = f"{mention['item_type']}_{mention['item_number']}"
+            by_item[key]['count'] += 1
+            by_item[key]['types'].add(mention['id_type'])
+            by_item[key]['item_type'] = mention['item_type']
+            by_item[key]['item_number'] = mention['item_number']
+        
+        # Convert to list for JSON serialization
+        result = []
+        for key, data in by_item.items():
+            result.append({
+                'item_type': data['item_type'],
+                'item_number': data['item_number'],
+                'mention_count': data['count'],
+                'id_types': list(data['types'])
+            })
+        
+        return sorted(result, key=lambda x: (x['item_type'], x['item_number']))
+
     def generate_report(self) -> dict:
         """Generate comprehensive audit report"""
         print("\nGenerating report...")
@@ -562,6 +708,11 @@ class BitbucketAuditor:
                 'total': len(self.milestones),
                 'list': sorted(list(self.milestones)),
             },
+            'account_id_mentions': {
+                'total': len(self.account_id_mentions),
+                'by_item': self._summarize_account_ids(),
+                'note': 'These are Bitbucket internal IDs, not real usernames. They cannot be mapped during migration.'
+            },
             'migration_estimates': {
                 'placeholder_issues_needed': issue_gap_count,
                 'total_api_calls_estimate': (
@@ -634,6 +785,14 @@ class BitbucketAuditor:
         if report['milestones']['list']:
             print(f"  List: {', '.join(report['milestones']['list'])}")
         
+        if report['account_id_mentions']['total'] > 0:
+            print("\nℹ️  ACCOUNT ID MENTIONS")
+            print(f"  Total: {report['account_id_mentions']['total']}")
+            print(f"  Found in: {len(report['account_id_mentions']['by_item'])} items")
+            print(f"  Note: These are Bitbucket internal IDs, not real usernames")
+            print(f"        They appear in old content or for deleted users")
+            print(f"        See detailed report for which items contain them")
+
         print("\n📊 MIGRATION ESTIMATES")
         print(f"  Placeholder Issues Needed: {report['migration_estimates']['placeholder_issues_needed']}")
         print(f"  Estimated API Calls: ~{report['migration_estimates']['total_api_calls_estimate']}")
@@ -746,17 +905,101 @@ class BitbucketAuditor:
             f.write("# Copy these mappings to migration_config.json\n")
             f.write("# Format: \"Bitbucket Display Name\": \"github-username\"\n")
             f.write("# Use null for users without GitHub accounts\n\n")
+            f.write("# Copy the appropriate format to your migration_config.json\n\n")
             
+            f.write("# FORMAT 1: SIMPLE (for authors/assignees only)\n")
+            f.write("# Use this if @mentions are rare or not important\n")
+            f.write('"user_mapping": {\n')
             for user in sorted(self.users):
+                if user == 'Unknown (deleted user)':
+                    continue
                 activity = self.user_stats.get(user, {})
                 total = (activity.get('issues_created', 0) + 
                         activity.get('prs_created', 0) + 
                         activity.get('commits', 0) +
                         activity.get('issue_comments', 0) +
                         activity.get('pr_comments', 0))
+                f.write(f'  "{user}": "github-username-here",  # {total} activities\n')
+            f.write('}\n\n')
+            
+            f.write("# FORMAT 2: ENHANCED (recommended for @mention support)\n")
+            f.write("# Use this if your team uses @mentions frequently\n")
+            f.write('"user_mapping": {\n')
+
+            for user in sorted(self.users):
+                if user == 'Unknown (deleted user)':
+                    continue
+                activity = self.user_stats.get(user, {})
+                total = (activity.get('issues_created', 0) + 
+                        activity.get('prs_created', 0) + 
+                        activity.get('commits', 0) +
+                        activity.get('issue_comments', 0) +
+                        activity.get('pr_comments', 0))
+                bb_username = activity.get('bitbucket_username', 'unknown')
                 
-                f.write(f"# {user} - {total} total activities\n")
-                f.write(f'"{user}": "",\n\n')
+                f.write(f'  "{user}": {{\n')
+                f.write(f'    "github": "github-username-here",\n')
+                f.write(f'    "bitbucket_username": "{bb_username}"\n')
+                f.write(f'  }},  # {total} activities\n')
+            f.write('}\n\n')
+            
+            f.write("# FORMAT 3: DIRECT USERNAME MAPPING\n")
+            f.write("# Use this for quick @mention mapping without display names\n")
+            f.write('"user_mapping": {\n')
+            for user in sorted(self.users):
+                if user == 'Unknown (deleted user)':
+                    continue
+                activity = self.user_stats.get(user, {})
+                bb_username = activity.get('bitbucket_username')
+                if bb_username and bb_username != 'unknown':
+                    f.write(f'  "{bb_username}": "github-username-here",  # {user}\n')
+            f.write('}\n\n')
+            
+            f.write("# FORMAT 4: MIXED (combine formats as needed)\n")
+            f.write('"user_mapping": {\n')
+            f.write('  "High Activity User": {\n')
+            f.write('    "github": "github-username",\n')
+            f.write('    "bitbucket_username": "bbuser"\n')
+            f.write('  },\n')
+            f.write('  "Medium Activity User": "github-username",\n')
+            f.write('  "low-activity-bbuser": "github-username",\n')
+            f.write('  "External Contractor": null\n')
+            f.write('}\n\n')
+            
+            f.write("# User Activity Summary\n")
+            f.write("# =====================\n")
+            f.write("# Sorted by total activity (issues + PRs + comments)\n")
+            f.write("#\n")
+            for user in sorted(self.users, key=lambda u: (
+                self.user_stats.get(u, {}).get('issues_created', 0) +
+                self.user_stats.get(u, {}).get('prs_created', 0) +
+                self.user_stats.get(u, {}).get('commits', 0) +
+                self.user_stats.get(u, {}).get('issue_comments', 0) +
+                self.user_stats.get(u, {}).get('pr_comments', 0)
+            ), reverse=True):
+                if user == 'Unknown (deleted user)':
+                    continue
+                activity = self.user_stats.get(user, {})
+                bb_username = activity.get('bitbucket_username', 'unknown')
+                total = (activity.get('issues_created', 0) + 
+                        activity.get('prs_created', 0) + 
+                        activity.get('commits', 0) +
+                        activity.get('issue_comments', 0) +
+                        activity.get('pr_comments', 0))
+                
+                f.write(f'# {user}\n')
+                f.write(f'#   Bitbucket username: {bb_username}\n')
+                f.write(f'#   Activity: {activity.get("issues_created", 0)} issues, ')
+                f.write(f'{activity.get("prs_created", 0)} PRs, ')
+                f.write(f'{activity.get("issue_comments", 0) + activity.get("pr_comments", 0)} comments\n')
+                f.write(f'#   Total: {total}\n')
+                f.write('#\n')
+            
+            f.write("\n# TIPS:\n")
+            f.write("# - Focus on mapping high-activity users first\n")
+            f.write("# - Use enhanced format for users mentioned frequently with @\n")
+            f.write("# - Set external/former users to null if they don't have GitHub\n")
+            f.write("# - Run migration with --dry-run to see which mentions are unmapped\n")
         
         print(f"User mapping template also saved to: {user_template_file}")
         print("This file shows all users with their activity counts for reference.\n")
@@ -840,6 +1083,78 @@ class BitbucketAuditor:
         md.append(f"- **Total Files:** {report['attachments']['total']}\n")
         md.append(f"- **Total Size:** {report['attachments']['total_size_mb']} MB\n\n")
         
+        # Account ID Mentions Section
+        if report['account_id_mentions']['total'] > 0:
+            md.append("## Account ID Mentions\n\n")
+            md.append(f"**Total Found:** {report['account_id_mentions']['total']}\n\n")
+            md.append("These are **Bitbucket internal account IDs**, not real usernames. They appear in:\n")
+            md.append("- Content from older Bitbucket migrations\n")
+            md.append("- Mentions of deleted/deactivated users\n")
+            md.append("- API-created content\n\n")
+            md.append("**Important:** These account IDs:\n")
+            md.append("- **CAN be mapped** to GitHub usernames via the migration script\n")
+            md.append("- The migration script automatically resolves account IDs to Bitbucket usernames\n")
+            md.append("- Then maps Bitbucket usernames to GitHub usernames using your config\n")
+            md.append("- If you see unmapped account IDs after migration, add the corresponding username mapping\n\n")
+            
+            md.append("### Items Containing Account ID Mentions\n\n")
+            md.append("| Item | Mentions | ID Types | Bitbucket Link |\n")
+            md.append("|------|----------|----------|----------------|\n")
+            
+            for item in report['account_id_mentions']['by_item']:
+                item_type = item['item_type'].capitalize()
+                item_num = item['item_number']
+                count = item['mention_count']
+                types = ', '.join(item['id_types'])
+                
+                if item['item_type'] == 'issue':
+                    bb_url = f"https://bitbucket.org/{report['repository']['workspace']}/{report['repository']['repo']}/issues/{item_num}"
+                else:
+                    bb_url = f"https://bitbucket.org/{report['repository']['workspace']}/{report['repository']['repo']}/pull-requests/{item_num}"
+                
+                md.append(f"| {item_type} #{item_num} | {count} | {types} | [View]({bb_url}) |\n")
+            
+            md.append("\n")
+            md.append("**To investigate:** Click the Bitbucket links above and:\n")
+            md.append("1. Check if you see any unusual @mentions\n")
+            md.append("2. Look for 'Former User' or deleted user indicators\n")
+            md.append("3. Note any @mentions that look like IDs rather than usernames\n\n")
+            md.append("**Migration impact:** These mentions will be copied as-is to GitHub.\n")
+            md.append("They likely won't work on GitHub, but they also can't be automatically fixed.\n\n")
+
+
+        # Add @mention analysis section
+        md.append("## @Mention Support\n\n")
+        md.append("The migration script can rewrite Bitbucket @mentions to GitHub usernames.\n\n")
+        md.append("**Important:** Bitbucket @mentions use **usernames** (not display names).\n\n")
+        md.append("### Recommended User Mapping Format\n\n")
+        md.append("For teams that use @mentions frequently, use the **enhanced format**:\n\n")
+        md.append("```json\n")
+        md.append('"user_mapping": {\n')
+        md.append('  "Display Name": {\n')
+        md.append('    "github": "github-username",\n')
+        md.append('    "bitbucket_username": "bb-username"\n')
+        md.append('  }\n')
+        md.append('}\n')
+        md.append("```\n\n")
+        md.append("**Why?** This allows the migration script to:\n")
+        md.append("1. Map issue/PR authors correctly (using display name)\n")
+        md.append("2. Rewrite @mentions correctly (using Bitbucket username)\n\n")
+        md.append("**Alternative:** If @mentions are rare, use simple format and manually fix a few mentions after migration.\n\n")
+        md.append("### Users with Bitbucket Usernames\n\n")
+        md.append("| Display Name | Bitbucket Username | Total Activity |\n")
+        md.append("|--------------|-------------------|----------------|\n")
+        
+        for user, stats in list(report['users']['activity_breakdown'].items())[:20]:
+            bb_username = stats.get('bitbucket_username', 'unknown')
+            total = stats['total_activity']
+            md.append(f"| {user} | `{bb_username}` | {total} |\n")
+        
+        if report['users']['total_unique'] > 20:
+            md.append(f"\n*... and {report['users']['total_unique'] - 20} more users*\n")
+        
+        md.append("\n")
+
         # Next Steps
         md.append("## Next Steps\n\n")
         md.append("### 1. Generate Migration Configuration\n\n")
@@ -871,7 +1186,23 @@ class BitbucketAuditor:
         md.append("```bash\n")
         md.append("python migrate_bitbucket_to_github.py --config migration_config.json --dry-run\n")
         md.append("```\n\n")
+
+        md.append("**Important:** Check the dry-run output for unmapped @mentions:\n")
+        md.append("```\n")
+        md.append("⚠️  Unmapped @Mentions:\n")
+        md.append("  Found X Bitbucket username(s) in @mentions\n")
+        md.append("```\n\n")
         
+        md.append("If you see unmapped mentions, update your config using the **enhanced format**:\n\n")
+        md.append("```json\n")
+        md.append('"user_mapping": {\n')
+        md.append('  "Display Name": {\n')
+        md.append('    "github": "github-username",\n')
+        md.append('    "bitbucket_username": "bb-username"\n')
+        md.append('  }\n')
+        md.append('}\n')
+        md.append("```\n\n")
+
         md.append("### 5. Run Actual Migration\n\n")
         md.append("```bash\n")
         md.append("python migrate_bitbucket_to_github.py --config migration_config.json\n")
