@@ -53,6 +53,43 @@ Link Rewriting:
     - Branch commit URLs: https://bitbucket.org/.../commits/branch/feature → [commits on `feature`](github_url) *(was Bitbucket)*
     - Compare URLs: https://bitbucket.org/.../compare/abc123..def456 → [compare `abc123`...`def456`](github_url) *(was Bitbucket)*
     - Unhandled links detection: Identifies Bitbucket links that need manual attention
+    - Cross-repository links: Links to other Bitbucket repos can be rewritten if configured
+
+Cross-Repository Link Rewriting:
+    If you're migrating multiple related repositories, you can configure automatic rewriting
+    of links between them. Add a "repository_mapping" section to your config:
+    
+    "repository_mapping": {
+      "workspace/other-repo": "github-owner/other-repo",
+      "workspace/shared-lib": "shared-lib"
+    }
+    
+    Supported cross-repo link types (safe to rewrite):
+    - Repository home: https://bitbucket.org/workspace/other-repo
+      → [other-repo](github_url)
+    - Issues: https://bitbucket.org/workspace/other-repo/issues/42
+      → [other-repo #42](github_url) - Numbers are preserved during migration
+    - Source files: https://bitbucket.org/workspace/other-repo/src/hash/file.cpp
+      → [other-repo/file.cpp](github_url)
+    - Source with lines: https://bitbucket.org/.../file.cpp#lines-143
+      → [other-repo/file.cpp](github_url#L143)
+    - Commits: https://bitbucket.org/workspace/other-repo/commits/abc123
+      → [other-repo@abc123d](github_url)
+    
+    NOT rewritten (require manual handling):
+    - Pull Requests: May become issues or be skipped, numbers not predictable
+    - Downloads: Use GitHub Releases instead
+    - Wiki pages: Migrate wiki separately
+    - New PR/branch pages: UI-specific, not applicable
+    - Images in repo storage: Need manual download/upload
+    
+    If you don't specify a GitHub owner (e.g., "shared-lib"), it uses the same
+    owner as the current repository.
+    
+    All unmapped/unsafe cross-repo links appear in the "Unhandled Links" report.
+    The repository_mapping is optional. If you're only migrating a single repo
+    or don't have cross-repo links, you can omit it. Links to unmapped repos
+    will be flagged in the "Unhandled Bitbucket Links" report.
 
 User Mapping:
     Maps Bitbucket display names to GitHub usernames in configuration file.
@@ -172,6 +209,7 @@ import shutil
 class BitbucketToGitHubMigrator:
     def __init__(self, bb_workspace: str, bb_repo: str, bb_email: str, bb_token: str,
                  gh_owner: str, gh_repo: str, gh_token: str, user_mapping: Dict[str, str],
+                 repository_mapping: Dict[str, str] = None,
                  dry_run: bool = False, skip_pr_as_issue: bool = False,
                  use_gh_cli: bool = False):
         self.bb_workspace = bb_workspace
@@ -188,7 +226,13 @@ class BitbucketToGitHubMigrator:
         self.skip_pr_as_issue = skip_pr_as_issue
         self.use_gh_cli = use_gh_cli
 
-       # Build account ID to username mapping (for @mention resolution)
+        # Repository mapping for cross-repo links
+        self.repo_mapping = repository_mapping or {}
+        
+        # Track cross-repo links for reporting
+        self.cross_repo_links_rewritten = 0
+
+        # Build account ID to username mapping (for @mention resolution)
         self.account_id_to_username = {}  # Maps account_id -> bitbucket_username
         self.account_id_to_display_name = {}  # Maps account_id -> display_name
 
@@ -352,6 +396,157 @@ class BitbucketToGitHubMigrator:
             return f"[compare `{sha1[:7]}`...`{sha2[:7]}`]({gh_url}) *(was [Bitbucket]({bb_url}))*"
         
         text = re.sub(pattern_compare_url, replace_compare_url, text)
+
+        # Pattern 8: Cross-repository links - Safe types
+        # We can safely rewrite:
+        # - Issues (numbers are preserved)
+        # - Source files, commits (don't change)
+        # NOT PRs (might become issues, be skipped, or get renumbered)
+        # # This handles BOTH cross-repo AND current repo links
+        pattern_cross_repo = r'https://bitbucket\.org/([^/]+)/([^/]+)/(issues|src|commits)(/[^\s\)"\'>]+)'
+        
+        def replace_cross_repo(match):
+            nonlocal links_found
+            workspace = match.group(1)
+            repo = match.group(2)
+            resource_type = match.group(3)
+            resource_path = match.group(4)[1:]  # Remove leading slash
+            
+            # Determine if this is current repo or cross-repo
+            if workspace == self.bb_workspace and repo == self.bb_repo:
+                # Current repo - use current repo's GitHub info
+                gh_owner = self.gh_owner
+                gh_repo = self.gh_repo
+            else:
+                # Cross-repo - check if we have a mapping
+                repo_key = f"{workspace}/{repo}"
+            
+                if repo_key not in self.repo_mapping:
+                    # No mapping - will be caught by unhandled links
+                    return match.group(0)
+                
+                gh_repo_full = self.repo_mapping[repo_key]
+                
+                # Parse GitHub owner/repo
+                if '/' in gh_repo_full:
+                    gh_owner, gh_repo = gh_repo_full.split('/', 1)
+                else:
+                    # Assume same owner as current repo
+                    gh_owner = self.gh_owner
+                    gh_repo = gh_repo_full
+
+            # Now process the link (same logic for both current and cross-repo)
+            links_found += 1
+            if workspace != self.bb_workspace or repo != self.bb_repo:
+                self.cross_repo_links_rewritten += 1
+            
+            bb_url = match.group(0)
+            
+            # Map resource types
+            if resource_type == 'issues':
+                # Issues maintain their original numbers, so this is safe
+                issue_number = resource_path.split('/')[0] if '/' in resource_path else resource_path
+                
+                # For current repo, check if we already mapped this issue
+                if workspace == self.bb_workspace and repo == self.bb_repo:
+                    # Use our mapping if available
+                    gh_issue_num = self.issue_mapping.get(int(issue_number), int(issue_number))
+                    gh_url = f"https://github.com/{gh_owner}/{gh_repo}/issues/{gh_issue_num}"
+                    if int(issue_number) != gh_issue_num:
+                        return f"[#{gh_issue_num}]({gh_url}) *(was BB #{issue_number})*"
+                    else:
+                        return f"[#{gh_issue_num}]({gh_url})"
+                else:
+                    # Cross-repo issue
+                    gh_url = f"https://github.com/{gh_owner}/{gh_repo}/issues/{issue_number}"
+                    return f"[{gh_repo} #{issue_number}]({gh_url}) *(was [Bitbucket {repo}]({bb_url}))*"
+            elif resource_type == 'src':
+                # Parse src URLs which can be very complex:
+                # /commit-hash/path/to/file.cpp
+                # /commit-hash/path/to/file.cpp#lines-143
+                # /branch/path/to/file.cpp
+                parts = resource_path.split('/', 1)
+                if len(parts) == 2:
+                    ref, file_path = parts
+                    
+                    # Check if it has line numbers
+                    if '#lines-' in file_path:
+                        file_path, line_ref = file_path.split('#lines-', 1)
+                        # GitHub uses #L notation
+                        gh_url = f"https://github.com/{gh_owner}/{gh_repo}/blob/{ref}/{file_path}#L{line_ref}"
+                    else:
+                        gh_url = f"https://github.com/{gh_owner}/{gh_repo}/blob/{ref}/{file_path}"
+                    
+                    # Create a readable link text
+                    filename = file_path.split('/')[-1] if '/' in file_path else file_path
+                    
+                    if workspace == self.bb_workspace and repo == self.bb_repo:
+                        # Current repo - simpler format
+                        return f"[{filename}]({gh_url})"
+                    else:
+                        # Cross-repo
+                        return f"[{gh_repo}/{filename}]({gh_url}) *(was [Bitbucket]({bb_url}))*"
+                else:
+                    # Malformed path, leave as-is
+                    return match.group(0)
+            elif resource_type == 'commits':
+                # commits/abc123def456
+                commit_hash = resource_path.split('/')[0] if '/' in resource_path else resource_path
+                gh_url = f"https://github.com/{gh_owner}/{gh_repo}/commit/{commit_hash}"
+                
+                if workspace == self.bb_workspace and repo == self.bb_repo:
+                    # Current repo
+                    return f"[`{commit_hash[:7]}`]({gh_url})"
+                else:
+                    # Cross-repo
+                    return f"[{gh_repo}@{commit_hash[:7]}]({gh_url}) *(was [Bitbucket]({bb_url}))*"
+            else:
+                # No mapping - will be caught by unhandled links
+                return match.group(0)
+        
+        text = re.sub(pattern_cross_repo, replace_cross_repo, text)
+        
+        # Pattern 8b: Repository home page links (no specific resource)
+        # https://bitbucket.org/workspace/repo-name (just the repo root)
+        pattern_repo_home = r'https://bitbucket\.org/([^/]+)/([^/\s\)"\'>]+)(?=/|\s|\)|"|\'|>|$)'
+        
+        def replace_repo_home(match):
+            nonlocal links_found
+            workspace = match.group(1)
+            repo = match.group(2)
+            
+            # Check if this is the current repo
+            if workspace == self.bb_workspace and repo == self.bb_repo:
+                # Current repo - rewrite to GitHub
+                links_found += 1
+                bb_url = match.group(0)
+                gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}"
+                return f"[repository]({gh_url})"                
+            
+            # Check if we have a mapping for this repo
+            repo_key = f"{workspace}/{repo}"
+            
+            if repo_key in self.repo_mapping:
+                links_found += 1
+                self.cross_repo_links_rewritten += 1
+                gh_repo_full = self.repo_mapping[repo_key]
+                
+                # Parse GitHub owner/repo
+                if '/' in gh_repo_full:
+                    gh_owner, gh_repo = gh_repo_full.split('/', 1)
+                else:
+                    gh_owner = self.gh_owner
+                    gh_repo = gh_repo_full
+                
+                bb_url = match.group(0)
+                gh_url = f"https://github.com/{gh_owner}/{gh_repo}"
+                
+                return f"[{gh_repo}]({gh_url}) *(was [Bitbucket {repo}]({bb_url}))*"
+            else:
+                # No mapping - will be caught by unhandled links
+                return match.group(0)
+        
+        text = re.sub(pattern_repo_home, replace_repo_home, text)
 
         # Pattern 9: Bitbucket @mentions
         # Matches: @username, @{username-with-dashes}, @{user name with spaces}
@@ -1936,6 +2131,10 @@ class BitbucketToGitHubMigrator:
         report.append(f"  - Issues with rewritten links: {self.link_rewrites['issues']}")
         report.append(f"  - PRs with rewritten links: {self.link_rewrites['prs']}")
         report.append(f"  - Total links rewritten: {self.link_rewrites['total_links']}")
+        
+        if self.cross_repo_links_rewritten > 0:
+            report.append(f"  - Cross-repository links rewritten: {self.cross_repo_links_rewritten}")
+        
         report.append("")
         
         # Table of Contents
@@ -2062,46 +2261,7 @@ class BitbucketToGitHubMigrator:
         report.append("The following user mappings were used during migration:")
         report.append("")
         report.append("| Bitbucket User | GitHub User | Status |")
-        report.append("|----------------|-------------|--------|")
-        
-        # Unhandled Bitbucket Links
-        if self.unhandled_bb_links:
-            report.append("---")
-            report.append("")
-            report.append("## ⚠️ Unhandled Bitbucket Links")
-            report.append("")
-            report.append(f"**Total Unhandled Links:** {len(self.unhandled_bb_links)}")
-            report.append("")
-            report.append("The following Bitbucket links were found but not automatically migrated. These may require manual attention:")
-            report.append("")
-            report.append("| Item | URL | Context |")
-            report.append("|------|-----|---------|")
-            
-            for link_info in self.unhandled_bb_links:
-                item_label = f"{link_info['item_type'].capitalize()} #{link_info['item_number']}"
-                url = link_info['url']
-                # Truncate context and escape pipe characters
-                context = link_info['context'][:100].replace('|', '\\|').replace('\n', ' ')
-                if len(link_info['context']) > 100:
-                    context += '...'
-                
-                report.append(f"| {item_label} | `{url}` | {context} |")
-            
-            report.append("")
-            report.append("**Common types of unhandled links:**")
-            report.append("- Download links (`/downloads/`)")
-            report.append("- Wiki pages (`/wiki/`)")
-            report.append("- Repository settings/admin pages")
-            report.append("- User profile links")
-            report.append("- Branch comparison pages (complex formats)")
-            report.append("- Snippet/gist links")
-            report.append("")
-            report.append("**Recommended actions:**")
-            report.append("1. Review each link and determine if it needs migration")
-            report.append("2. For downloads, consider hosting files elsewhere (GitHub Releases, etc.)")
-            report.append("3. For wiki pages, migrate wiki separately")
-            report.append("4. Update links manually in the migrated issues/PRs if needed")
-            report.append("")        
+        report.append("|----------------|-------------|--------|")   
 
         # Collect all unique users from records
         all_users = set()
@@ -2243,6 +2403,60 @@ class BitbucketToGitHubMigrator:
             report.append("unless those users later get GitHub accounts.")
             report.append("")
 
+        # Unhandled Bitbucket Links
+        if self.unhandled_bb_links:
+            report.append("---")
+            report.append("")
+            report.append("## ⚠️ Unhandled Bitbucket Links")
+            report.append("")
+            report.append(f"**Total Unhandled Links:** {len(self.unhandled_bb_links)}")
+            report.append("")
+            report.append("The following Bitbucket links were found but not automatically migrated. These may require manual attention:")
+            report.append("")
+            report.append("| Item | URL |")
+            report.append("|------|-----|")
+            
+            for link_info in self.unhandled_bb_links:
+                item_label = f"{link_info['item_type'].capitalize()} #{link_info['item_number']}"
+                url = link_info['url']
+                # Escape the URL to prevent markdown interpretation
+                # Use inline code blocks for URL to prevent link rendering
+                report.append(f"| {item_label} | `{url}` |")
+            
+            report.append("")
+            report.append("**Context for each link:**")
+            report.append("")
+            
+            for link_info in self.unhandled_bb_links:
+                item_label = f"{link_info['item_type'].capitalize()} #{link_info['item_number']}"
+                url = link_info['url']
+                context = link_info['context'][:200]
+                if len(link_info['context']) > 200:
+                    context += '...'
+                
+                # Use code block for context to preserve all special characters
+                report.append(f"- **{item_label}**: `{url}`")
+                report.append(f"```\n")
+                report.append(f"  {context}")
+                report.append(f"\n```")
+                report.append("")
+
+            report.append("")
+            report.append("**Common types of unhandled links:**")
+            report.append("- Download links (`/downloads/`)")
+            report.append("- Wiki pages (`/wiki/`)")
+            report.append("- Repository settings/admin pages")
+            report.append("- User profile links")
+            report.append("- Branch comparison pages (complex formats)")
+            report.append("- Snippet/gist links")
+            report.append("")
+            report.append("**Recommended actions:**")
+            report.append("1. Review each link and determine if it needs migration")
+            report.append("2. For downloads, consider hosting files elsewhere (GitHub Releases, etc.)")
+            report.append("3. For wiki pages, migrate wiki separately")
+            report.append("4. Update links manually in the migrated issues/PRs if needed")
+            report.append("")    
+
         # Migration Statistics
         report.append("---")
         report.append("")
@@ -2341,7 +2555,10 @@ class BitbucketToGitHubMigrator:
         self.log(f"  Issues with rewritten links: {self.link_rewrites['issues']}")
         self.log(f"  PRs with rewritten links: {self.link_rewrites['prs']}")
         self.log(f"  Total links rewritten: {self.link_rewrites['total_links']}")
-        
+      
+        if self.cross_repo_links_rewritten > 0:
+            self.log(f"  Cross-repository links rewritten: {self.cross_repo_links_rewritten}")
+
         if self.unhandled_bb_links:
             self.log(f"⚠️  Unhandled Bitbucket Links:")
             self.log(f"  Found {len(self.unhandled_bb_links)} Bitbucket link(s) that were not automatically migrated")
@@ -2746,6 +2963,7 @@ Example:
         gh_repo=config['github']['repo'],
         gh_token=config['github']['token'],
         user_mapping=config.get('user_mapping', {}),
+        repository_mapping=config.get('repository_mapping', {}),
         dry_run=args.dry_run,
         skip_pr_as_issue=args.skip_pr_as_issue,
         use_gh_cli=args.use_gh_cli
