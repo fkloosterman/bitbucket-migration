@@ -13,6 +13,7 @@ theme:
     - content.tooltips
     - navigation.tabs
     - navigation.top
+    - navigation.tabs.sticky
     - navigation.expand
     - navigation.indexes
     - content.code.fences
@@ -21,17 +22,21 @@ theme:
 nav:
   - Home: index.md
   - Migration Guide: migration_guide.md
-  - Attachments: attachment_upload.md
-  - Troubleshooting: troubleshooting.md
-  - Checklists:
-    - Pre-migration: checklists/pre_migration.md
-    - Verification: checklists/verification.md
-    - Post-migration: checklists/post_migration.md
   - Reference:
+    - Migration Details:
+      - Overview: reference/migration_details.md
+      - Issues: reference/migration_issues.md
+      - Pull Requests: reference/migration_pull_requests.md
+      - Comments: reference/migration_comments.md
+      - Attachments: reference/migration_attachments.md
+      - Images: reference/migration_images.md
+      - Links: reference/migration_links.md
+      - Mentions: reference/migration_mentions.md
+      - Milestones: reference/migration_milestones.md
     - Migration Config: reference/migration_config.md
     - User Mapping: reference/user_mapping.md
     - API Tokens: reference/api_tokens.md
-    - Glossary: reference/glossary.md
+    - Command Line Interface: reference/cli_reference.md
 
 docs_dir: docs
 site_dir: site
@@ -40,6 +45,7 @@ plugins:
   - search
 
 markdown_extensions:
+  - md_in_html
   - admonition
   - pymdownx.details
   - pymdownx.superfences:
@@ -47,7 +53,8 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
-  - pymdownx.tabbed
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.highlight
   - pymdownx.inlinehilite
   - pymdownx.snippets

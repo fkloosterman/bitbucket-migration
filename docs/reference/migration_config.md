@@ -25,6 +25,10 @@ This file defines how the migration tool connects to Bitbucket and GitHub, and h
     "Alice Smith": "alice-smith-gh",
     "Bob Jones": "bjones",
     "Unknown (deleted user)": null
+  },
+  "repository_mapping": {
+    "workspace/other-repo": "github-owner/other-repo",
+    "workspace/shared-lib": "shared-lib"
   }
 }
 ```
@@ -43,6 +47,7 @@ This file defines how the migration tool connects to Bitbucket and GitHub, and h
 | `github.repo`         | Repository name      | Destination repo name (must exist and be empty)        |
 | `github.token`        | GitHub PAT           | Must include `repo` scope                              |
 | `user_mapping`        | Mapping table        | Links Bitbucket display names to GitHub usernames      |
+| `repository_mapping`  | Repository mapping   | Maps Bitbucket repositories to GitHub repositories for cross-repo link rewriting |
 
 ---
 
@@ -66,6 +71,35 @@ Example:
 
 ---
 
+## Repository Mapping
+
+This optional section allows automatic rewriting of cross-repository links when migrating multiple related repositories.
+
+```json
+"repository_mapping": {
+  "workspace/other-repo": "github-owner/other-repo",
+  "workspace/shared-lib": "shared-lib"
+}
+```
+
+### Supported Link Types
+- Repository home: `https://bitbucket.org/workspace/other-repo` → `[other-repo](github_url)`
+- Issues: `https://bitbucket.org/workspace/other-repo/issues/42` → `[other-repo #42](github_url)` (numbers preserved)
+- Source files: `https://bitbucket.org/workspace/other-repo/src/hash/file.cpp` → `[other-repo/file.cpp](github_url)`
+- Commits: `https://bitbucket.org/workspace/other-repo/commits/abc123` → `[other-repo@abc123](github_url)`
+
+### Not Supported
+- Pull Requests (may become issues or be skipped, numbers not predictable)
+- Downloads (use GitHub Releases instead)
+- Wiki pages (migrate wiki separately)
+- Images in repo storage (need manual download/upload)
+
+If you don't specify a GitHub owner (e.g., "shared-lib"), it uses the same owner as the current repository.
+
+All unmapped/unsafe cross-repo links appear in the "Unhandled Links" report.
+
+---
+
 ## 💡 Tips
 
 * Use the audit report (`audit_report.md`) to find active users.
@@ -74,11 +108,3 @@ Example:
 
 ---
 
-## 🔧 Validation Checklist
-
-* [ ] All tokens filled in (Bitbucket and GitHub)
-* [ ] Repository names correct
-* [ ] `user_mapping` includes all active contributors
-* [ ] No trailing commas or JSON syntax errors
-
----

@@ -1,76 +1,112 @@
-# Bitbucket → GitHub Migration Documentation
+---
+hide:
+  - navigation
+#   - toc
+---
 
-Welcome! This documentation explains how to migrate a Bitbucket **Cloud** repository to **GitHub**, using the provided Python migration tools.
-It’s designed for **repository administrators, DevOps engineers, and technical leads** who need a reliable, repeatable migration process.
+<div style="text-align: center;" markdown="1">
+
+# Bitbucket → GitHub Migration Tools
+
+**Intelligent • Safe • Comprehensive**
+
+Migrate your Bitbucket Cloud repositories to GitHub with confidence using our smart migration platform that preserves everything while making intelligent decisions about PRs, branches, and metadata.
+
+**[🚀 Get Started](#quick-start) • [📖 Full Guide](migration_guide.md)**
+
+</div>
+
+---
+
+<div style="text-align: center;" markdown="1">
+
+## ⚡ Key Features
+
+</div>
+
+<div class="grid cards" style="text-align: center;" markdown="1">
+
+-   **🧠 Smart PR Migration**
+    
+    ---
+    
+    Open PRs become GitHub PRs, closed PRs become Issues with full metadata preservation. No more broken references or lost context.
+    
+
+-   **🛡️ Safe by Design**
+    
+    ---
+    
+    Conservative approach prevents re-merging closed PRs. Comprehensive dry-run validation ensures successful migrations.
+
+-   **🔍 Pre-Migration Audit**
+    
+    ---
+    
+    See exactly what will migrate before you start. Get user mapping recommendations and gap analysis automatically.
+
+-   **🔗 Automatic Link Rewriting**
+    
+    ---
+    
+    Cross-references between issues and PRs are automatically updated to point to GitHub while preserving original context.
+
+</div>
 
 ---
 
 ## 🚀 Quick Start
 
-| Step | Task                                                                 | Estimated Time | Reference                         |
-| ---- | -------------------------------------------------------------------- | -------------- | --------------------------------- |
-| 1    | [Run Audit](migration_guide.md#step-1-run-audit)                     | 15–30 min      | Generates audit report and config |
-| 2    | [Push Git Mirror](migration_guide.md#step-3-migrate-git-history)     | 15–30 min      | Copies commits, branches, tags    |
-| 3    | [Dry Run Migration](migration_guide.md#step-4-dry-run-migration)     | 15 min         | Validate configuration            |
-| 4    | [Run Full Migration](migration_guide.md#step-5-run-full-migration) | 1–3 h          | Migrates issues and PRs           |
-| 5    | [Upload Attachments](attachment_upload.md)                           | 30–90 min      | Manual step due to API limits     |
-| 6    | [Verify & Clean Up](checklists/post_migration.md)                    | 30–60 min      | Validate and finalize repo        |
+**Install:**
+```bash
+pipx install bitbucket-migration
+```
+
+**Example Usage:**
+```bash
+audit_bitbucket --workspace YOUR_WORKSPACE --repo YOUR_REPO --generate-config
+migrate_bitbucket_to_github --config migration_config.json --dry-run
+```
 
 ---
 
-## 📂 Documentation Structure
+## 📚 Documentation
 
-| Section                                         | Purpose                                  |
-| ----------------------------------------------- | ---------------------------------------- |
-| [Migration Guide](migration_guide.md)           | Main step-by-step workflow               |
-| [Attachment Upload Guide](attachment_upload.md) | Manual process for migrating attachments |
-| [Troubleshooting](troubleshooting.md)           | Fix common API or config errors          |
-| [Reference](reference/migration_config.md)      | JSON config, API tokens, user mapping    |
-| [Checklists](checklists/pre_migration.md)       | Ready-to-use task lists                  |
-| [Glossary](reference/glossary.md)               | Key terms used throughout the docs       |
+<div class="grid cards" markdown="1">
 
----
+-   **[📖 Migration Guide](migration_guide.md)**
 
-## 🧭 Who Should Use This Guide
+    Complete step-by-step migration process with detailed explanations, checklists, troubleshooting, and attachment upload instructions.
 
-* **Migration administrators** moving Bitbucket Cloud repos to GitHub.
-* **Developers** verifying migrated data (issues, PRs, attachments).
-* **Team leads** planning the cutover and post-migration cleanup.
+-   **[⚙️ Migration Config](reference/migration_config.md)**
 
-If you only need to upload attachments after migration, skip directly to
-➡️ [**Attachment Upload Guide**](attachment_upload.md).
+    Configuration file format, user mapping, and repository mapping options.
 
----
+-   **[📋 Migration Details](reference/migration_details.md)**
 
-## 🛠️ Requirements
+    Detailed reference on what metadata is preserved and how non-migratable information is handled.
 
-* Python **3.7+**
-* Git **2.x+**
-* Bitbucket Cloud account (API token)
-* GitHub account (Personal Access Token with `repo` scope)
+-   **[🖥️ CLI Reference](reference/cli_reference.md)**
 
-See detailed setup in [Prerequisites](migration_guide.md#prerequisites).
+    Command-line interface guide for audit, migration, and authentication scripts.
+
+-   **[� User Mapping](reference/user_mapping.md)**
+
+    How to map Bitbucket users to GitHub accounts and handle unmapped users.
+
+-   **[🔑 API Tokens](reference/api_tokens.md)**
+
+    Setup guides for Bitbucket and GitHub API authentication.
+
+</div>
 
 ---
 
-## 📋 Resources
+<div style="text-align: center;" markdown="1">
 
-* [GitHub REST API v3](https://docs.github.com/en/rest)
-* [Bitbucket Cloud REST API 2.0](https://developer.atlassian.com/cloud/bitbucket/rest/)
-* [GitHub Import Service Docs](https://docs.github.com/en/migrations)
+**Built with ❤️ for reliable repository migrations**
 
----
+[🐛 Report Issues](https://github.com/fkloosterman/bitbucket-migration/issues) • [📚 API References](reference/migration_config.md)
 
-## 🕐 Estimated Migration Duration
+</div>
 
-| Repository Size         | Typical Duration | Notes                         |
-| ----------------------- | ---------------- | ----------------------------- |
-| Small (≤50 issues)      | 1–2 hours        | Minimal verification          |
-| Medium (100–300 issues) | 3–5 hours        | Includes manual upload        |
-| Large (500+ issues)     | 6–9 hours        | May require chunked migration |
-
----
-
-**Next step →** [Start the Migration Guide](migration_guide.md)
-
----

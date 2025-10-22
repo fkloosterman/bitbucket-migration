@@ -1,3 +1,8 @@
+---
+hide:
+  - navigation
+#   - toc
+---
 
 # Bitbucket → GitHub Migration Guide
 
@@ -5,9 +10,9 @@
 
 ---
 
-## 🤩 Overview
+## Overview
 
-This guide explains how to migrate a Bitbucket **Cloud** repository to **GitHub**, preserving:
+This guide explains how to migrate a **Bitbucket** Cloud repository to **GitHub**, preserving:
 
 * Git history (branches, tags, commits)
 * Issues, pull requests, and comments
@@ -16,53 +21,97 @@ This guide explains how to migrate a Bitbucket **Cloud** repository to **GitHub*
 
 ---
 
-## 🧱 Migration Phases
+!!! warning "Important Safety Note"
+    Keep your Bitbucket repository intact (potentially archived) until migration is fully verified. If errors occur and migration is only partially completed, delete the GitHub repository and start fresh.
+
+---
+
+## Installation and Setup
+
+1. **Install from PyPI** (Recommended):
+    ```bash
+    pipx install bitbucket-migration
+    ```
+    Then use as follows. See [CLI Reference Guide](reference/cli_reference.md) for detailed description
+    of the command line interface of the included scripts.
+    ```bash
+    audit_bitbucket --workspace YOUR_WORKSPACE --repo YOUR_REPO --generate-config
+    migrate_bitbucket_to_github --config migration_config.json --dry-run
+    ```
+
+    ??? "Alternative installation methods"
+
+        **Run Directly**
+        ```bash
+        pipx run bitbucket-migration audit_bitbucket --workspace YOUR_WORKSPACE --repo YOUR_REPO --generate-config
+        ```
+
+        **From Source**
+        ```bash
+        git clone https://github.com/fkloosterman/bitbucket-migration.git
+        cd bitbucket-migration
+        python audit_bitbucket.py --workspace YOUR_WORKSPACE --repo YOUR_REPO --generate-config
+        ```
+
+2. **Set up Bitbucket and Github Tokens**
+
+    You will need a Bitbucket Cloud API Token (read access to repos, issues, PRs) and
+    a GitHub Personal Access Token (PAT) with `repo` scope.
+    
+    See [API Tokens Setup Guide](reference/api_tokens.md)
+    for instructions on how to setup these tokens and to verify access.
+
+---
+
+## Migration Steps
 
 ```mermaid
 flowchart TD
-A[1. Audit Bitbucket Repo] --> B[2. Push Git Mirror]
-B --> C[3. Dry Run Migration]
-C --> D[4. Run Full Migration]
-D --> E[5. Upload Attachments]
-E --> F[6. Verify & Clean Up]
-```
+A(
+  **1. Audit Bitbucket Repository**
+  Collect metadata and create config.
+) --> B(
+  **2. Mirror Git Repository**
+  Copy commits, branches, and tags.
+)
+click A "#step-1-run-audit" "Audit Bitbucket Repo"
+click B "#step-2-prepare-github-repository" "Mirror Git Repo"
 
-| Phase             | Purpose                          | Output                                     |
-| ----------------- | -------------------------------- | ------------------------------------------ |
-| 1. Audit          | Collect metadata & create config | `audit_report.md`, `migration_config.json` |
-| 2. Git Mirror     | Copy commits, branches, tags     | GitHub repo populated                      |
-| 3. Dry Run        | Validate config & API access     | Console logs                               |
-| 4. Full Migration | Migrate issues, PRs, comments    | `migration_mapping.json`                   |
-| 5. Attachments    | Upload manually                  | GitHub comments + uploaded files           |
-| 6. Verification   | Compare counts, finalize         | Checklist complete                         |
+B --> C(
+  **3. Tailor Configuration**
+  GitHub token, member mapping, repository mapping.
+)
+click C "#step-3-tailor-configuration" "Tailor Config"
+
+C --> D(
+  **4. Dry Run Migration**
+  Validate config and check migration of issues and PRs.
+)
+D --> C
+click D "#step-4-dry-run-migration" "Dry Run Migration"
+
+D --> E(
+  **5. Run Full Migration**
+  Migrate issues, PRs, and comments.
+)
+click E "#step-5-run-full-migration" "Run Full Migration"
+
+E --> F(
+  **6. Upload Attachments**
+  Automated with --use-gh-cli or manual upload.
+)
+click F "#step-6-upload-attachments" "Upload Attachments"
+
+F --> G(
+  **6. Verify & Clean Up**
+  Finalize and verify migration.
+)
+click G "#step-7-verify-and-clean-up" "Verify"
+```
 
 ---
 
-## 🛠️ Prerequisites
-
-### Required Tools
-
-* Python **3.7+**
-* Git **2.x+**
-* `pip install requests`
-
-### Required Accounts & Tokens
-
-* **Bitbucket Cloud API Token** (read access to repos, issues, PRs)
-* **GitHub Personal Access Token (PAT)** with `repo` scope
-  → [Create PAT](https://github.com/settings/tokens)
-
-### Local Setup
-
-```bash
-git --version
-python3 --version
-pip install requests
-```
-
----
-
-## ⚙️ Step-by-Step Migration
+## Step-by-Step Migration
 
 ### Step 1 — Run Audit
 
@@ -89,15 +138,11 @@ See [User Mapping Reference](reference/user_mapping.md).
 
 ---
 
-### Step 2 — Prepare GitHub Repository
+### Step 2 — Mirror Repository
 
 1. Create an **empty** repository on GitHub.
    Do *not* add a README or license.
 2. Keep it **private** until migration is complete.
-
----
-
-### Step 3 — Migrate Git History
 
 ```bash
 git clone --mirror https://bitbucket.org/WORKSPACE/REPO.git
@@ -114,7 +159,31 @@ git ls-remote github
 
 ---
 
+### Step 3 - Tailor Configuration
+
+Edit `migration_config.json` to set your tokens and user mappings. See [Migration Config Reference](reference/migration_config.md) for full details.
+
+1. **Update Tokens**
+   - Set `bitbucket.token` to your Bitbucket API token.
+   - Set `github.token` to your GitHub PAT with `repo` scope.
+
+2. **Configure User Mapping**
+   - Map Bitbucket display names to GitHub usernames in `user_mapping`.
+   - Set unmapped or deleted users to `null`.
+
+3. **Run Dry Run**
+   - After editing, run a dry run (Step 4) to validate.
+   - Refine mappings if needed.
+
+??? "Advanced Options"
+    - Add `repository_mapping` for cross-repository link rewriting.
+    - See [Migration Config Reference](reference/migration_config.md) for details.
+
+---
+
 ### Step 4 — Dry Run Migration
+
+Run a simulation of the migration to validate your configuration without making any changes.
 
 ```bash
 python migrate_bitbucket_to_github.py \
@@ -122,112 +191,151 @@ python migrate_bitbucket_to_github.py \
   --dry-run
 ```
 
-Check for:
+**What it does:**
+- Validates tokens and permissions.
+- Checks user mappings and repository access.
+- Estimates issue/PR counts and migration time.
+- Generates `migration_report_dry_run.md` with details.
 
-* Token authentication success
-* Valid user mappings
-* Correct issue/PR counts
-  If errors occur, see [Troubleshooting](troubleshooting.md).
+**Check for:**
+- Authentication success (no 401/403 errors).
+- Valid user mappings (no unmapped users warnings).
+- Correct counts matching your audit report.
+- If issues, refine `migration_config.json` and retry.
+
+??? "Advanced Options"
+    - Use `--skip-issues` or `--skip-prs` to test specific phases.
+    - See [CLI Reference](reference/cli_reference.md) for all options.
 
 ---
 
 ### Step 5 — Run Full Migration
+
+Execute the actual migration of issues, PRs, comments, and attachments.
 
 ```bash
 python migrate_bitbucket_to_github.py \
   --config migration_config.json
 ```
 
-**Outputs**
+**What it does:**
+- Migrates issues and PRs (open PRs stay as PRs; closed PRs become issues).
+- Downloads attachments to `attachments_temp/`.
+- Generates `migration_mapping.json` for ID cross-references.
+- Creates `migration_report.md` with details and any issues.
 
-* Migrated issues and PRs (open PRs remain PRs; closed PRs become issues)
-* Downloaded attachments in `attachments_temp/`
-* `migration_mapping.json` for ID cross-reference
-
-Migration typically takes **0.5 min per issue/PR** due to API limits.
+??? "Advanced Options"
+    - Use `--use-gh-cli` for automatic attachment upload.
+    - Use `--skip-issues` or `--skip-prs` to migrate selectively.
+    - See [CLI Reference](reference/cli_reference.md) for all options.
 
 ---
 
 ### Step 6 — Upload Attachments
 
-Attachments are downloaded locally because GitHub’s API doesn’t support direct upload.
+Attachments are downloaded locally because GitHub’s API doesn’t support direct upload. Use the `--use-gh-cli` option in the migration script for automated upload, or follow the manual steps below.
 
-Go to ➡️ [Attachment Upload Guide](attachment_upload.md) for detailed steps.
+#### Automated Upload (Recommended)
+
+Add `--use-gh-cli` to the migration command for automatic attachment upload:
+
+```bash
+python migrate_bitbucket_to_github.py --config migration_config.json --use-gh-cli
+```
+
+This requires GitHub CLI installed and authenticated.
+
+#### Manual Upload
+
+1. **Locate Files**
+    ```bash
+    cd attachments_temp/
+    ls -lh
+    ```
+
+2. **Identify Targets**
+    Check GitHub issues for comments like:
+    ```markdown
+    📎 **Attachment from Bitbucket**: `file.png` (size)
+    ```
+
+3. **Upload**
+    - Drag and drop files into issue comments on GitHub.
+    - Files preview inline or as links.
+
+4. **Verify**
+    - Confirm uploads in GitHub issues.
+
+??? "Advanced Options"
+    For bulk uploads or prioritization:
+
+    **Bulk Upload with GitHub CLI**
+    ```bash
+    gh auth login
+    cd attachments_temp
+    while IFS=',' read -r file issue_num; do
+      gh issue comment "$issue_num" --repo OWNER/REPO --body "**Attachment:** $file" --attach "$file"
+      sleep 2
+    done < attachment_mapping.csv
+    ```
+
+    **Prioritization**
+    | Priority | Files | Action |
+    |----------|-------|--------|
+    | Critical | Screenshots, docs | Upload first |
+    | Optional | Old files | Skip if needed |
+
+    **Tracking & Cleanup**
+    - Create `attachment-status.md` for progress.
+    - Backup: `tar -czf attachments_backup.tar.gz attachments_temp/`
+    - Delete: `rm -rf attachments_temp/` after verification.
 
 ---
 
 ### Step 7 — Verify and Clean Up
 
-Use the [Verification Checklist](checklists/verification.md) to confirm:
+Confirm migration success and finalize the process.
 
-* Issue/PR counts match audit report
-* User mentions and labels correct
-* Attachments uploaded
-* Repository settings configured
+**Essential Checks:**
 
-Then:
+- Verify Git history: branches, tags, and commits match Bitbucket.
+- Check issue/PR counts and content against audit report.
+- Spot-check user mentions, comments, and timestamps.
+- Confirm attachments are uploaded (if not using --use-gh-cli).
 
-* Update README and branch protections
-* Archive the Bitbucket repository (optional)
+**Clean-Up Operations:**
 
----
-
-## 🗟️ Workarounds Summary
-
-| Limitation                    | Workaround                                                 |
-| ----------------------------- | ---------------------------------------------------------- |
-| Missing original timestamps   | Included as text in description/comments                   |
-| Users without GitHub accounts | Mentioned in text, not assigned                            |
-| Closed PRs (deleted branches) | Migrated as issues with metadata                           |
-| Attachments                   | Manual upload via [Attachment Guide](attachment_upload.md) |
-| Rate limiting                 | Script auto-throttles; rerun if interrupted                |
+- Update README with new GitHub links and branch protections.
+- Set Bitbucket repo to read-only or archive it.
+- Clean up temporary files: `rm -rf attachments_temp/`.
+- Archive migration reports and mappings for reference.
 
 ---
 
-## 🧪 Verification Checklist (Mini)
+### Support Resources
 
-| Task                                        | Done |
-| ------------------------------------------- | ---- |
-| GitHub repo has all branches & tags         | ☑    |
-| Issue & PR counts match audit               | ☑    |
-| Spot-check migrated issue content           | ☑    |
-| User mentions appear correctly              | ☑    |
-| Attachments uploaded                        | ☑    |
-| Bitbucket repo archived or marked read-only | ☑    |
+* [GitHub REST API Documentation](https://docs.github.com/en/rest)
+* [Bitbucket Cloud API Documentation](https://developer.atlassian.com/cloud/bitbucket/rest/)
+* [GitHub Support](https://support.github.com)
 
-See the full [Post-Migration Checklist](checklists/post_migration.md).
+### Checklist Before Asking for Help
 
----
+* Confirm both API tokens are active and scoped correctly
+* Compare audit vs. migrated item counts
+* Check `migration_mapping.json` for missing IDs
+* Search console logs for `ERROR` or `429`
+* Verify no network or disk errors occurred
 
-## 🔀 Troubleshooting Highlights
-
-| Symptom                 | Likely Cause                 | Fix                                                  |
-| ----------------------- | ---------------------------- | ---------------------------------------------------- |
-| `401 Unauthorized`      | Token expired / wrong scopes | Regenerate PAT or Bitbucket token                    |
-| `429 Too Many Requests` | API rate limit               | Wait 1 h or rerun with delay                         |
-| “Branch not found”      | Deleted source branch        | PR migrated as issue                                 |
-| Missing attachments     | Download failure             | Check `attachments_temp/` and re-run attachment step |
-
-Full list: [Troubleshooting Guide](troubleshooting.md).
+If problems persist, open a support ticket with a description of the error and the script version.
 
 ---
 
 ## 📚 References
 
 * [Migration Config Reference](reference/migration_config.md)
+* [Migration Details Reference](reference/migration_details.md)
+* [CLI Reference](reference/cli_reference.md)
 * [User Mapping Guide](reference/user_mapping.md)
 * [API Token Setup](reference/api_tokens.md)
-* [Glossary](reference/glossary.md)
 
----
 
-## ✅ Success Criteria
-
-* All issues and PRs migrated (placeholders fill gaps)
-* Git history intact
-* Team can access new repo
-* Bitbucket archived or marked read-only
-
----
-
-**Next:** [Upload Attachments →](attachment_upload.md)
