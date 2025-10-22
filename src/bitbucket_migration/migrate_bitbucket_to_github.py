@@ -232,6 +232,9 @@ class BitbucketToGitHubMigrator:
         # Track cross-repo links for reporting
         self.cross_repo_links_rewritten = 0
 
+        # Milestone mapping (BB name -> GH number)
+        self.milestone_mapping = {}
+
         # Build account ID to username mapping (for @mention resolution)
         self.account_id_to_username = {}  # Maps account_id -> bitbucket_username
         self.account_id_to_display_name = {}  # Maps account_id -> display_name
@@ -735,6 +738,52 @@ class BitbucketToGitHubMigrator:
             
         return gh_user
 
+    def fetch_bb_milestones(self) -> List[dict]:
+        """Fetch all milestones from Bitbucket
+        
+        Returns:
+            List of milestone dictionaries with name, description, etc.
+        """
+        self.log("Fetching Bitbucket milestones...")
+        url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/milestones"
+        
+        try:
+            milestones = self._paginate(url, params={'pagelen': 100})
+            self.log(f"  Found {len(milestones)} milestones")
+            return milestones
+        except Exception as e:
+            self.log(f"  Warning: Could not fetch milestones: {e}")
+            return []
+    
+    def _paginate(self, url: str, params: dict = None) -> List[dict]:
+        """Fetch all pages of results from Bitbucket API"""
+        results = []
+        next_url = url
+        first_request = True
+        
+        while next_url:
+            try:
+                if first_request and params:
+                    response = self.bb_session.get(next_url, params=params)
+                    first_request = False
+                else:
+                    response = self.bb_session.get(next_url)
+                
+                response.raise_for_status()
+                data = response.json()
+                
+                if 'values' in data:
+                    results.extend(data['values'])
+                else:
+                    results.append(data)
+                
+                next_url = data.get('next')
+            except Exception as e:
+                self.log(f"  Error fetching data: {e}")
+                break
+                
+        return results
+
     def map_mention(self, bb_username: str) -> Optional[str]:
         """Map Bitbucket username (from @mention) to GitHub username
         
@@ -792,6 +841,77 @@ class BitbucketToGitHubMigrator:
         
         # No mapping found
         return None
+
+    def create_or_get_milestone(self, milestone_name: str, milestone_data: dict = None) -> Optional[int]:
+        """Create a milestone on GitHub or get existing one
+        
+        Args:
+            milestone_name: Name of the milestone from Bitbucket
+            milestone_data: Optional full milestone data from Bitbucket API containing:
+                - description: Milestone description
+                - due_on: Due date in ISO format
+                - state: 'open' or 'closed'
+
+        Returns:
+            GitHub milestone number, or None if creation failed
+        """
+        # Check if we already mapped this milestone
+        if milestone_name in self.milestone_mapping:
+            return self.milestone_mapping[milestone_name]
+        
+        url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/milestones"
+        
+        if self.dry_run:
+            # Simulate - just assign a fake number
+            fake_number = len(self.milestone_mapping) + 1
+            self.milestone_mapping[milestone_name] = fake_number
+            self.log(f"  [DRY RUN] Would create milestone: {milestone_name}")
+            return fake_number
+        
+        try:
+            # First, check if milestone already exists
+            response = self.gh_session.get(url, params={'state': 'all'})
+            response.raise_for_status()
+            milestones = response.json()
+            
+            for milestone in milestones:
+                if milestone['title'] == milestone_name:
+                    # Already exists
+                    self.milestone_mapping[milestone_name] = milestone['number']
+                    self.log(f"  Found existing milestone: {milestone_name} (#{milestone['number']})")
+                    return milestone['number']
+            
+            # Doesn't exist, create it
+            payload = {
+                'title': milestone_name,
+                'state': 'open'
+            }
+            
+            # Add optional fields from Bitbucket data
+            if milestone_data:
+                if milestone_data.get('description'):
+                    payload['description'] = milestone_data['description']
+                if milestone_data.get('due_on'):
+                    # Bitbucket uses 'due_on', GitHub uses 'due_on' - compatible!
+                    payload['due_on'] = milestone_data['due_on']
+                # Note: We default to 'open', can close later based on issue states
+
+            response = self.gh_session.post(url, json=payload)
+            response.raise_for_status()
+            milestone = response.json()
+            
+            self.milestone_mapping[milestone_name] = milestone['number']
+            desc_note = " with description" if milestone_data and milestone_data.get('description') else ""
+            due_note = f" (due: {milestone_data.get('due_on', '')[:10]})" if milestone_data and milestone_data.get('due_on') else ""
+            self.log(f"  Created milestone: {milestone_name} (#{milestone['number']}){desc_note}{due_note}")
+
+            self.rate_limit_sleep(0.5)
+            
+            return milestone['number']
+            
+        except Exception as e:
+            self.log(f"  Warning: Could not create milestone '{milestone_name}': {e}")
+            return None
 
     def build_account_id_mappings(self, bb_issues: List[dict], bb_prs: List[dict]):
         """Build mappings from account IDs to usernames by scanning all Bitbucket data
@@ -923,7 +1043,6 @@ class BitbucketToGitHubMigrator:
         except Exception as e:
             self.log(f"  Warning: Error looking up account ID {account_id[:40]}...: {e}")
             return None
-
 
     def check_gh_cli_available(self) -> bool:
         """Check if GitHub CLI is installed and authenticated"""
@@ -1301,7 +1420,8 @@ class BitbucketToGitHubMigrator:
             return False
 
     def create_gh_issue(self, title: str, body: str, labels: List[str] = None, 
-                       state: str = 'open', assignees: List[str] = None) -> dict:
+                       state: str = 'open', assignees: List[str] = None,
+                       milestone: int = None) -> dict:
         """Create a GitHub issue"""
         url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/issues"
         
@@ -1314,7 +1434,9 @@ class BitbucketToGitHubMigrator:
             payload['labels'] = labels
         if assignees:
             payload['assignees'] = assignees
-        
+        if milestone:
+            payload['milestone'] = milestone
+
         if self.dry_run:
             # Simulate issue creation with correct numbering
             simulated_number = self.next_github_number
@@ -1611,8 +1733,11 @@ class BitbucketToGitHubMigrator:
 """
         return comment_body, links_count, inline_images
     
-    def migrate_issues(self, bb_issues: List[dict]):
+    def migrate_issues(self, bb_issues: List[dict], milestone_lookup: Dict[str, dict] = None):
         """Migrate all Bitbucket issues to GitHub"""
+
+        milestone_lookup = milestone_lookup or {}
+        
         self.log("="*80)
         self.log("PHASE 1: Migrating Issues")
         self.log("="*80)
@@ -1692,14 +1817,22 @@ class BitbucketToGitHubMigrator:
                     assignees = [gh_user]
                 else:
                     self.log(f"  Note: Assignee '{assignee_name}' has no GitHub account, mentioned in body instead")
-            
+
+            # Map milestone
+            milestone_number = None
+            if bb_issue.get('milestone'):
+                milestone_name = bb_issue['milestone'].get('name')
+                if milestone_name:
+                    milestone_number = self.create_or_get_milestone(milestone_name, milestone_lookup.get(milestone_name))
+
             # Create issue
             gh_issue = self.create_gh_issue(
                 title=bb_issue.get('title', f'Issue #{issue_num}'),
                 body=body,
                 labels=['migrated-from-bitbucket'],
                 state='open' if bb_issue.get('state') in ['new', 'open'] else 'closed',
-                assignees=assignees
+                assignees=assignees,
+                milestone=milestone_number
             )
             
             self.issue_mapping[issue_num] = gh_issue['number']
@@ -1777,7 +1910,7 @@ class BitbucketToGitHubMigrator:
             self.log(f"  ✓ Migrated issue #{issue_num} -> #{gh_issue['number']} with {len(comments)} comments and {len(attachments)} attachments")
             expected_num += 1
     
-    def migrate_pull_requests(self, bb_prs: List[dict]):
+    def migrate_pull_requests(self, bb_prs: List[dict], milestone_lookup: Dict[str, dict] = None):
         """Migrate Bitbucket PRs to GitHub with intelligent branch checking
         
         Strategy:
@@ -1786,6 +1919,9 @@ class BitbucketToGitHubMigrator:
         
         This avoids any risk of re-merging already-merged code.
         """
+        
+        milestone_lookup = milestone_lookup or {}
+        
         self.log("="*80)
         self.log("PHASE 2: Migrating Pull Requests")
         self.log("="*80)
@@ -1817,7 +1953,14 @@ class BitbucketToGitHubMigrator:
                         self.log(f"  ✓ Both branches exist, creating as GitHub PR")
                         
                         body, links_in_body, inline_images_body = self.format_pr_body(bb_pr)
-                        
+
+                        # Map milestone for PRs
+                        milestone_number = None
+                        if bb_pr.get('milestone'):
+                            milestone_name = bb_pr['milestone'].get('name')
+                            if milestone_name:
+                                milestone_number = self.create_or_get_milestone(milestone_name, milestone_lookup.get(milestone_name))
+
                         # Track inline images
                         for img in inline_images_body:
                             self.attachments.append({
@@ -1835,6 +1978,20 @@ class BitbucketToGitHubMigrator:
                             base=dest_branch
                         )
                         
+                        # Apply milestone to PR (must be done after creation)
+                        if milestone_number and gh_pr:
+                            try:
+                                url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/issues/{gh_pr['number']}"
+                                if not self.dry_run:
+                                    response = self.gh_session.patch(url, json={'milestone': milestone_number})
+                                    response.raise_for_status()
+                                    self.log(f"    Applied milestone to PR #{gh_pr['number']}")
+                                    self.rate_limit_sleep(0.5)
+                                else:
+                                    self.log(f"  [DRY RUN] Would apply milestone to PR #{gh_pr['number']}")
+                            except Exception as e:
+                                self.log(f"    Warning: Could not apply milestone to PR: {e}")
+
                         if gh_pr:
                             self.pr_mapping[pr_num] = gh_pr['number']
                             self.stats['prs_as_prs'] += 1
@@ -1956,6 +2113,13 @@ class BitbucketToGitHubMigrator:
             
             body, links_in_body, inline_images_body = self.format_pr_as_issue_body(bb_pr)
 
+            # Map milestone for PRs migrated as issues
+            milestone_number = None
+            if bb_pr.get('milestone'):
+                milestone_name = bb_pr['milestone'].get('name')
+                if milestone_name:
+                    milestone_number = self.create_or_get_milestone(milestone_name, milestone_lookup.get(milestone_name))
+
             # Track inline images
             for img in inline_images_body:
                 self.attachments.append({
@@ -1979,7 +2143,8 @@ class BitbucketToGitHubMigrator:
                 title=f"[PR #{pr_num}] {title}",
                 body=body,
                 labels=labels,
-                state='closed'  # Always close migrated PRs that are now issues
+                state='closed',  # Always close migrated PRs that are now issues
+                milestone=milestone_number
             )
             
             self.pr_mapping[pr_num] = gh_issue['number']
@@ -2113,6 +2278,11 @@ class BitbucketToGitHubMigrator:
         report.append(f"- **Total Issues Migrated:** {len(self.issue_records)}")
         report.append(f"  - Real Issues: {len([r for r in self.issue_records if r['state'] != 'deleted'])}")
         report.append(f"  - Placeholders: {len([r for r in self.issue_records if r['state'] == 'deleted'])}")
+
+        if self.milestone_mapping:
+            report.append(f"- **Milestones Created:** {len(self.milestone_mapping)}")
+            for bb_name, gh_num in sorted(self.milestone_mapping.items()):
+                report.append(f"  - {bb_name} → Milestone #{gh_num}")
 
         # Calculate PR statistics
         total_prs = len(self.pr_records)
@@ -2536,6 +2706,10 @@ class BitbucketToGitHubMigrator:
         self.log(f"Issues:")
         self.log(f"  Total migrated: {len(self.issue_mapping)}")
         
+        if self.milestone_mapping:
+            self.log(f"Milestones:")
+            self.log(f"  Total created/mapped: {len(self.milestone_mapping)}")
+
         self.log(f"Pull Requests:")
         self.log(f"  Total processed: {len(self.pr_mapping)}")
         self.log(f"  Migrated as GitHub PRs: {self.stats['prs_as_prs']}")
@@ -3007,6 +3181,19 @@ Example:
         # Build account ID mappings from the fetched data
         migrator.build_account_id_mappings(bb_issues, bb_prs)
 
+        # Fetch and create milestones before migration
+        bb_milestones = migrator.fetch_bb_milestones()
+        milestone_lookup = {}  # name -> full data
+        
+        if bb_milestones:
+            migrator.log("\nCreating milestones on GitHub...")
+            for milestone in bb_milestones:
+                name = milestone.get('name')
+                if name:
+                    milestone_lookup[name] = milestone
+                    # Pre-create milestone
+                    migrator.create_or_get_milestone(name, milestone)
+
         # Diagnostic: check for account IDs in raw data
         if args.dry_run:
             migrator.diagnose_mentions(bb_issues, bb_prs)
@@ -3037,10 +3224,10 @@ Example:
         
         # Perform migration
         if not args.skip_issues:
-            migrator.migrate_issues(bb_issues)
+            migrator.migrate_issues(bb_issues, milestone_lookup)
         
         if not args.skip_prs:
-            migrator.migrate_pull_requests(bb_prs)
+            migrator.migrate_pull_requests(bb_prs, milestone_lookup)
         
         # Save mapping
         migrator.save_mapping()
