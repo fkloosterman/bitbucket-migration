@@ -16,7 +16,7 @@
         <link rel="prev" href="..">
       
       
-        <link rel="next" href="../attachment_upload/">
+        <link rel="next" href="../reference/migration_details/">
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -78,7 +78,9 @@
     
       
 
-<header class="md-header" data-md-component="header">
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href=".." title="Bitbucket → GitHub Migration" class="md-header__button md-logo" aria-label="Bitbucket → GitHub Migration" data-md-component="logo">
       
@@ -167,14 +169,8 @@
     
   </nav>
   
-</header>
     
-    <div class="md-container" data-md-component="container">
       
-      
-        
-          
-            
 <nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
   <div class="md-grid">
     <ul class="md-tabs__list">
@@ -224,40 +220,9 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../attachment_upload/" class="md-tabs__link">
-        
-  
-  
     
-  
-  Attachments
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../troubleshooting/" class="md-tabs__link">
-        
-  
-  
     
-  
-  Troubleshooting
-
-      </a>
-    </li>
-  
-
       
-        
   
   
   
@@ -265,29 +230,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../checklists/pre_migration/" class="md-tabs__link">
-          
-  
-  
-    
-  
-  Checklists
-
-        </a>
-      </li>
-    
-  
-
-      
-        
-  
-  
-  
-  
-    
-    
-      <li class="md-tabs__item">
-        <a href="../reference/migration_config/" class="md-tabs__link">
+        <a href="../reference/migration_details/" class="md-tabs__link">
           
   
   
@@ -300,11 +243,20 @@
     
   
 
+    
+  
+
       
     </ul>
   </div>
 </nav>
-          
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
         
       
       <main class="md-main" data-md-component="main">
@@ -312,7 +264,9 @@
           
             
               
-              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" hidden>
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
                     
@@ -427,71 +381,38 @@
         <li class="md-nav__item">
   <a href="#overview" class="md-nav__link">
     <span class="md-ellipsis">
-      🤩 Overview
+      Overview
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#migration-phases" class="md-nav__link">
+  <a href="#installation-and-setup" class="md-nav__link">
     <span class="md-ellipsis">
-      🧱 Migration Phases
+      Installation and Setup
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#prerequisites" class="md-nav__link">
+  <a href="#migration-steps" class="md-nav__link">
     <span class="md-ellipsis">
-      🛠️ Prerequisites
+      Migration Steps
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="🛠️ Prerequisites">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#required-tools" class="md-nav__link">
-    <span class="md-ellipsis">
-      Required Tools
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#required-accounts-tokens" class="md-nav__link">
-    <span class="md-ellipsis">
-      Required Accounts &amp; Tokens
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#local-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      Local Setup
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
   <a href="#step-by-step-migration" class="md-nav__link">
     <span class="md-ellipsis">
-      ⚙️ Step-by-Step Migration
+      Step-by-Step Migration
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="⚙️ Step-by-Step Migration">
+    <nav class="md-nav" aria-label="Step-by-Step Migration">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -504,18 +425,18 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-2-prepare-github-repository" class="md-nav__link">
+  <a href="#step-2-mirror-repository" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 2 — Prepare GitHub Repository
+      Step 2 — Mirror Repository
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-3-migrate-git-history" class="md-nav__link">
+  <a href="#step-3-tailor-configuration" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 3 — Migrate Git History
+      Step 3 - Tailor Configuration
     </span>
   </a>
   
@@ -546,6 +467,30 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Step 6 — Upload Attachments">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#automated-upload-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      Automated Upload (Recommended)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-upload" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manual Upload
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -557,35 +502,26 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#support-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      Support Resources
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#checklist-before-asking-for-help" class="md-nav__link">
+    <span class="md-ellipsis">
+      Checklist Before Asking for Help
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#workarounds-summary" class="md-nav__link">
-    <span class="md-ellipsis">
-      🗟️ Workarounds Summary
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#verification-checklist-mini" class="md-nav__link">
-    <span class="md-ellipsis">
-      🧪 Verification Checklist (Mini)
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#troubleshooting-highlights" class="md-nav__link">
-    <span class="md-ellipsis">
-      🔀 Troubleshooting Highlights
-    </span>
-  </a>
   
 </li>
       
@@ -593,15 +529,6 @@
   <a href="#references" class="md-nav__link">
     <span class="md-ellipsis">
       📚 References
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#success-criteria" class="md-nav__link">
-    <span class="md-ellipsis">
-      ✅ Success Criteria
     </span>
   </a>
   
@@ -621,52 +548,12 @@
   
   
   
-    <li class="md-nav__item">
-      <a href="../attachment_upload/" class="md-nav__link">
+    
+    
+      
         
-  
-  
-  <span class="md-ellipsis">
-    Attachments
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-    
       
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../troubleshooting/" class="md-nav__link">
         
-  
-  
-  <span class="md-ellipsis">
-    Troubleshooting
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
       
         
       
@@ -687,15 +574,15 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
         
           
-          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
             
   
   
   <span class="md-ellipsis">
-    Checklists
+    Reference
     
   </span>
   
@@ -703,10 +590,73 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
-            Checklists
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Migration Details
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            Migration Details
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -717,12 +667,12 @@
   
   
     <li class="md-nav__item">
-      <a href="../checklists/pre_migration/" class="md-nav__link">
+      <a href="../reference/migration_details/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Pre-migration
+    Overview
     
   </span>
   
@@ -740,12 +690,12 @@
   
   
     <li class="md-nav__item">
-      <a href="../checklists/verification/" class="md-nav__link">
+      <a href="../reference/migration_issues/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Verification
+    Issues
     
   </span>
   
@@ -763,12 +713,150 @@
   
   
     <li class="md-nav__item">
-      <a href="../checklists/post_migration/" class="md-nav__link">
+      <a href="../reference/migration_pull_requests/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Post-migration
+    Pull Requests
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/migration_comments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Comments
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/migration_attachments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Attachments
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/migration_images/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Images
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/migration_links/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Links
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/migration_mentions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Mentions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/migration_milestones/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Milestones
     
   </span>
   
@@ -785,59 +873,7 @@
     </li>
   
 
-    
-      
-      
-  
-  
-  
-  
-    
-    
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-      
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
-        
-          
-          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    Reference
-    
-  </span>
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6">
-            <span class="md-nav__icon md-icon"></span>
-            Reference
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
+              
             
               
                 
@@ -915,12 +951,12 @@
   
   
     <li class="md-nav__item">
-      <a href="../reference/glossary/" class="md-nav__link">
+      <a href="../reference/cli_reference/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Glossary
+    Command Line Interface
     
   </span>
   
@@ -946,6 +982,8 @@
             
             
               
+                
+              
               <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
@@ -967,71 +1005,38 @@
         <li class="md-nav__item">
   <a href="#overview" class="md-nav__link">
     <span class="md-ellipsis">
-      🤩 Overview
+      Overview
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#migration-phases" class="md-nav__link">
+  <a href="#installation-and-setup" class="md-nav__link">
     <span class="md-ellipsis">
-      🧱 Migration Phases
+      Installation and Setup
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#prerequisites" class="md-nav__link">
+  <a href="#migration-steps" class="md-nav__link">
     <span class="md-ellipsis">
-      🛠️ Prerequisites
+      Migration Steps
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="🛠️ Prerequisites">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#required-tools" class="md-nav__link">
-    <span class="md-ellipsis">
-      Required Tools
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#required-accounts-tokens" class="md-nav__link">
-    <span class="md-ellipsis">
-      Required Accounts &amp; Tokens
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#local-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      Local Setup
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
   <a href="#step-by-step-migration" class="md-nav__link">
     <span class="md-ellipsis">
-      ⚙️ Step-by-Step Migration
+      Step-by-Step Migration
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="⚙️ Step-by-Step Migration">
+    <nav class="md-nav" aria-label="Step-by-Step Migration">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1044,18 +1049,18 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-2-prepare-github-repository" class="md-nav__link">
+  <a href="#step-2-mirror-repository" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 2 — Prepare GitHub Repository
+      Step 2 — Mirror Repository
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-3-migrate-git-history" class="md-nav__link">
+  <a href="#step-3-tailor-configuration" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 3 — Migrate Git History
+      Step 3 - Tailor Configuration
     </span>
   </a>
   
@@ -1086,6 +1091,30 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Step 6 — Upload Attachments">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#automated-upload-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      Automated Upload (Recommended)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-upload" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manual Upload
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -1097,35 +1126,26 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#support-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      Support Resources
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#checklist-before-asking-for-help" class="md-nav__link">
+    <span class="md-ellipsis">
+      Checklist Before Asking for Help
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#workarounds-summary" class="md-nav__link">
-    <span class="md-ellipsis">
-      🗟️ Workarounds Summary
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#verification-checklist-mini" class="md-nav__link">
-    <span class="md-ellipsis">
-      🧪 Verification Checklist (Mini)
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#troubleshooting-highlights" class="md-nav__link">
-    <span class="md-ellipsis">
-      🔀 Troubleshooting Highlights
-    </span>
-  </a>
   
 </li>
       
@@ -1133,15 +1153,6 @@
   <a href="#references" class="md-nav__link">
     <span class="md-ellipsis">
       📚 References
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#success-criteria" class="md-nav__link">
-    <span class="md-ellipsis">
-      ✅ Success Criteria
     </span>
   </a>
   
@@ -1160,6 +1171,8 @@
               <article class="md-content__inner md-typeset">
                 
                   
+  
+
 
 
   
@@ -1169,8 +1182,8 @@
 <h1 id="bitbucket-github-migration-guide">Bitbucket → GitHub Migration Guide</h1>
 <p><strong>Version:</strong> 2.0  <strong>Last Updated:</strong> 2025-10-18</p>
 <hr />
-<h2 id="overview">🤩 Overview</h2>
-<p>This guide explains how to migrate a Bitbucket <strong>Cloud</strong> repository to <strong>GitHub</strong>, preserving:</p>
+<h2 id="overview">Overview</h2>
+<p>This guide explains how to migrate a <strong>Bitbucket</strong> Cloud repository to <strong>GitHub</strong>, preserving:</p>
 <ul>
 <li>Git history (branches, tags, commits)</li>
 <li>Issues, pull requests, and comments</li>
@@ -1178,75 +1191,87 @@
 <li>Author and timestamp metadata (as text)</li>
 </ul>
 <hr />
-<h2 id="migration-phases">🧱 Migration Phases</h2>
-<pre class="mermaid"><code>flowchart TD
-A[1. Audit Bitbucket Repo] --&gt; B[2. Push Git Mirror]
-B --&gt; C[3. Dry Run Migration]
-C --&gt; D[4. Run Full Migration]
-D --&gt; E[5. Upload Attachments]
-E --&gt; F[6. Verify &amp; Clean Up]</code></pre>
-<table>
-<thead>
-<tr>
-<th>Phase</th>
-<th>Purpose</th>
-<th>Output</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>1. Audit</td>
-<td>Collect metadata &amp; create config</td>
-<td><code>audit_report.md</code>, <code>migration_config.json</code></td>
-</tr>
-<tr>
-<td>2. Git Mirror</td>
-<td>Copy commits, branches, tags</td>
-<td>GitHub repo populated</td>
-</tr>
-<tr>
-<td>3. Dry Run</td>
-<td>Validate config &amp; API access</td>
-<td>Console logs</td>
-</tr>
-<tr>
-<td>4. Full Migration</td>
-<td>Migrate issues, PRs, comments</td>
-<td><code>migration_mapping.json</code></td>
-</tr>
-<tr>
-<td>5. Attachments</td>
-<td>Upload manually</td>
-<td>GitHub comments + uploaded files</td>
-</tr>
-<tr>
-<td>6. Verification</td>
-<td>Compare counts, finalize</td>
-<td>Checklist complete</td>
-</tr>
-</tbody>
-</table>
+<div class="admonition warning">
+<p class="admonition-title">Important Safety Note</p>
+<p>Keep your Bitbucket repository intact (potentially archived) until migration is fully verified. If errors occur and migration is only partially completed, delete the GitHub repository and start fresh.</p>
+</div>
 <hr />
-<h2 id="prerequisites">🛠️ Prerequisites</h2>
-<h3 id="required-tools">Required Tools</h3>
-<ul>
-<li>Python <strong>3.7+</strong></li>
-<li>Git <strong>2.x+</strong></li>
-<li><code>pip install requests</code></li>
-</ul>
-<h3 id="required-accounts-tokens">Required Accounts &amp; Tokens</h3>
-<ul>
-<li><strong>Bitbucket Cloud API Token</strong> (read access to repos, issues, PRs)</li>
-<li><strong>GitHub Personal Access Token (PAT)</strong> with <code>repo</code> scope
-  → <a href="https://github.com/settings/tokens">Create PAT</a></li>
-</ul>
-<h3 id="local-setup">Local Setup</h3>
-<div class="highlight"><pre><span></span><code>git<span class="w"> </span>--version
-python3<span class="w"> </span>--version
-pip<span class="w"> </span>install<span class="w"> </span>requests
+<h2 id="installation-and-setup">Installation and Setup</h2>
+<ol>
+<li>
+<p><strong>Install from PyPI</strong> (Recommended):
+    <div class="highlight"><pre><span></span><code>pipx<span class="w"> </span>install<span class="w"> </span>bitbucket-migration
 </code></pre></div>
+    Then use as follows. See <a href="../reference/cli_reference/">CLI Reference Guide</a> for detailed description
+    of the command line interface of the included scripts.
+    <div class="highlight"><pre><span></span><code>audit_bitbucket<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--generate-config
+migrate_bitbucket_to_github<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--dry-run
+</code></pre></div></p>
+<details>
+<summary>Alternative installation methods</summary>
+<p><strong>Run Directly</strong>
+<div class="highlight"><pre><span></span><code>pipx<span class="w"> </span>run<span class="w"> </span>bitbucket-migration<span class="w"> </span>audit_bitbucket<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--generate-config
+</code></pre></div></p>
+<p><strong>From Source</strong>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/fkloosterman/bitbucket-migration.git
+<span class="nb">cd</span><span class="w"> </span>bitbucket-migration
+python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--generate-config
+</code></pre></div></p>
+</details>
+</li>
+<li>
+<p><strong>Set up Bitbucket and Github Tokens</strong></p>
+<p>You will need a Bitbucket Cloud API Token (read access to repos, issues, PRs) and
+a GitHub Personal Access Token (PAT) with <code>repo</code> scope.</p>
+<p>See <a href="../reference/api_tokens/">API Tokens Setup Guide</a>
+for instructions on how to setup these tokens and to verify access.</p>
+</li>
+</ol>
 <hr />
-<h2 id="step-by-step-migration">⚙️ Step-by-Step Migration</h2>
+<h2 id="migration-steps">Migration Steps</h2>
+<pre class="mermaid"><code>flowchart TD
+A(
+  **1. Audit Bitbucket Repository**
+  Collect metadata and create config.
+) --&gt; B(
+  **2. Mirror Git Repository**
+  Copy commits, branches, and tags.
+)
+click A "#step-1-run-audit" "Audit Bitbucket Repo"
+click B "#step-2-prepare-github-repository" "Mirror Git Repo"
+
+B --&gt; C(
+  **3. Tailor Configuration**
+  GitHub token, member mapping, repository mapping.
+)
+click C "#step-3-tailor-configuration" "Tailor Config"
+
+C --&gt; D(
+  **4. Dry Run Migration**
+  Validate config and check migration of issues and PRs.
+)
+D --&gt; C
+click D "#step-4-dry-run-migration" "Dry Run Migration"
+
+D --&gt; E(
+  **5. Run Full Migration**
+  Migrate issues, PRs, and comments.
+)
+click E "#step-5-run-full-migration" "Run Full Migration"
+
+E --&gt; F(
+  **6. Upload Attachments**
+  Automated with --use-gh-cli or manual upload.
+)
+click F "#step-6-upload-attachments" "Upload Attachments"
+
+F --&gt; G(
+  **6. Verify &amp; Clean Up**
+  Finalize and verify migration.
+)
+click G "#step-7-verify-and-clean-up" "Verify"</code></pre>
+<hr />
+<h2 id="step-by-step-migration">Step-by-Step Migration</h2>
 <h3 id="step-1-run-audit">Step 1 — Run Audit</h3>
 <p>Generates the initial configuration and user mapping.</p>
 <div class="highlight"><pre><span></span><code>python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span><span class="se">\</span>
@@ -1266,14 +1291,12 @@ pip<span class="w"> </span>install<span class="w"> </span>requests
 <p><strong>Next:</strong> Edit the config file to map Bitbucket users to GitHub accounts.
 See <a href="../reference/user_mapping/">User Mapping Reference</a>.</p>
 <hr />
-<h3 id="step-2-prepare-github-repository">Step 2 — Prepare GitHub Repository</h3>
+<h3 id="step-2-mirror-repository">Step 2 — Mirror Repository</h3>
 <ol>
 <li>Create an <strong>empty</strong> repository on GitHub.
    Do <em>not</em> add a README or license.</li>
 <li>Keep it <strong>private</strong> until migration is complete.</li>
 </ol>
-<hr />
-<h3 id="step-3-migrate-git-history">Step 3 — Migrate Git History</h3>
 <div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>--mirror<span class="w"> </span>https://bitbucket.org/WORKSPACE/REPO.git
 <span class="nb">cd</span><span class="w"> </span>REPO.git
 git<span class="w"> </span>remote<span class="w"> </span>add<span class="w"> </span>github<span class="w"> </span>https://github.com/OWNER/REPO.git
@@ -1283,169 +1306,176 @@ git<span class="w"> </span>push<span class="w"> </span>--mirror<span class="w"> 
 <div class="highlight"><pre><span></span><code>git<span class="w"> </span>ls-remote<span class="w"> </span>github
 </code></pre></div>
 <hr />
+<h3 id="step-3-tailor-configuration">Step 3 - Tailor Configuration</h3>
+<p>Edit <code>migration_config.json</code> to set your tokens and user mappings. See <a href="../reference/migration_config/">Migration Config Reference</a> for full details.</p>
+<ol>
+<li><strong>Update Tokens</strong></li>
+<li>Set <code>bitbucket.token</code> to your Bitbucket API token.</li>
+<li>
+<p>Set <code>github.token</code> to your GitHub PAT with <code>repo</code> scope.</p>
+</li>
+<li>
+<p><strong>Configure User Mapping</strong></p>
+</li>
+<li>Map Bitbucket display names to GitHub usernames in <code>user_mapping</code>.</li>
+<li>
+<p>Set unmapped or deleted users to <code>null</code>.</p>
+</li>
+<li>
+<p><strong>Run Dry Run</strong></p>
+</li>
+<li>After editing, run a dry run (Step 4) to validate.</li>
+<li>Refine mappings if needed.</li>
+</ol>
+<details>
+<summary>Advanced Options</summary>
+<ul>
+<li>Add <code>repository_mapping</code> for cross-repository link rewriting.</li>
+<li>See <a href="../reference/migration_config/">Migration Config Reference</a> for details.</li>
+</ul>
+</details>
+<hr />
 <h3 id="step-4-dry-run-migration">Step 4 — Dry Run Migration</h3>
+<p>Run a simulation of the migration to validate your configuration without making any changes.</p>
 <div class="highlight"><pre><span></span><code>python<span class="w"> </span>migrate_bitbucket_to_github.py<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--dry-run
 </code></pre></div>
-<p>Check for:</p>
+<p><strong>What it does:</strong>
+- Validates tokens and permissions.
+- Checks user mappings and repository access.
+- Estimates issue/PR counts and migration time.
+- Generates <code>migration_report_dry_run.md</code> with details.</p>
+<p><strong>Check for:</strong>
+- Authentication success (no 401/403 errors).
+- Valid user mappings (no unmapped users warnings).
+- Correct counts matching your audit report.
+- If issues, refine <code>migration_config.json</code> and retry.</p>
+<details>
+<summary>Advanced Options</summary>
 <ul>
-<li>Token authentication success</li>
-<li>Valid user mappings</li>
-<li>Correct issue/PR counts
-  If errors occur, see <a href="../troubleshooting/">Troubleshooting</a>.</li>
+<li>Use <code>--skip-issues</code> or <code>--skip-prs</code> to test specific phases.</li>
+<li>See <a href="../reference/cli_reference/">CLI Reference</a> for all options.</li>
 </ul>
+</details>
 <hr />
 <h3 id="step-5-run-full-migration">Step 5 — Run Full Migration</h3>
+<p>Execute the actual migration of issues, PRs, comments, and attachments.</p>
 <div class="highlight"><pre><span></span><code>python<span class="w"> </span>migrate_bitbucket_to_github.py<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--config<span class="w"> </span>migration_config.json
 </code></pre></div>
-<p><strong>Outputs</strong></p>
+<p><strong>What it does:</strong>
+- Migrates issues and PRs (open PRs stay as PRs; closed PRs become issues).
+- Downloads attachments to <code>attachments_temp/</code>.
+- Generates <code>migration_mapping.json</code> for ID cross-references.
+- Creates <code>migration_report.md</code> with details and any issues.</p>
+<details>
+<summary>Advanced Options</summary>
 <ul>
-<li>Migrated issues and PRs (open PRs remain PRs; closed PRs become issues)</li>
-<li>Downloaded attachments in <code>attachments_temp/</code></li>
-<li><code>migration_mapping.json</code> for ID cross-reference</li>
+<li>Use <code>--use-gh-cli</code> for automatic attachment upload.</li>
+<li>Use <code>--skip-issues</code> or <code>--skip-prs</code> to migrate selectively.</li>
+<li>See <a href="../reference/cli_reference/">CLI Reference</a> for all options.</li>
 </ul>
-<p>Migration typically takes <strong>0.5 min per issue/PR</strong> due to API limits.</p>
+</details>
 <hr />
 <h3 id="step-6-upload-attachments">Step 6 — Upload Attachments</h3>
-<p>Attachments are downloaded locally because GitHub’s API doesn’t support direct upload.</p>
-<p>Go to ➡️ <a href="../attachment_upload/">Attachment Upload Guide</a> for detailed steps.</p>
+<p>Attachments are downloaded locally because GitHub’s API doesn’t support direct upload. Use the <code>--use-gh-cli</code> option in the migration script for automated upload, or follow the manual steps below.</p>
+<h4 id="automated-upload-recommended">Automated Upload (Recommended)</h4>
+<p>Add <code>--use-gh-cli</code> to the migration command for automatic attachment upload:</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>migrate_bitbucket_to_github.py<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--use-gh-cli
+</code></pre></div>
+<p>This requires GitHub CLI installed and authenticated.</p>
+<h4 id="manual-upload">Manual Upload</h4>
+<ol>
+<li>
+<p><strong>Locate Files</strong>
+    <div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>attachments_temp/
+ls<span class="w"> </span>-lh
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Identify Targets</strong>
+    Check GitHub issues for comments like:
+    <div class="highlight"><pre><span></span><code>📎 <span class="gs">**Attachment from Bitbucket**</span>: <span class="sb">`file.png`</span> (size)
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Upload</strong></p>
+<ul>
+<li>Drag and drop files into issue comments on GitHub.</li>
+<li>Files preview inline or as links.</li>
+</ul>
+</li>
+<li>
+<p><strong>Verify</strong></p>
+<ul>
+<li>Confirm uploads in GitHub issues.</li>
+</ul>
+</li>
+</ol>
+<details>
+<summary>Advanced Options</summary>
+<p>For bulk uploads or prioritization:</p>
+<p><strong>Bulk Upload with GitHub CLI</strong>
+<div class="highlight"><pre><span></span><code>gh<span class="w"> </span>auth<span class="w"> </span>login
+<span class="nb">cd</span><span class="w"> </span>attachments_temp
+<span class="k">while</span><span class="w"> </span><span class="nv">IFS</span><span class="o">=</span><span class="s1">&#39;,&#39;</span><span class="w"> </span><span class="nb">read</span><span class="w"> </span>-r<span class="w"> </span>file<span class="w"> </span>issue_num<span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span>gh<span class="w"> </span>issue<span class="w"> </span>comment<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$issue_num</span><span class="s2">&quot;</span><span class="w"> </span>--repo<span class="w"> </span>OWNER/REPO<span class="w"> </span>--body<span class="w"> </span><span class="s2">&quot;**Attachment:** </span><span class="nv">$file</span><span class="s2">&quot;</span><span class="w"> </span>--attach<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$file</span><span class="s2">&quot;</span>
+<span class="w">  </span>sleep<span class="w"> </span><span class="m">2</span>
+<span class="k">done</span><span class="w"> </span>&lt;<span class="w"> </span>attachment_mapping.csv
+</code></pre></div></p>
+<p><strong>Prioritization</strong>
+| Priority | Files | Action |
+|----------|-------|--------|
+| Critical | Screenshots, docs | Upload first |
+| Optional | Old files | Skip if needed |</p>
+<p><strong>Tracking &amp; Cleanup</strong>
+- Create <code>attachment-status.md</code> for progress.
+- Backup: <code>tar -czf attachments_backup.tar.gz attachments_temp/</code>
+- Delete: <code>rm -rf attachments_temp/</code> after verification.</p>
+</details>
 <hr />
 <h3 id="step-7-verify-and-clean-up">Step 7 — Verify and Clean Up</h3>
-<p>Use the <a href="../checklists/verification/">Verification Checklist</a> to confirm:</p>
+<p>Confirm migration success and finalize the process.</p>
+<p><strong>Essential Checks:</strong></p>
 <ul>
-<li>Issue/PR counts match audit report</li>
-<li>User mentions and labels correct</li>
-<li>Attachments uploaded</li>
-<li>Repository settings configured</li>
+<li>Verify Git history: branches, tags, and commits match Bitbucket.</li>
+<li>Check issue/PR counts and content against audit report.</li>
+<li>Spot-check user mentions, comments, and timestamps.</li>
+<li>Confirm attachments are uploaded (if not using --use-gh-cli).</li>
 </ul>
-<p>Then:</p>
+<p><strong>Clean-Up Operations:</strong></p>
 <ul>
-<li>Update README and branch protections</li>
-<li>Archive the Bitbucket repository (optional)</li>
+<li>Update README with new GitHub links and branch protections.</li>
+<li>Set Bitbucket repo to read-only or archive it.</li>
+<li>Clean up temporary files: <code>rm -rf attachments_temp/</code>.</li>
+<li>Archive migration reports and mappings for reference.</li>
 </ul>
 <hr />
-<h2 id="workarounds-summary">🗟️ Workarounds Summary</h2>
-<table>
-<thead>
-<tr>
-<th>Limitation</th>
-<th>Workaround</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Missing original timestamps</td>
-<td>Included as text in description/comments</td>
-</tr>
-<tr>
-<td>Users without GitHub accounts</td>
-<td>Mentioned in text, not assigned</td>
-</tr>
-<tr>
-<td>Closed PRs (deleted branches)</td>
-<td>Migrated as issues with metadata</td>
-</tr>
-<tr>
-<td>Attachments</td>
-<td>Manual upload via <a href="../attachment_upload/">Attachment Guide</a></td>
-</tr>
-<tr>
-<td>Rate limiting</td>
-<td>Script auto-throttles; rerun if interrupted</td>
-</tr>
-</tbody>
-</table>
-<hr />
-<h2 id="verification-checklist-mini">🧪 Verification Checklist (Mini)</h2>
-<table>
-<thead>
-<tr>
-<th>Task</th>
-<th>Done</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>GitHub repo has all branches &amp; tags</td>
-<td>☑</td>
-</tr>
-<tr>
-<td>Issue &amp; PR counts match audit</td>
-<td>☑</td>
-</tr>
-<tr>
-<td>Spot-check migrated issue content</td>
-<td>☑</td>
-</tr>
-<tr>
-<td>User mentions appear correctly</td>
-<td>☑</td>
-</tr>
-<tr>
-<td>Attachments uploaded</td>
-<td>☑</td>
-</tr>
-<tr>
-<td>Bitbucket repo archived or marked read-only</td>
-<td>☑</td>
-</tr>
-</tbody>
-</table>
-<p>See the full <a href="../checklists/post_migration/">Post-Migration Checklist</a>.</p>
-<hr />
-<h2 id="troubleshooting-highlights">🔀 Troubleshooting Highlights</h2>
-<table>
-<thead>
-<tr>
-<th>Symptom</th>
-<th>Likely Cause</th>
-<th>Fix</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>401 Unauthorized</code></td>
-<td>Token expired / wrong scopes</td>
-<td>Regenerate PAT or Bitbucket token</td>
-</tr>
-<tr>
-<td><code>429 Too Many Requests</code></td>
-<td>API rate limit</td>
-<td>Wait 1 h or rerun with delay</td>
-</tr>
-<tr>
-<td>“Branch not found”</td>
-<td>Deleted source branch</td>
-<td>PR migrated as issue</td>
-</tr>
-<tr>
-<td>Missing attachments</td>
-<td>Download failure</td>
-<td>Check <code>attachments_temp/</code> and re-run attachment step</td>
-</tr>
-</tbody>
-</table>
-<p>Full list: <a href="../troubleshooting/">Troubleshooting Guide</a>.</p>
+<h3 id="support-resources">Support Resources</h3>
+<ul>
+<li><a href="https://docs.github.com/en/rest">GitHub REST API Documentation</a></li>
+<li><a href="https://developer.atlassian.com/cloud/bitbucket/rest/">Bitbucket Cloud API Documentation</a></li>
+<li><a href="https://support.github.com">GitHub Support</a></li>
+</ul>
+<h3 id="checklist-before-asking-for-help">Checklist Before Asking for Help</h3>
+<ul>
+<li>Confirm both API tokens are active and scoped correctly</li>
+<li>Compare audit vs. migrated item counts</li>
+<li>Check <code>migration_mapping.json</code> for missing IDs</li>
+<li>Search console logs for <code>ERROR</code> or <code>429</code></li>
+<li>Verify no network or disk errors occurred</li>
+</ul>
+<p>If problems persist, open a support ticket with a description of the error and the script version.</p>
 <hr />
 <h2 id="references">📚 References</h2>
 <ul>
 <li><a href="../reference/migration_config/">Migration Config Reference</a></li>
+<li><a href="../reference/migration_details/">Migration Details Reference</a></li>
+<li><a href="../reference/cli_reference/">CLI Reference</a></li>
 <li><a href="../reference/user_mapping/">User Mapping Guide</a></li>
 <li><a href="../reference/api_tokens/">API Token Setup</a></li>
-<li><a href="../reference/glossary/">Glossary</a></li>
 </ul>
-<hr />
-<h2 id="success-criteria">✅ Success Criteria</h2>
-<ul>
-<li>All issues and PRs migrated (placeholders fill gaps)</li>
-<li>Git history intact</li>
-<li>Team can access new repo</li>
-<li>Bitbucket archived or marked read-only</li>
-</ul>
-<hr />
-<p><strong>Next:</strong> <a href="../attachment_upload/">Upload Attachments →</a></p>
 
 
 
@@ -1453,8 +1483,13 @@ git<span class="w"> </span>push<span class="w"> </span>--mirror<span class="w"> 
 
 
 
+  
+  
 
 
+
+
+  
 
 
 
@@ -1518,7 +1553,7 @@ git<span class="w"> </span>push<span class="w"> </span>--mirror<span class="w"> 
     
     
       
-      <script id="__config" type="application/json">{"base": "..", "features": ["content.code.annotate", "content.code.copy", "content.tabs.link", "content.tooltips", "navigation.tabs", "navigation.top", "navigation.expand", "navigation.indexes", "content.code.fences", "content.code.mermaid"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "..", "features": ["content.code.annotate", "content.code.copy", "content.tabs.link", "content.tooltips", "navigation.tabs", "navigation.top", "navigation.tabs.sticky", "navigation.expand", "navigation.indexes", "content.code.fences", "content.code.mermaid"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>

@@ -13,20 +13,22 @@
       
       
       
+        <link rel="prev" href="../migration_issues/">
       
-        <link rel="next" href="migration_guide/">
+      
+        <link rel="next" href="../migration_comments/">
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
     
     
       
-        <title>Bitbucket → GitHub Migration</title>
+        <title>Pull Requests - Bitbucket → GitHub Migration</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.84d31ad4.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
       
       
 
@@ -45,7 +47,7 @@
       
     
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -64,7 +66,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#bitbucket-github-migration-tools" class="md-skip">
+        <a href="#pull-requests-migration" class="md-skip">
           Skip to content
         </a>
       
@@ -80,7 +82,7 @@
 
 <header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="Bitbucket → GitHub Migration" class="md-header__button md-logo" aria-label="Bitbucket → GitHub Migration" data-md-component="logo">
+    <a href="../.." title="Bitbucket → GitHub Migration" class="md-header__button md-logo" aria-label="Bitbucket → GitHub Migration" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -100,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Home
+              Pull Requests
             
           </span>
         </div>
@@ -177,11 +179,9 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="." class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
         
   
   
@@ -200,7 +200,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="migration_guide/" class="md-tabs__link">
+      <a href="../../migration_guide/" class="md-tabs__link">
         
   
   
@@ -217,6 +217,8 @@
   
   
   
+    
+  
   
     
     
@@ -224,11 +226,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="reference/migration_details/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../migration_details/" class="md-tabs__link">
           
   
   
@@ -262,9 +266,7 @@
           
             
               
-                
-              
-              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" hidden>
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
                     
@@ -275,7 +277,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="Bitbucket → GitHub Migration" class="md-nav__button md-logo" aria-label="Bitbucket → GitHub Migration" data-md-component="logo">
+    <a href="../.." title="Bitbucket → GitHub Migration" class="md-nav__button md-logo" aria-label="Bitbucket → GitHub Migration" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -302,32 +304,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    Home
-    
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -338,53 +318,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#key-features" class="md-nav__link">
-    <span class="md-ellipsis">
-      ⚡ Key Features
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
-    <span class="md-ellipsis">
-      🚀 Quick Start
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
-    <span class="md-ellipsis">
-      📚 Documentation
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -396,7 +329,7 @@
   
   
     <li class="md-nav__item">
-      <a href="migration_guide/" class="md-nav__link">
+      <a href="../../migration_guide/" class="md-nav__link">
         
   
   
@@ -415,8 +348,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -434,19 +369,20 @@
     
     
       
+        
+        
+      
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
-        
-          
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -459,7 +395,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             Reference
@@ -470,8 +406,10 @@
                 
   
   
+    
   
   
+  
     
     
       
@@ -500,13 +438,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_1" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" checked>
         
           
           <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
@@ -522,7 +458,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3_1">
             <span class="md-nav__icon md-icon"></span>
             Migration Details
@@ -536,7 +472,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reference/migration_details/" class="md-nav__link">
+      <a href="../migration_details/" class="md-nav__link">
         
   
   
@@ -559,7 +495,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reference/migration_issues/" class="md-nav__link">
+      <a href="../migration_issues/" class="md-nav__link">
         
   
   
@@ -579,10 +515,32 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="reference/migration_pull_requests/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Pull Requests
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -593,6 +551,62 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-gets-migrated" class="md-nav__link">
+    <span class="md-ellipsis">
+      What Gets Migrated
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-preserved" class="md-nav__link">
+    <span class="md-ellipsis">
+      What IS Preserved
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-not-preserved" class="md-nav__link">
+    <span class="md-ellipsis">
+      What Is NOT Preserved
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#handling-non-migratable-information" class="md-nav__link">
+    <span class="md-ellipsis">
+      Handling Non-Migratable Information
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -605,7 +619,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reference/migration_comments/" class="md-nav__link">
+      <a href="../migration_comments/" class="md-nav__link">
         
   
   
@@ -628,7 +642,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reference/migration_attachments/" class="md-nav__link">
+      <a href="../migration_attachments/" class="md-nav__link">
         
   
   
@@ -651,7 +665,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reference/migration_images/" class="md-nav__link">
+      <a href="../migration_images/" class="md-nav__link">
         
   
   
@@ -674,7 +688,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reference/migration_links/" class="md-nav__link">
+      <a href="../migration_links/" class="md-nav__link">
         
   
   
@@ -697,7 +711,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reference/migration_mentions/" class="md-nav__link">
+      <a href="../migration_mentions/" class="md-nav__link">
         
   
   
@@ -720,7 +734,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reference/migration_milestones/" class="md-nav__link">
+      <a href="../migration_milestones/" class="md-nav__link">
         
   
   
@@ -751,7 +765,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reference/migration_config/" class="md-nav__link">
+      <a href="../migration_config/" class="md-nav__link">
         
   
   
@@ -774,7 +788,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reference/user_mapping/" class="md-nav__link">
+      <a href="../user_mapping/" class="md-nav__link">
         
   
   
@@ -797,7 +811,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reference/api_tokens/" class="md-nav__link">
+      <a href="../api_tokens/" class="md-nav__link">
         
   
   
@@ -820,7 +834,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reference/cli_reference/" class="md-nav__link">
+      <a href="../cli_reference/" class="md-nav__link">
         
   
   
@@ -851,8 +865,6 @@
             
             
               
-                
-              
               <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
@@ -872,27 +884,36 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#key-features" class="md-nav__link">
+  <a href="#what-gets-migrated" class="md-nav__link">
     <span class="md-ellipsis">
-      ⚡ Key Features
+      What Gets Migrated
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
+  <a href="#what-is-preserved" class="md-nav__link">
     <span class="md-ellipsis">
-      🚀 Quick Start
+      What IS Preserved
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
+  <a href="#what-is-not-preserved" class="md-nav__link">
     <span class="md-ellipsis">
-      📚 Documentation
+      What Is NOT Preserved
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#handling-non-migratable-information" class="md-nav__link">
+    <span class="md-ellipsis">
+      Handling Non-Migratable Information
     </span>
   </a>
   
@@ -911,92 +932,84 @@
               <article class="md-content__inner md-typeset">
                 
                   
-  
-
 
 
   
   
 
 
-<div style="text-align: center;">
-<h1 id="bitbucket-github-migration-tools">Bitbucket → GitHub Migration Tools</h1>
-<p><strong>Intelligent • Safe • Comprehensive</strong></p>
-<p>Migrate your Bitbucket Cloud repositories to GitHub with confidence using our smart migration platform that preserves everything while making intelligent decisions about PRs, branches, and metadata.</p>
-<p><strong><a href="#quick-start">🚀 Get Started</a> • <a href="migration_guide/">📖 Full Guide</a></strong></p>
-</div>
-<hr />
-<div style="text-align: center;">
-<h2 id="key-features">⚡ Key Features</h2>
-</div>
-<div class="grid cards" style="text-align: center;">
+<h1 id="pull-requests-migration">Pull Requests Migration</h1>
+<h2 id="what-gets-migrated">What Gets Migrated</h2>
+<p>Pull Requests follow a similar pattern to issues:</p>
+<div class="highlight"><pre><span></span><code><span class="gs">**Migrated from Bitbucket**</span>
+<span class="k">-</span><span class="w"> </span>Original Author: <span class="ni">@alice</span>-github (or <span class="gs">**Alice Smith**</span> <span class="ge">*(no GitHub account)*</span>)
+<span class="k">-</span><span class="w"> </span>Original Created: 2023-05-15T10:30:00Z
+<span class="k">-</span><span class="w"> </span>Original URL: https://bitbucket.org/...
+
+---
+
+[Original PR description]
+</code></pre></div>
+<p>For PRs migrated as GitHub Issues (merged/closed/declined):</p>
+<div class="highlight"><pre><span></span><code>⚠️ <span class="gs">**This was a Pull Request on Bitbucket (migrated as an issue)**</span>
+
+<span class="gs">**Original PR Metadata:**</span>
+<span class="k">-</span><span class="w"> </span>Author: <span class="ni">@alice</span>-github
+<span class="k">-</span><span class="w"> </span>State: MERGED
+<span class="k">-</span><span class="w"> </span>Created: 2023-05-15T10:30:00Z
+<span class="k">-</span><span class="w"> </span>Updated: 2023-05-16T14:22:00Z
+<span class="k">-</span><span class="w"> </span>Source Branch: <span class="sb">`feature-xyz`</span>
+<span class="k">-</span><span class="w"> </span>Destination Branch: <span class="sb">`main`</span>
+<span class="k">-</span><span class="w"> </span>Original URL: https://bitbucket.org/...
+
+---
+
+<span class="gs">**Description:**</span>
+
+[Original PR description]
+
+---
+
+<span class="ge">*Note: This PR was merged on Bitbucket. It was migrated as a GitHub issue to preserve all metadata and comments. The actual code changes are in the git history.*</span>
+</code></pre></div>
+<p>GitHub displays:</p>
 <ul>
-<li>
-<p><strong>🧠 Smart PR Migration</strong></p>
-<hr />
-<p>Open PRs become GitHub PRs, closed PRs become Issues with full metadata preservation. No more broken references or lost context.</p>
-</li>
-<li>
-<p><strong>🛡️ Safe by Design</strong></p>
-<hr />
-<p>Conservative approach prevents re-merging closed PRs. Comprehensive dry-run validation ensures successful migrations.</p>
-</li>
-<li>
-<p><strong>🔍 Pre-Migration Audit</strong></p>
-<hr />
-<p>See exactly what will migrate before you start. Get user mapping recommendations and gap analysis automatically.</p>
-</li>
-<li>
-<p><strong>🔗 Automatic Link Rewriting</strong></p>
-<hr />
-<p>Cross-references between issues and PRs are automatically updated to point to GitHub while preserving original context.</p>
-</li>
+<li><strong>Author</strong>: Migration account (API limitation).</li>
+<li><strong>Created Date</strong>: Migration date.</li>
+<li><strong>Assignees</strong>: Can be set if mapped.</li>
 </ul>
-</div>
-<hr />
-<h2 id="quick-start">🚀 Quick Start</h2>
-<p><strong>Install:</strong>
-<div class="highlight"><pre><span></span><code>pipx<span class="w"> </span>install<span class="w"> </span>bitbucket-migration
-</code></pre></div></p>
-<p><strong>Example Usage:</strong>
-<div class="highlight"><pre><span></span><code>audit_bitbucket<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--generate-config
-migrate_bitbucket_to_github<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--dry-run
-</code></pre></div></p>
-<hr />
-<h2 id="documentation">📚 Documentation</h2>
-<div class="grid cards">
+<h2 id="what-is-preserved">What IS Preserved</h2>
 <ul>
-<li>
-<p><strong><a href="migration_guide/">📖 Migration Guide</a></strong></p>
-<p>Complete step-by-step migration process with detailed explanations, checklists, troubleshooting, and attachment upload instructions.</p>
-</li>
-<li>
-<p><strong><a href="reference/migration_config/">⚙️ Migration Config</a></strong></p>
-<p>Configuration file format, user mapping, and repository mapping options.</p>
-</li>
-<li>
-<p><strong><a href="reference/migration_details/">📋 Migration Details</a></strong></p>
-<p>Detailed reference on what metadata is preserved and how non-migratable information is handled.</p>
-</li>
-<li>
-<p><strong><a href="reference/cli_reference/">🖥️ CLI Reference</a></strong></p>
-<p>Command-line interface guide for audit, migration, and authentication scripts.</p>
-</li>
-<li>
-<p><strong><a href="reference/user_mapping/">� User Mapping</a></strong></p>
-<p>How to map Bitbucket users to GitHub accounts and handle unmapped users.</p>
-</li>
-<li>
-<p><strong><a href="reference/api_tokens/">🔑 API Tokens</a></strong></p>
-<p>Setup guides for Bitbucket and GitHub API authentication.</p>
-</li>
+<li>✅ <strong>Title</strong>: Migrated as-is (prefixed with <code>[PR #N]</code> if migrated as issue).</li>
+<li>✅ <strong>Description</strong>: Full content with markdown preserved.</li>
+<li>✅ <strong>Assignees</strong>: Set via API if user mapping exists.</li>
+<li>✅ <strong>Labels</strong>: Applied (e.g., 'migrated-from-bitbucket', 'original-pr', 'pr-merged').</li>
+<li>✅ <strong>State</strong>: Open PRs remain open; merged/closed PRs become closed issues.</li>
+<li>✅ <strong>Original Timestamps</strong>: Mentioned in description.</li>
+<li>✅ <strong>Original Authors</strong>: Mentioned and @tagged in description.</li>
+<li>✅ <strong>Source/Destination Branches</strong>: Noted in description.</li>
+<li>✅ <strong>Commit Count</strong>: Noted in description.</li>
+<li>✅ <strong>Participant Count</strong>: Noted in description.</li>
 </ul>
-</div>
-<hr />
-<div style="text-align: center;">
-<p><strong>Built with ❤️ for reliable repository migrations</strong></p>
-<p><a href="https://github.com/fkloosterman/bitbucket-migration/issues">🐛 Report Issues</a> • <a href="reference/migration_config/">📚 API References</a></p>
-</div>
+<h2 id="what-is-not-preserved">What Is NOT Preserved</h2>
+<ul>
+<li>❌ <strong>PR Numbers</strong>: PRs share GitHub's issue numbering sequence, so numbers may change.</li>
+<li>❌ <strong>Original Author as Creator</strong>: Migration account is shown as author.</li>
+<li>❌ <strong>Original Creation Date</strong>: Shows migration date.</li>
+<li>❌ <strong>Reviewers</strong>: Cannot be set via API during creation (noted in description).</li>
+<li>❌ <strong>Approval Status</strong>: PR reviews cannot be migrated (noted in description).</li>
+<li>❌ <strong>Code Review Comments</strong>: Inline code comments are not migrated (general comments are).</li>
+<li>❌ <strong>Diff View</strong>: For PRs migrated as issues, no interactive diff available.</li>
+</ul>
+<h2 id="handling-non-migratable-information">Handling Non-Migratable Information</h2>
+<ul>
+<li><strong>Merged/Declined PRs</strong>: Migrated as closed issues to preserve metadata without risking re-merge.</li>
+<li><strong>Missing Branches</strong>: PRs with missing branches become issues; noted in description.</li>
+<li><strong>Deleted Users</strong>: Noted as "Unknown (deleted user)".</li>
+<li><strong>Unmapped Users</strong>: Mentioned as "<strong>Name</strong> <em>(no GitHub account)</em>".</li>
+<li><strong>Labels</strong>: Added based on original state (e.g., 'pr-merged', 'pr-declined', 'original-pr').</li>
+<li><strong>Reviewers</strong>: Listed in PR description but not set as official reviewers.</li>
+</ul>
 
 
 
@@ -1004,13 +1017,8 @@ migrate_bitbucket_to_github<span class="w"> </span>--config<span class="w"> </sp
 
 
 
-  
-  
 
 
-
-
-  
 
 
 
@@ -1074,10 +1082,10 @@ migrate_bitbucket_to_github<span class="w"> </span>--config<span class="w"> </sp
     
     
       
-      <script id="__config" type="application/json">{"base": ".", "features": ["content.code.annotate", "content.code.copy", "content.tabs.link", "content.tooltips", "navigation.tabs", "navigation.top", "navigation.tabs.sticky", "navigation.expand", "navigation.indexes", "content.code.fences", "content.code.mermaid"], "search": "assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.annotate", "content.code.copy", "content.tabs.link", "content.tooltips", "navigation.tabs", "navigation.top", "navigation.tabs.sticky", "navigation.expand", "navigation.indexes", "content.code.fences", "content.code.mermaid"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="assets/javascripts/bundle.f55a23d4.min.js"></script>
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
       
     
   </body>
