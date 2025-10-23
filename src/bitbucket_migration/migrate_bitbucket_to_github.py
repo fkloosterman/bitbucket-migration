@@ -189,6 +189,16 @@ Examples:
     python migrate_bitbucket_to_github.py --config config.json --skip-issues
 """
 
+"""
+Bitbucket to GitHub Migration Script
+
+⚠️  DISCLAIMER: This migration tool was developed with assistance from Claude.ai, an AI language model.
+   Use at your own risk. Always perform dry runs and verify results before production use.
+
+Comprehensive migration tool that transfers a Bitbucket repository to GitHub while preserving
+all metadata, comments, attachments, and cross-references between issues and pull requests.
+"""
+
 import argparse
 import json
 import sys
@@ -198,39 +208,95 @@ import os
 import tempfile
 from collections import defaultdict
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple, Any, Union
 import requests
 from pathlib import Path
 from urllib.parse import urlparse
 import subprocess
 import shutil
 
+# Import custom exceptions
+from exceptions import (
+    MigrationError,
+    APIError,
+    AuthenticationError,
+    NetworkError,
+    ConfigurationError,
+    ValidationError,
+    BranchNotFoundError,
+    AttachmentError
+)
+
+# Import configuration management
+from config.migration_config import (
+    MigrationConfig,
+    ConfigLoader,
+    BitbucketConfig,
+    GitHubConfig
+)
+
 
 class BitbucketToGitHubMigrator:
-    def __init__(self, bb_workspace: str, bb_repo: str, bb_email: str, bb_token: str,
-                 gh_owner: str, gh_repo: str, gh_token: str, user_mapping: Dict[str, str],
-                 repository_mapping: Dict[str, str] = None,
-                 dry_run: bool = False, skip_pr_as_issue: bool = False,
-                 use_gh_cli: bool = False):
-        self.bb_workspace = bb_workspace
-        self.bb_repo = bb_repo
-        self.bb_email = bb_email
-        self.bb_token = bb_token
-        
-        self.gh_owner = gh_owner
-        self.gh_repo = gh_repo
-        self.gh_token = gh_token
-        
-        self.user_mapping = user_mapping
-        self.dry_run = dry_run
-        self.skip_pr_as_issue = skip_pr_as_issue
-        self.use_gh_cli = use_gh_cli
+    """
+    Main migration class that orchestrates the transfer of Bitbucket repositories to GitHub.
+
+    This class handles the complete migration workflow including:
+    - Fetching data from Bitbucket API
+    - Creating corresponding issues and PRs on GitHub
+    - Migrating comments, attachments, and metadata
+    - Rewriting links and user mentions
+    - Generating comprehensive migration reports
+
+    Attributes:
+        config (MigrationConfig): Complete migration configuration
+        bb_workspace (str): Bitbucket workspace name
+        bb_repo (str): Bitbucket repository name
+        bb_email (str): Bitbucket user email for API authentication
+        bb_token (str): Bitbucket API token
+        gh_owner (str): GitHub repository owner
+        gh_repo (str): GitHub repository name
+        gh_token (str): GitHub API token
+        user_mapping (Dict[str, Any]): Mapping of Bitbucket users to GitHub users
+        repository_mapping (Optional[Dict[str, str]]): Cross-repository link mappings
+        dry_run (bool): Whether to simulate migration without making changes
+        skip_pr_as_issue (bool): Whether to skip migrating closed PRs as issues
+        use_gh_cli (bool): Whether to use GitHub CLI for attachment uploads
+    """
+
+    def __init__(self, config: MigrationConfig) -> None:
+        """
+        Initialize the migration with configuration.
+
+        Args:
+            config: Complete migration configuration object
+        """
+        # Store config reference
+        self.config = config
+
+        # Extract values from config
+        self.bb_workspace = config.bitbucket.workspace
+        self.bb_repo = config.bitbucket.repo
+        self.bb_email = config.bitbucket.email
+        self.bb_token = config.bitbucket.token
+
+        self.gh_owner = config.github.owner
+        self.gh_repo = config.github.repo
+        self.gh_token = config.github.token
+
+        self.user_mapping = config.user_mapping
+        self.dry_run = config.dry_run
+        self.skip_pr_as_issue = config.skip_pr_as_issue
+        self.use_gh_cli = config.use_gh_cli
 
         # Repository mapping for cross-repo links
-        self.repo_mapping = repository_mapping or {}
+        self.repo_mapping = config.repository_mapping or {}
         
         # Track cross-repo links for reporting
         self.cross_repo_links_rewritten = 0
+
+        # Organization issue types support
+        self.is_org_repo = False
+        self.org_issue_types = {}  # name -> id mapping
 
         # Milestone mapping (BB name -> GH number)
         self.milestone_mapping = {}
@@ -244,15 +310,15 @@ class BitbucketToGitHubMigrator:
             if not self.check_gh_cli_available():
                 self.log("ERROR: --use-gh-cli specified but GitHub CLI is not available")
                 self.log("Please install gh CLI: https://cli.github.com/")
-                raise RuntimeError("GitHub CLI not available")
+                raise ConfigurationError("GitHub CLI not available. Please install from https://cli.github.com/")
 
         # Setup API sessions
         self.bb_session = requests.Session()
-        self.bb_session.auth = (bb_email, bb_token)
+        self.bb_session.auth = (self.bb_email, self.bb_token)
         
         self.gh_session = requests.Session()
         self.gh_session.headers.update({
-            'Authorization': f'token {gh_token}',
+            'Authorization': f'token {self.gh_token}',
             'Accept': 'application/vnd.github.v3+json'
         })
         
@@ -291,17 +357,24 @@ class BitbucketToGitHubMigrator:
         # Track unmapped mentions
         self.unmapped_mentions = {}  # {bb_username: count}
     
-    def rewrite_bitbucket_links(self, text: str, item_type: str = 'issue', item_number: int = None) -> tuple:
-        """Rewrite Bitbucket issue/PR references to point to GitHub
-        
+    def rewrite_bitbucket_links(self,
+                               text: str,
+                               item_type: str = 'issue',
+                               item_number: Optional[int] = None) -> Tuple[str, int]:
+        """
+        Rewrite Bitbucket issue/PR references to point to GitHub.
+
+        This method processes text content and replaces Bitbucket URLs and references
+        with corresponding GitHub links while preserving the original context.
+
         Args:
             text: The text to rewrite (issue body or comment)
             item_type: 'issue' or 'pr' for logging purposes
             item_number: The current item number for logging
-            
+
         Returns:
             Tuple of (rewritten_text, links_found_count)
-            
+
         Strategy:
             - Make GitHub link primary: [#123](github_url) (was [BB #123](bitbucket_url))
             - This makes it easy to click to GitHub while preserving history
@@ -702,24 +775,28 @@ class BitbucketToGitHubMigrator:
         
         return text, links_found
         
-    def log(self, message: str):
-        """Log with timestamp"""
+    def log(self, message: str) -> None:
+        """Log a message with timestamp."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"[{timestamp}] {message}")
-        
-    def rate_limit_sleep(self, duration: float = 1.0):
-        """Sleep to avoid hitting rate limits"""
+
+    def rate_limit_sleep(self, duration: float = 1.0) -> None:
+        """Sleep to avoid hitting rate limits."""
         if not self.dry_run:
             time.sleep(duration)
-    
+
     def map_user(self, bb_username: str) -> Optional[str]:
-        """Map Bitbucket display name or username to GitHub username
-        
-        Supports two config formats:
+        """
+        Map Bitbucket display name or username to GitHub username.
+
+        Supports multiple config formats:
         1. Simple: "Display Name": "github-username"
         2. Enhanced: "Display Name": {"github": "github-username", "bitbucket_username": "bbuser"}
         3. Direct: "bitbucket-username": "github-username"
-        
+
+        Args:
+            bb_username: Bitbucket username or display name to map
+
         Returns:
             GitHub username if mapped, None if user doesn't have GitHub account
         """
@@ -738,9 +815,123 @@ class BitbucketToGitHubMigrator:
             
         return gh_user
 
-    def fetch_bb_milestones(self) -> List[dict]:
-        """Fetch all milestones from Bitbucket
+    def check_if_organization(self) -> bool:
+        """
+        Check if the repository belongs to an organization.
+
+        Returns:
+            True if repo is under an organization, False if personal
+        """
+        url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}"
+
+        try:
+            response = self.gh_session.get(url)
+            response.raise_for_status()
+            repo_data = response.json()
+
+            owner_type = repo_data.get('owner', {}).get('type')
+            is_org = owner_type == 'Organization'
+
+            if is_org:
+                self.log(f"  ✓ Repository is under organization: {self.gh_owner}")
+            else:
+                self.log(f"  ℹ Repository is personal (owner type: {owner_type})")
+
+            return is_org
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                self.log(f"  Warning: Authentication failed checking repository type: {e}")
+                return False
+            elif e.response.status_code == 404:
+                self.log(f"  Warning: Repository not found: {e}")
+                return False
+            else:
+                self.log(f"  Warning: API error checking repository type: {e}")
+                return False
+        except requests.exceptions.RequestException as e:
+            self.log(f"  Warning: Network error checking repository type: {e}")
+            return False
+        except Exception as e:
+            self.log(f"  Warning: Unexpected error checking repository type: {e}")
+            return False
+
+    def fetch_org_issue_types(self) -> Dict[str, int]:
+        """
+        Fetch issue types configured for the organization.
+
+        Returns:
+            Dictionary mapping type name (lowercase) to type ID
+        """
+        if not self.is_org_repo:
+            return {}
         
+        url = f"https://api.github.com/orgs/{self.gh_owner}/issue-types"
+        
+        try:
+            response = self.gh_session.get(url)
+            response.raise_for_status()
+            issue_types = response.json()
+            
+            type_mapping = {}
+            for issue_type in issue_types:
+                name = issue_type.get('name', '').lower()
+                type_id = issue_type.get('id')
+                if name and type_id:
+                    type_mapping[name] = type_id
+            
+            if type_mapping:
+                self.log(f"  ✓ Found {len(type_mapping)} organization issue types: {', '.join(type_mapping.keys())}")
+            else:
+                self.log(f"  ℹ No issue types configured for organization")
+            
+            return type_mapping
+            
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                self.log(f"  Warning: Authentication failed fetching issue types: {e}")
+            elif e.response.status_code == 404:
+                self.log(f"  Warning: Organization issue types endpoint not found: {e}")
+            else:
+                self.log(f"  Warning: API error fetching issue types: {e}")
+            return {}
+        except requests.exceptions.RequestException as e:
+            self.log(f"  Warning: Network error fetching issue types: {e}")
+            return {}
+        except Exception as e:
+            self.log(f"  Warning: Unexpected error fetching issue types: {e}")
+            return {}
+    
+    def map_bitbucket_type_to_github(self, bb_kind: str) -> Tuple[Optional[str], bool]:
+        """
+        Map Bitbucket issue kind to GitHub issue type.
+
+        Args:
+            bb_kind: Bitbucket issue kind (bug, enhancement, proposal, task)
+
+        Returns:
+            Tuple of (type_name, is_available) - type_name is the GitHub type,
+            is_available is True if it exists in org issue types
+        """
+        # Mapping from Bitbucket kinds to GitHub type names
+        BITBUCKET_TO_GITHUB = {
+            'bug': 'bug',
+            'enhancement': 'feature',
+            'proposal': 'feature',
+            'task': 'task',
+        }
+
+        gh_type_name = BITBUCKET_TO_GITHUB.get(bb_kind.lower())
+        if gh_type_name:
+            is_available = gh_type_name in self.org_issue_types
+            return gh_type_name, is_available
+
+        return None, False
+
+    def fetch_bb_milestones(self) -> List[Dict[str, Any]]:
+        """
+        Fetch all milestones from Bitbucket.
+
         Returns:
             List of milestone dictionaries with name, description, etc.
         """
@@ -755,12 +946,21 @@ class BitbucketToGitHubMigrator:
             self.log(f"  Warning: Could not fetch milestones: {e}")
             return []
     
-    def _paginate(self, url: str, params: dict = None) -> List[dict]:
-        """Fetch all pages of results from Bitbucket API"""
+    def _paginate(self, url: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """
+        Fetch all pages of results from Bitbucket API.
+
+        Args:
+            url: The API endpoint URL to paginate
+            params: Optional query parameters for the first request
+
+        Returns:
+            List of all items from all pages
+        """
         results = []
         next_url = url
         first_request = True
-        
+
         while next_url:
             try:
                 if first_request and params:
@@ -768,33 +968,47 @@ class BitbucketToGitHubMigrator:
                     first_request = False
                 else:
                     response = self.bb_session.get(next_url)
-                
+
                 response.raise_for_status()
                 data = response.json()
-                
+
                 if 'values' in data:
                     results.extend(data['values'])
                 else:
                     results.append(data)
-                
+
                 next_url = data.get('next')
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 401:
+                    self.log(f"  Authentication error: {e}")
+                    raise AuthenticationError(f"Bitbucket API authentication failed: {e}")
+                elif e.response.status_code >= 500:
+                    self.log(f"  Server error: {e}")
+                    raise NetworkError(f"Bitbucket API server error: {e}")
+                else:
+                    self.log(f"  API error: {e}")
+                    raise APIError(f"Bitbucket API error: {e}", status_code=e.response.status_code)
+            except requests.exceptions.RequestException as e:
+                self.log(f"  Network error: {e}")
+                raise NetworkError(f"Network error communicating with Bitbucket API: {e}")
             except Exception as e:
-                self.log(f"  Error fetching data: {e}")
-                break
-                
+                self.log(f"  Unexpected error: {e}")
+                raise MigrationError(f"Unexpected error during API pagination: {e}")
+
         return results
 
     def map_mention(self, bb_username: str) -> Optional[str]:
-        """Map Bitbucket username (from @mention) to GitHub username
-        
+        """
+        Map Bitbucket username (from @mention) to GitHub username.
+
         This specifically handles @mentions which use Bitbucket usernames,
         not display names. Searches through all mapping formats.
-        
+
         Also handles account IDs by first resolving them to usernames.
 
         Args:
             bb_username: Bitbucket username (from @mention) or account ID
-            
+
         Returns:
             GitHub username if mapped, None if no mapping found
         """
@@ -842,9 +1056,12 @@ class BitbucketToGitHubMigrator:
         # No mapping found
         return None
 
-    def create_or_get_milestone(self, milestone_name: str, milestone_data: dict = None) -> Optional[int]:
-        """Create a milestone on GitHub or get existing one
-        
+    def create_or_get_milestone(self,
+                               milestone_name: str,
+                               milestone_data: Optional[Dict[str, Any]] = None) -> Optional[int]:
+        """
+        Create a milestone on GitHub or get existing one.
+
         Args:
             milestone_name: Name of the milestone from Bitbucket
             milestone_data: Optional full milestone data from Bitbucket API containing:
@@ -909,15 +1126,36 @@ class BitbucketToGitHubMigrator:
             
             return milestone['number']
             
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                self.log(f"  Warning: Authentication failed creating milestone: {e}")
+            elif e.response.status_code == 404:
+                self.log(f"  Warning: Repository not found creating milestone: {e}")
+            elif e.response.status_code == 422:
+                self.log(f"  Warning: Invalid milestone data: {e}")
+            else:
+                self.log(f"  Warning: API error creating milestone: {e}")
+            return None
+        except requests.exceptions.RequestException as e:
+            self.log(f"  Warning: Network error creating milestone: {e}")
+            return None
         except Exception as e:
-            self.log(f"  Warning: Could not create milestone '{milestone_name}': {e}")
+            self.log(f"  Warning: Unexpected error creating milestone '{milestone_name}': {e}")
             return None
 
-    def build_account_id_mappings(self, bb_issues: List[dict], bb_prs: List[dict]):
-        """Build mappings from account IDs to usernames by scanning all Bitbucket data
-        
+    def build_account_id_mappings(self, bb_issues: List[Dict[str, Any]], bb_prs: List[Dict[str, Any]]) -> int:
+        """
+        Build mappings from account IDs to usernames by scanning all Bitbucket data.
+
         This extracts account_id -> username mappings from user objects in the API responses.
         These are needed because @mentions in content sometimes use account IDs instead of usernames.
+
+        Args:
+            bb_issues: List of Bitbucket issues to scan
+            bb_prs: List of Bitbucket pull requests to scan
+
+        Returns:
+            Number of unique account IDs found
         """
         self.log("Building account ID to username mappings...")
         
@@ -1012,12 +1250,13 @@ class BitbucketToGitHubMigrator:
         
         return len(users_found)
 
-    def lookup_account_id_via_api(self, account_id: str) -> Optional[dict]:
-        """Look up a Bitbucket account ID using the API
-        
+    def lookup_account_id_via_api(self, account_id: str) -> Optional[Dict[str, str]]:
+        """
+        Look up a Bitbucket account ID using the API.
+
         Args:
             account_id: The account ID to look up (e.g., "557058:c250d1e9-df76-4236-bc2f-a98d056b56b5")
-            
+
         Returns:
             Dict with 'username' and 'display_name' if found, None otherwise
         """
@@ -1040,35 +1279,125 @@ class BitbucketToGitHubMigrator:
             else:
                 self.log(f"  Warning: Could not lookup account ID {account_id[:40]}... (HTTP {response.status_code})")
                 return None
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                # User not found (deleted account, etc.) - this is expected
+                return None
+            elif e.response.status_code == 401:
+                self.log(f"  Warning: Authentication failed looking up account ID: {e}")
+                return None
+            else:
+                self.log(f"  Warning: API error looking up account ID: {e}")
+                return None
+        except requests.exceptions.RequestException as e:
+            self.log(f"  Warning: Network error looking up account ID: {e}")
+            return None
         except Exception as e:
-            self.log(f"  Warning: Error looking up account ID {account_id[:40]}...: {e}")
+            self.log(f"  Warning: Unexpected error looking up account ID {account_id[:40]}...: {e}")
             return None
 
+    def scan_comments_for_account_ids(self, bb_issues: List[Dict[str, Any]], bb_prs: List[Dict[str, Any]]) -> None:
+        """
+        Scan all comments for account IDs to pre-resolve them via API.
+
+        This is needed because account IDs in @mentions within comment text
+        are not captured by build_account_id_mappings (which only looks at
+        participant metadata).
+
+        Args:
+            bb_issues: List of Bitbucket issues to scan
+            bb_prs: List of Bitbucket pull requests to scan
+        """
+        self.log("Scanning comments for account IDs...")
+        
+        import re
+        pattern_mention = r'(?<![a-zA-Z0-9_.])@(\{[^}]+\}|[a-zA-Z0-9_:][a-zA-Z0-9_:-]*)'
+        
+        unresolved_account_ids = set()
+        
+        # Scan issue comments
+        for issue in bb_issues:
+            comments = self.fetch_bb_issue_comments(issue['id'])
+            for comment in comments:
+                content = comment.get('content', {}).get('raw', '') or ''
+                if content and '@' in content:
+                    mentions = re.findall(pattern_mention, content)
+                    for mention_match in mentions:
+                        mention = mention_match[1:-1] if mention_match.startswith('{') else mention_match
+                        
+                        # Check if it's an account ID
+                        is_account_id = ':' in mention or (len(mention) == 24 and all(c in '0123456789abcdef' for c in mention.lower()))
+                        
+                        if is_account_id and mention not in self.account_id_to_username:
+                            unresolved_account_ids.add(mention)
+        
+        # Scan PR comments
+        for pr in bb_prs:
+            comments = self.fetch_bb_pr_comments(pr['id'])
+            for comment in comments:
+                content = comment.get('content', {}).get('raw', '') or ''
+                if content and '@' in content:
+                    mentions = re.findall(pattern_mention, content)
+                    for mention_match in mentions:
+                        mention = mention_match[1:-1] if mention_match.startswith('{') else mention_match
+                        
+                        is_account_id = ':' in mention or (len(mention) == 24 and all(c in '0123456789abcdef' for c in mention.lower()))
+                        
+                        if is_account_id and mention not in self.account_id_to_username:
+                            unresolved_account_ids.add(mention)
+        
+        if unresolved_account_ids:
+            self.log(f"  Found {len(unresolved_account_ids)} account ID(s) in comment text")
+            
+            # Resolve via API
+            resolved_count = 0
+            for account_id in unresolved_account_ids:
+                user_info = self.lookup_account_id_via_api(account_id)
+                if user_info:
+                    username = user_info.get('username') or user_info.get('nickname')
+                    display_name = user_info.get('display_name')
+                    
+                    if username:
+                        self.account_id_to_username[account_id] = username
+                        resolved_count += 1
+                        self.log(f"    ✓ {account_id[:40]}... → {username}")
+                    if display_name:
+                        self.account_id_to_display_name[account_id] = display_name
+            
+            self.log(f"  ✓ Resolved {resolved_count}/{len(unresolved_account_ids)} account ID(s) from comments")
+        else:
+            self.log(f"  No account IDs found in comment text")
+
     def check_gh_cli_available(self) -> bool:
-        """Check if GitHub CLI is installed and authenticated"""
+        """
+        Check if GitHub CLI is installed and authenticated.
+
+        Returns:
+            True if GitHub CLI is available and authenticated, False otherwise
+        """
         try:
             # Check if gh is installed
-            result = subprocess.run(['gh', '--version'], 
-                                  capture_output=True, 
-                                  text=True, 
+            result = subprocess.run(['gh', '--version'],
+                                  capture_output=True,
+                                  text=True,
                                   timeout=5)
             if result.returncode != 0:
                 return False
-            
+
             self.log(f"  ✓ GitHub CLI found: {result.stdout.split()[2]}")
-            
+
             # Check if gh is authenticated
-            result = subprocess.run(['gh', 'auth', 'status'], 
-                                  capture_output=True, 
-                                  text=True, 
+            result = subprocess.run(['gh', 'auth', 'status'],
+                                  capture_output=True,
+                                  text=True,
                                   timeout=5)
             if result.returncode != 0:
                 self.log("  ✗ GitHub CLI is not authenticated. Run: gh auth login")
                 return False
-            
+
             self.log("  ✓ GitHub CLI is authenticated")
             return True
-            
+
         except FileNotFoundError:
             return False
         except subprocess.TimeoutExpired:
@@ -1079,14 +1408,15 @@ class BitbucketToGitHubMigrator:
             return False
 
     def check_branch_exists(self, branch_name: str) -> bool:
-        """Check if a branch exists in the GitHub repository
-        
+        """
+        Check if a branch exists in the GitHub repository.
+
         Args:
             branch_name: Name of the branch to check
-            
+
         Returns:
             True if branch exists, False otherwise
-            
+
         Note: This is a read-only operation, safe to run even in dry-run mode
         """
         url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/branches/{branch_name}"
@@ -1107,64 +1437,101 @@ class BitbucketToGitHubMigrator:
             
             self.rate_limit_sleep(0.3)  # Small delay for branch checks
             return exists
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                # Branch doesn't exist - this is expected
+                return False
+            elif e.response.status_code == 401:
+                self.log(f"    ✗ Authentication error checking branch: {e}")
+                return False
+            else:
+                self.log(f"    ✗ API error checking branch: {e}")
+                return False
+        except requests.exceptions.RequestException as e:
+            self.log(f"    ✗ Network error checking branch: {e}")
+            return False
         except Exception as e:
-            self.log(f"    ✗ Error checking branch '{branch_name}': {e}")
+            self.log(f"    ✗ Unexpected error checking branch '{branch_name}': {e}")
             return False
 
-    def fetch_bb_issues(self) -> List[dict]:
-        """Fetch all issues from Bitbucket"""
+    def fetch_bb_issues(self) -> List[Dict[str, Any]]:
+        """
+        Fetch all issues from Bitbucket.
+
+        Returns:
+            List of Bitbucket issues sorted by ID
+        """
         self.log("Fetching Bitbucket issues...")
         url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/issues"
         params = {'pagelen': 100, 'sort': 'id'}
-        
+
         issues = []
         next_url = url
-        
+
         while next_url:
             response = self.bb_session.get(next_url, params=params if next_url == url else None)
             response.raise_for_status()
             data = response.json()
-            
+
             issues.extend(data.get('values', []))
             next_url = data.get('next')
             params = None
-            
+
         self.log(f"  Found {len(issues)} issues")
         return sorted(issues, key=lambda x: x['id'])
-    
-    def fetch_bb_prs(self) -> List[dict]:
-        """Fetch all pull requests from Bitbucket"""
+
+    def fetch_bb_prs(self) -> List[Dict[str, Any]]:
+        """
+        Fetch all pull requests from Bitbucket.
+
+        Returns:
+            List of Bitbucket pull requests sorted by ID
+        """
         self.log("Fetching Bitbucket pull requests...")
         url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/pullrequests"
         params = {'state': 'MERGED,SUPERSEDED,OPEN,DECLINED', 'pagelen': 50, 'sort': 'id'}
-        
+
         prs = []
         next_url = url
-        
+
         while next_url:
             response = self.bb_session.get(next_url, params=params if next_url == url else None)
             response.raise_for_status()
             data = response.json()
-            
+
             prs.extend(data.get('values', []))
             next_url = data.get('next')
             params = None
-            
+
         self.log(f"  Found {len(prs)} pull requests")
         return sorted(prs, key=lambda x: x['id'])
     
-    def fetch_bb_attachments(self, url, item='item', item_id=0) -> List[dict]:
+    def fetch_bb_attachments(self,
+                            url: str,
+                            item: str = 'item',
+                            item_id: int = 0) -> List[Dict[str, Any]]:
+        """
+        Fetch attachments for a Bitbucket issue or PR.
+
+        Args:
+            url: The API URL to fetch attachments from
+            item: Description of the item type (for logging)
+            item_id: The item ID (for logging)
+
+        Returns:
+            List of attachment dictionaries
+        """
         try:
             response = self.bb_session.get(url)
             if response.status_code == 404:
                 return []
             response.raise_for_status()
             data = response.json()
-            
+
             # Handle pagination
             attachments = data.get('values', [])
             next_url = data.get('next')
-            
+
             while next_url:
                 try:
                     response = self.bb_session.get(next_url)
@@ -1175,48 +1542,104 @@ class BitbucketToGitHubMigrator:
                 except Exception as e:
                     self.log(f"    Warning: Error fetching next page of {item} attachments: {e}")
                     break
-            
+
             return attachments
-            
+
         except requests.exceptions.HTTPError as e:
-            self.log(f"    Warning: HTTP error fetching attachments for {item} #{item_id}: {e}")
+            if e.response.status_code == 404:
+                # No attachments found - this is normal
+                return []
+            elif e.response.status_code == 401:
+                self.log(f"    Warning: Authentication error fetching attachments: {e}")
+                return []
+            else:
+                self.log(f"    Warning: API error fetching attachments: {e}")
+                return []
+        except requests.exceptions.RequestException as e:
+            self.log(f"    Warning: Network error fetching attachments: {e}")
             return []
         except Exception as e:
-            self.log(f"    Warning: Error fetching attachments for {item} #{item_id}: {e}")
+            self.log(f"    Warning: Unexpected error fetching attachments for {item} #{item_id}: {e}")
             return []
 
-    def fetch_bb_issue_attachments(self, issue_id: int) -> List[dict]:
-        """Fetch attachments for a Bitbucket issue"""
+    def fetch_bb_issue_attachments(self, issue_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch attachments for a Bitbucket issue.
+
+        Args:
+            issue_id: The Bitbucket issue ID
+
+        Returns:
+            List of attachment dictionaries
+        """
         url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/issues/{issue_id}/attachments"
         return self.fetch_bb_attachments(url, "issue", issue_id)
-    
-    def fetch_bb_pr_attachments(self, pr_id: int) -> List[dict]:
-        """Fetch attachments for a Bitbucket PR"""
+
+    def fetch_bb_pr_attachments(self, pr_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch attachments for a Bitbucket PR.
+
+        Args:
+            pr_id: The Bitbucket pull request ID
+
+        Returns:
+            List of attachment dictionaries
+        """
         url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/pullrequests/{pr_id}/attachments"
         return self.fetch_bb_attachments(url, "PR", pr_id)
 
     def download_attachment(self, attachment_url: str, filename: str) -> Optional[Path]:
-        """Download an attachment from Bitbucket"""
+        """
+        Download an attachment from Bitbucket.
+
+        Args:
+            attachment_url: URL of the attachment to download
+            filename: Local filename to save as
+
+        Returns:
+            Path to downloaded file, or None if download failed
+        """
         try:
             response = self.bb_session.get(attachment_url, stream=True)
             response.raise_for_status()
-            
+
             # Save to temp directory
             filepath = self.attachment_dir / filename
             with open(filepath, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            
+
             return filepath
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                self.log(f"    ERROR: Attachment not found: {filename}")
+                raise AttachmentError(f"Attachment not found: {filename}", filename=filename)
+            elif e.response.status_code == 401:
+                self.log(f"    ERROR: Authentication failed downloading attachment: {filename}")
+                raise AuthenticationError(f"Authentication failed downloading attachment: {filename}")
+            else:
+                self.log(f"    ERROR: API error downloading attachment: {filename}")
+                raise APIError(f"API error downloading attachment: {filename}", status_code=e.response.status_code)
+        except requests.exceptions.RequestException as e:
+            self.log(f"    ERROR: Network error downloading attachment: {filename}")
+            raise NetworkError(f"Network error downloading attachment: {filename}")
         except Exception as e:
-            self.log(f"    ERROR downloading attachment {filename}: {e}")
-            return None
+            self.log(f"    ERROR: Unexpected error downloading attachment {filename}: {e}")
+            raise AttachmentError(f"Unexpected error downloading attachment: {filename}", filename=filename)
     
     def upload_attachment_to_github(self, filepath: Path, issue_number: int) -> Optional[str]:
-        """Upload attachment to GitHub issue/PR
-        
+        """
+        Upload attachment to GitHub issue/PR.
+
         If --use-gh-cli is enabled, uses GitHub CLI to upload the file directly.
         Otherwise, creates a comment noting the attachment for manual upload.
+
+        Args:
+            filepath: Path to the local attachment file
+            issue_number: GitHub issue/PR number to attach to
+
+        Returns:
+            Upload result message or None if failed
         """
         if self.dry_run:
             if self.use_gh_cli:
@@ -1277,40 +1700,69 @@ class BitbucketToGitHubMigrator:
             self.log(f"    ERROR: gh CLI command timed out for {filepath.name}")
             return None
     
-    def fetch_bb_comments(self, url) ->List[dict]:
+    def fetch_bb_comments(self, url: str) -> List[Dict[str, Any]]:
+        """
+        Fetch comments from a Bitbucket API endpoint.
+
+        Args:
+            url: The API URL to fetch comments from
+
+        Returns:
+            List of comment dictionaries
+        """
         comments = []
         next_url = url
-        
+
         while next_url:
             response = self.bb_session.get(next_url)
             if response.status_code == 404:
                 break
             response.raise_for_status()
             data = response.json()
-            
+
             comments.extend(data.get('values', []))
             next_url = data.get('next')
-            
+
         return comments
 
-    def fetch_bb_issue_comments(self, issue_id: int) -> List[dict]:
-        """Fetch comments for a Bitbucket issue"""
+    def fetch_bb_issue_comments(self, issue_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch comments for a Bitbucket issue.
+
+        Args:
+            issue_id: The Bitbucket issue ID
+
+        Returns:
+            List of comment dictionaries
+        """
         url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/issues/{issue_id}/comments"
         return self.fetch_bb_comments(url)
-    
-    def fetch_bb_pr_comments(self, pr_id: int) -> List[dict]:
-        """Fetch comments for a Bitbucket PR"""
+
+    def fetch_bb_pr_comments(self, pr_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch comments for a Bitbucket PR.
+
+        Args:
+            pr_id: The Bitbucket pull request ID
+
+        Returns:
+            List of comment dictionaries
+        """
         url = f"https://api.bitbucket.org/2.0/repositories/{self.bb_workspace}/{self.bb_repo}/pullrequests/{pr_id}/comments"
         return self.fetch_bb_comments(url)
     
-    def extract_and_download_inline_images(self, text: str, item_type: str, item_number: int) -> tuple:
-        """Extract Bitbucket-hosted inline images from markdown and download them
-        
+    def extract_and_download_inline_images(self,
+                                          text: str,
+                                          item_type: str,
+                                          item_number: int) -> Tuple[str, List[Dict[str, Any]]]:
+        """
+        Extract Bitbucket-hosted inline images from markdown and download them.
+
         Args:
             text: Markdown text containing images
             item_type: 'issue' or 'pr' for context
             item_number: Issue/PR number for logging
-            
+
         Returns:
             Tuple of (updated_text, list_of_downloaded_image_info)
         """
@@ -1382,11 +1834,19 @@ class BitbucketToGitHubMigrator:
         
         return updated_text, downloaded_images
 
-    def upload_inline_images_to_comment(self, comment_id: int, inline_images: List[dict]) -> bool:
-        """Upload inline images to an existing GitHub comment using gh CLI
-        
-        Note: This appends the images to the comment. The user may want to 
+    def upload_inline_images_to_comment(self, comment_id: int, inline_images: List[Dict[str, Any]]) -> bool:
+        """
+        Upload inline images to an existing GitHub comment using gh CLI.
+
+        Note: This appends the images to the comment. The user may want to
         edit the comment to integrate them inline with the text.
+
+        Args:
+            comment_id: GitHub comment ID to upload images to
+            inline_images: List of image information dictionaries
+
+        Returns:
+            True if upload successful, False otherwise
         """
         if not self.use_gh_cli or not inline_images:
             return False
@@ -1419,23 +1879,44 @@ class BitbucketToGitHubMigrator:
             self.log(f"    Error uploading inline images: {e}")
             return False
 
-    def create_gh_issue(self, title: str, body: str, labels: List[str] = None, 
-                       state: str = 'open', assignees: List[str] = None,
-                       milestone: int = None) -> dict:
-        """Create a GitHub issue"""
+    def create_gh_issue(self,
+                        title: str,
+                        body: str,
+                        labels: Optional[List[str]] = None,
+                        state: str = 'open',
+                        assignees: Optional[List[str]] = None,
+                        milestone: Optional[int] = None,
+                        issue_type: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Create a GitHub issue.
+
+        Args:
+            title: Issue title
+            body: Issue body content
+            labels: Optional list of label names
+            state: Issue state ('open' or 'closed')
+            assignees: Optional list of GitHub usernames to assign
+            milestone: Optional milestone number
+            issue_type: Optional issue type for organizations
+
+        Returns:
+            Created GitHub issue data
+        """
         url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/issues"
-        
+
         payload = {
             'title': title,
             'body': body,
         }
-        
+
         if labels:
             payload['labels'] = labels
         if assignees:
             payload['assignees'] = assignees
         if milestone:
             payload['milestone'] = milestone
+        if issue_type:
+            payload['type'] = issue_type
 
         if self.dry_run:
             # Simulate issue creation with correct numbering
@@ -1445,79 +1926,104 @@ class BitbucketToGitHubMigrator:
             if state == 'closed':
                 self.log(f"  [DRY RUN] Would close issue #{simulated_number}")
             return {'number': simulated_number}
-        
+
         try:
             response = self.gh_session.post(url, json=payload)
             response.raise_for_status()
             issue = response.json()
-            
+
             # Update counter for real migrations too
             if issue['number'] >= self.next_github_number:
                 self.next_github_number = issue['number'] + 1
-            
+
             # Close if needed
             if state == 'closed':
                 self.close_gh_issue(issue['number'])
-            
+
             self.rate_limit_sleep(1.0)
             return issue
         except requests.exceptions.HTTPError as e:
-            if response.status_code == 401:
+            if e.response.status_code == 401:
                 self.log(f"  ERROR: GitHub authentication failed. Check your token.")
-                raise
-            elif response.status_code == 404:
+                raise AuthenticationError("GitHub authentication failed. Please check your token.")
+            elif e.response.status_code == 404:
                 self.log(f"  ERROR: Repository {self.gh_owner}/{self.gh_repo} not found.")
                 self.log(f"  Make sure the repository exists and your token has access.")
-                raise
+                raise APIError(f"Repository not found: {self.gh_owner}/{self.gh_repo}", status_code=404)
+            elif e.response.status_code == 422:
+                self.log(f"  ERROR: Invalid issue data: {e}")
+                raise ValidationError(f"Invalid issue data: {e}")
             else:
                 self.log(f"  ERROR: Failed to create issue: {e}")
-                raise
+                raise APIError(f"Failed to create GitHub issue: {e}", status_code=e.response.status_code)
+        except requests.exceptions.RequestException as e:
+            self.log(f"  ERROR: Network error creating issue: {e}")
+            raise NetworkError(f"Network error creating GitHub issue: {e}")
+        except Exception as e:
+            self.log(f"  ERROR: Unexpected error creating issue: {e}")
+            raise MigrationError(f"Unexpected error creating GitHub issue: {e}")
     
-    def close_gh_issue(self, issue_number: int):
-        """Close a GitHub issue"""
+    def close_gh_issue(self, issue_number: int) -> None:
+        """
+        Close a GitHub issue.
+
+        Args:
+            issue_number: The GitHub issue number to close
+        """
         url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/issues/{issue_number}"
-        
+
         if self.dry_run:
             self.log(f"  [DRY RUN] Would close issue #{issue_number}")
             return
-        
+
         response = self.gh_session.patch(url, json={'state': 'closed'})
         response.raise_for_status()
         self.rate_limit_sleep(0.5)
-    
-    def create_gh_comment(self, issue_number: int, body: str, is_pr: bool = False):
-        """Create a comment on a GitHub issue or PR
-        
+
+    def create_gh_comment(self, issue_number: int, body: str, is_pr: bool = False) -> None:
+        """
+        Create a comment on a GitHub issue or PR.
+
         Args:
             issue_number: The issue or PR number
             body: Comment text
             is_pr: Whether this is a PR (for better logging)
         """
         url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/issues/{issue_number}/comments"
-        
+
         if self.dry_run:
             item_type = "PR" if is_pr else "issue"
             self.log(f"  [DRY RUN] Would add comment to {item_type} #{issue_number}")
             return
-        
+
         response = self.gh_session.post(url, json={'body': body})
         response.raise_for_status()
         self.rate_limit_sleep(0.5)
     
-    def create_gh_pr(self, title: str, body: str, head: str, base: str) -> Optional[dict]:
-        """Create a GitHub pull request
-        
+    def create_gh_pr(self, title: str, body: str, head: str, base: str) -> Optional[Dict[str, Any]]:
+        """
+        Create a GitHub pull request.
+
         Note: This creates an OPEN PR. Both head and base branches must exist.
+
+        Args:
+            title: PR title
+            body: PR body content
+            head: Source branch name
+            base: Target branch name
+
+        Returns:
+            Created GitHub PR data, or None if creation failed
         """
         url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/pulls"
-        
+
         payload = {
             'title': title,
             'body': body,
             'head': head,
             'base': base,
         }
-        
+
         if self.dry_run:
             # Simulate PR creation with correct numbering
             # PRs and issues share the same numbering sequence on GitHub
@@ -1525,48 +2031,86 @@ class BitbucketToGitHubMigrator:
             self.next_github_number += 1
             self.log(f"  [DRY RUN] Would create PR #{simulated_number}: {title} ({head} -> {base})")
             return {'number': simulated_number}
-        
+
         try:
             response = self.gh_session.post(url, json=payload)
             response.raise_for_status()
             pr = response.json()
-            
+
             # Update counter for real migrations too
             if pr['number'] >= self.next_github_number:
                 self.next_github_number = pr['number'] + 1
-            
+
             self.rate_limit_sleep(1.0)
             return pr
         except requests.exceptions.HTTPError as e:
-            self.log(f"  ERROR: Could not create PR: {e}")
-            if hasattr(response, 'text'):
-                self.log(f"  Response: {response.text}")
-            return None
+            if e.response.status_code == 401:
+                self.log(f"  ERROR: GitHub authentication failed creating PR")
+                raise AuthenticationError("GitHub authentication failed creating PR")
+            elif e.response.status_code == 404:
+                self.log(f"  ERROR: Repository or branches not found creating PR")
+                raise APIError("Repository or branches not found", status_code=404)
+            elif e.response.status_code == 422:
+                self.log(f"  ERROR: Invalid PR data or branch doesn't exist")
+                raise ValidationError("Invalid PR data or branch doesn't exist")
+            else:
+                self.log(f"  ERROR: Could not create PR: {e}")
+                if hasattr(e.response, 'text'):
+                    self.log(f"  Response: {e.response.text}")
+                raise APIError(f"Failed to create GitHub PR: {e}", status_code=e.response.status_code)
+        except requests.exceptions.RequestException as e:
+            self.log(f"  ERROR: Network error creating PR: {e}")
+            raise NetworkError(f"Network error creating GitHub PR: {e}")
+        except Exception as e:
+            self.log(f"  ERROR: Unexpected error creating PR: {e}")
+            raise MigrationError(f"Unexpected error creating GitHub PR: {e}")
     
-    def close_gh_pr(self, pr_number: int):
-        """Close a GitHub PR without merging
-        
+    def close_gh_pr(self, pr_number: int) -> None:
+        """
+        Close a GitHub PR without merging.
+
         This is safe - it just changes the PR state to 'closed' without
         performing any git operations.
+
+        Args:
+            pr_number: The GitHub PR number to close
         """
         url = f"https://api.github.com/repos/{self.gh_owner}/{self.gh_repo}/pulls/{pr_number}"
-        
+
         if self.dry_run:
             self.log(f"  [DRY RUN] Would close PR #{pr_number}")
             return
-        
+
         try:
             response = self.gh_session.patch(url, json={'state': 'closed'})
             response.raise_for_status()
             self.rate_limit_sleep(0.5)
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                self.log(f"  ERROR: Authentication failed closing PR")
+                raise AuthenticationError("GitHub authentication failed closing PR")
+            elif e.response.status_code == 404:
+                self.log(f"  ERROR: PR not found")
+                raise APIError("PR not found", status_code=404)
+            else:
+                self.log(f"  ERROR: API error closing PR")
+                raise APIError(f"Failed to close GitHub PR: {e}", status_code=e.response.status_code)
+        except requests.exceptions.RequestException as e:
+            self.log(f"  ERROR: Network error closing PR")
+            raise NetworkError(f"Network error closing GitHub PR: {e}")
         except Exception as e:
-            self.log(f"  ERROR: Could not close PR #{pr_number}: {e}")
+            self.log(f"  ERROR: Unexpected error closing PR #{pr_number}: {e}")
+            raise MigrationError(f"Unexpected error closing GitHub PR: {e}")
     
-    def format_issue_body(self, bb_issue: dict) -> tuple:
-        """Format issue body with metadata
-        
+    def format_issue_body(self, bb_issue: Dict[str, Any]) -> Tuple[str, int, List[Dict[str, Any]]]:
+        """
+        Format issue body with metadata.
+
+        Args:
+            bb_issue: Bitbucket issue data
+
         Returns:
-            Tuple of (formatted_body, links_rewritten_count)
+            Tuple of (formatted_body, links_rewritten_count, inline_images)
         """
         reporter = bb_issue.get('reporter', {}).get('display_name', 'Unknown') if bb_issue.get('reporter') else 'Unknown (deleted user)'
         gh_reporter = self.map_user(reporter) if reporter != 'Unknown (deleted user)' else None
@@ -1604,11 +2148,15 @@ class BitbucketToGitHubMigrator:
 """
         return body, links_count, inline_images
     
-    def format_pr_as_issue_body(self, bb_pr: dict) -> tuple:
-        """Format a PR (that will be migrated as an issue) with full metadata
-        
+    def format_pr_as_issue_body(self, bb_pr: Dict[str, Any]) -> Tuple[str, int, List[Dict[str, Any]]]:
+        """
+        Format a PR (that will be migrated as an issue) with full metadata.
+
+        Args:
+            bb_pr: Bitbucket pull request data
+
         Returns:
-            Tuple of (formatted_body, links_rewritten_count)
+            Tuple of (formatted_body, links_rewritten_count, inline_images)
         """
         author = bb_pr.get('author', {}).get('display_name', 'Unknown') if bb_pr.get('author') else 'Unknown (deleted user)'
         gh_author = self.map_user(author) if author != 'Unknown (deleted user)' else None
@@ -1658,11 +2206,15 @@ class BitbucketToGitHubMigrator:
 """
         return body, links_count, inline_images
     
-    def format_pr_body(self, bb_pr: dict) -> tuple:
-        """Format PR body for an actual GitHub PR (for OPEN PRs)
-        
+    def format_pr_body(self, bb_pr: Dict[str, Any]) -> Tuple[str, int, List[Dict[str, Any]]]:
+        """
+        Format PR body for an actual GitHub PR (for OPEN PRs).
+
+        Args:
+            bb_pr: Bitbucket pull request data
+
         Returns:
-            Tuple of (formatted_body, links_rewritten_count)
+            Tuple of (formatted_body, links_rewritten_count, inline_images)
         """
         author = bb_pr.get('author', {}).get('display_name', 'Unknown') if bb_pr.get('author') else 'Unknown (deleted user)'
         gh_author = self.map_user(author) if author != 'Unknown (deleted user)' else None
@@ -1696,16 +2248,20 @@ class BitbucketToGitHubMigrator:
 """
         return body, links_count, inline_images
     
-    def format_comment_body(self, bb_comment: dict, item_type: str = 'issue', item_number: int = None) -> tuple:
-        """Format a comment with original author and timestamp
-        
+    def format_comment_body(self,
+                          bb_comment: Dict[str, Any],
+                          item_type: str = 'issue',
+                          item_number: Optional[int] = None) -> Tuple[str, int, List[Dict[str, Any]]]:
+        """
+        Format a comment with original author and timestamp.
+
         Args:
             bb_comment: Bitbucket comment data
             item_type: 'issue' or 'pr' for link rewriting context
             item_number: The issue/PR number for link rewriting context
-            
+
         Returns:
-            Tuple of (formatted_comment, links_rewritten_count)
+            Tuple of (formatted_comment, links_rewritten_count, inline_images)
         """
         author = bb_comment.get('user', {}).get('display_name', 'Unknown') if bb_comment.get('user') else 'Unknown (deleted user)'
         gh_author = self.map_user(author) if author != 'Unknown (deleted user)' else None
@@ -1732,10 +2288,74 @@ class BitbucketToGitHubMigrator:
 {content}
 """
         return comment_body, links_count, inline_images
-    
-    def migrate_issues(self, bb_issues: List[dict], milestone_lookup: Dict[str, dict] = None):
-        """Migrate all Bitbucket issues to GitHub"""
 
+    def format_pr_comment_body(self,
+                             bb_comment: Dict[str, Any],
+                             item_type: str = 'pr',
+                             item_number: Optional[int] = None) -> Tuple[str, int, List[Dict[str, Any]]]:
+        """
+        Format a PR comment with code context if it's an inline comment.
+
+        Args:
+            bb_comment: Bitbucket comment data
+            item_type: 'pr' for link rewriting context
+            item_number: The PR number for link rewriting context
+
+        Returns:
+            Tuple of (formatted_comment, links_rewritten_count, inline_images)
+        """
+        author = bb_comment.get('user', {}).get('display_name', 'Unknown') if bb_comment.get('user') else 'Unknown (deleted user)'
+        gh_author = self.map_user(author) if author != 'Unknown (deleted user)' else None
+        
+        # Format author mention
+        if gh_author:
+            author_mention = f"@{gh_author}"
+        elif author == 'Unknown (deleted user)':
+            author_mention = f"**{author}**"
+        else:
+            author_mention = f"**{author}** *(no GitHub account)*"
+        
+        created = bb_comment.get('created_on', '')
+        content = bb_comment.get('content', {}).get('raw', '')
+        
+        # Rewrite links in the comment
+        content, links_count = self.rewrite_bitbucket_links(content, item_type, item_number)
+        
+        # Extract and download inline images
+        content, inline_images = self.extract_and_download_inline_images(content, item_type, item_number)
+        
+        # Check if this is an inline code comment
+        inline_data = bb_comment.get('inline')
+        code_context = ""
+        
+        if inline_data:
+            # This is an inline comment - add context information
+            file_path = inline_data.get('path', 'unknown file')
+            line_from = inline_data.get('from')
+            line_to = inline_data.get('to')
+            
+            if line_from:
+                if line_to and line_to != line_from:
+                    line_info = f"lines {line_from}-{line_to}"
+                else:
+                    line_info = f"line {line_from}"
+                
+                code_context = f"\n\n> 💬 **Code comment on `{file_path}` ({line_info})**\n"
+        
+        comment_body = f"""**Comment by {author_mention} on {created}:**
+{code_context}
+{content}
+"""
+        return comment_body, links_count, inline_images
+
+    def migrate_issues(self, bb_issues: List[Dict[str, Any]], milestone_lookup: Optional[Dict[str, Dict[str, Any]]] = None) -> None:
+        """
+        Migrate all Bitbucket issues to GitHub.
+
+        Args:
+            bb_issues: List of Bitbucket issues to migrate
+            milestone_lookup: Optional mapping of milestone names to GitHub milestone data
+        """
         milestone_lookup = milestone_lookup or {}
         
         self.log("="*80)
@@ -1753,6 +2373,10 @@ class BitbucketToGitHubMigrator:
         
         self.log(f"Issue range: #{min_num} to #{max_num}")
         
+        # Track issue type usage for reporting
+        type_stats = {'using_native': 0, 'using_labels': 0, 'no_type': 0}
+        type_fallbacks = []  # Track types that fell back to labels
+
         # Create placeholder issues for gaps
         expected_num = 1
         for bb_issue in bb_issues:
@@ -1825,14 +2449,38 @@ class BitbucketToGitHubMigrator:
                 if milestone_name:
                     milestone_number = self.create_or_get_milestone(milestone_name, milestone_lookup.get(milestone_name))
 
+            # Map issue kind/type as labels
+            labels = ['migrated-from-bitbucket']
+            issue_type_name = None
+
+            kind = bb_issue.get('kind')
+            if kind:
+                # Try to use organization issue type first
+                type_name, is_available = self.map_bitbucket_type_to_github(kind)
+                if type_name and is_available:
+                    issue_type_name = type_name
+                    type_stats['using_native'] += 1
+                else:
+                    # Fallback to label
+                    labels.append(f'type: {kind}')
+                    type_stats['using_labels'] += 1
+                    type_fallbacks.append((kind, type_name))
+            else:
+                type_stats['no_type'] += 1
+
+            priority = bb_issue.get('priority')
+            if priority:
+                labels.append(f'priority: {priority}')
+
             # Create issue
             gh_issue = self.create_gh_issue(
                 title=bb_issue.get('title', f'Issue #{issue_num}'),
                 body=body,
-                labels=['migrated-from-bitbucket'],
+                labels=labels,
                 state='open' if bb_issue.get('state') in ['new', 'open'] else 'closed',
                 assignees=assignees,
-                milestone=milestone_number
+                milestone=milestone_number,
+                issue_type=issue_type_name
             )
             
             self.issue_mapping[issue_num] = gh_issue['number']
@@ -1909,17 +2557,36 @@ class BitbucketToGitHubMigrator:
             
             self.log(f"  ✓ Migrated issue #{issue_num} -> #{gh_issue['number']} with {len(comments)} comments and {len(attachments)} attachments")
             expected_num += 1
-    
-    def migrate_pull_requests(self, bb_prs: List[dict], milestone_lookup: Dict[str, dict] = None):
-        """Migrate Bitbucket PRs to GitHub with intelligent branch checking
+
+        # Report type usage statistics
+        self.log(f"\nIssue Type Migration Summary:")
+        self.log(f"  Using native issue types: {type_stats['using_native']}")
+        self.log(f"  Using labels (fallback): {type_stats['using_labels']}")
+        self.log(f"  No type specified: {type_stats['no_type']}")
         
+        if type_fallbacks:
+            self.log(f"\n  ℹ Types that fell back to labels:")
+            fallback_summary = {}
+            for bb_type, gh_type in type_fallbacks:
+                fallback_summary[bb_type] = fallback_summary.get(bb_type, 0) + 1
+            for bb_type, count in fallback_summary.items():
+                gh_suggestion = self.map_bitbucket_type_to_github(bb_type)[1]
+                self.log(f"    - '{bb_type}' ({count} issues) → Would map to '{gh_suggestion}' if available")
+
+    def migrate_pull_requests(self, bb_prs: List[Dict[str, Any]], milestone_lookup: Optional[Dict[str, Dict[str, Any]]] = None) -> None:
+        """
+        Migrate Bitbucket PRs to GitHub with intelligent branch checking.
+
         Strategy:
         - OPEN PRs: Try to create as GitHub PRs (if branches exist)
         - MERGED/DECLINED/SUPERSEDED PRs: Always migrate as issues (safest approach)
-        
+
         This avoids any risk of re-merging already-merged code.
+
+        Args:
+            bb_prs: List of Bitbucket pull requests to migrate
+            milestone_lookup: Optional mapping of milestone names to GitHub milestone data
         """
-        
         milestone_lookup = milestone_lookup or {}
         
         self.log("="*80)
@@ -2000,6 +2667,23 @@ class BitbucketToGitHubMigrator:
                             author = bb_pr.get('author', {}).get('display_name', 'Unknown') if bb_pr.get('author') else 'Unknown (deleted user)'
                             gh_author = self.map_user(author) if author != 'Unknown (deleted user)' else None
                             
+                            # Add comments
+                            comments = self.fetch_bb_pr_comments(pr_num)
+                            links_in_comments = 0
+                            for comment in comments:
+                                comment_body, comment_links, inline_images_comment = self.format_pr_comment_body(comment, 'pr', pr_num)
+                                links_in_comments += comment_links
+                                # Track inline images from PR comments
+                                for img in inline_images_comment:
+                                    self.attachments.append({
+                                        'pr_number': pr_num,
+                                        'github_pr': gh_pr['number'],
+                                        'filename': img['filename'],
+                                        'filepath': img['filepath'],
+                                        'type': 'inline_image_comment'
+                                    })
+                                self.create_gh_comment(gh_pr['number'], comment_body, is_pr=True)
+                            
                             self.pr_records.append({
                                 'bb_number': pr_num,
                                 'gh_number': gh_pr['number'],
@@ -2011,17 +2695,12 @@ class BitbucketToGitHubMigrator:
                                 'source_branch': source_branch,
                                 'dest_branch': dest_branch,
                                 'comments': len(self.fetch_bb_pr_comments(pr_num)),
+                                'links_rewritten': links_in_body + links_in_comments,
                                 'bb_url': bb_pr.get('links', {}).get('html', {}).get('href', ''),
                                 'gh_url': f"https://github.com/{self.gh_owner}/{self.gh_repo}/pull/{gh_pr['number']}",
                                 'remarks': ['Migrated as GitHub PR', 'Branches exist on GitHub']
                             })
-                            
-                            # Add comments
-                            comments = self.fetch_bb_pr_comments(pr_num)
-                            for comment in comments:
-                                comment_body = self.format_comment_body(comment, 'pr', pr_num)
-                                self.create_gh_comment(gh_pr['number'], comment_body, is_pr=True)
-                            
+
                             # Migrate PR attachments
                             pr_attachments = self.fetch_bb_pr_attachments(pr_num)
                             if pr_attachments:
@@ -2154,7 +2833,7 @@ class BitbucketToGitHubMigrator:
             comments = self.fetch_bb_pr_comments(pr_num)
             links_in_comments = 0
             for comment in comments:
-                comment_body, comment_links, inline_images_comment = self.format_comment_body(comment, 'pr', pr_num)
+                comment_body, comment_links, inline_images_comment = self.format_pr_comment_body(comment, 'pr', pr_num)
                 links_in_comments += comment_links
 
                 # Track inline images from PR comments
@@ -2235,8 +2914,13 @@ class BitbucketToGitHubMigrator:
                                     'type': 'pr_attachment'
                                 })           
     
-    def save_mapping(self, filename: str = 'migration_mapping.json'):
-        """Save issue/PR mapping to file"""
+    def save_mapping(self, filename: str = 'migration_mapping.json') -> None:
+        """
+        Save issue/PR mapping to file.
+
+        Args:
+            filename: Output filename for the mapping JSON
+        """
         mapping = {
             'bitbucket': {
                 'workspace': self.bb_workspace,
@@ -2251,14 +2935,22 @@ class BitbucketToGitHubMigrator:
             'statistics': self.stats,
             'migration_date': datetime.now().isoformat()
         }
-        
+
         with open(filename, 'w') as f:
             json.dump(mapping, f, indent=2)
-        
+
         self.log(f"Mapping saved to {filename}")
-    
-    def generate_migration_report(self, report_filename: str = 'migration_report.md'):
-        """Generate a comprehensive markdown migration report"""
+
+    def generate_migration_report(self, report_filename: str = 'migration_report.md') -> str:
+        """
+        Generate a comprehensive markdown migration report.
+
+        Args:
+            report_filename: Output filename for the report
+
+        Returns:
+            The filename where the report was saved
+        """
         
         report = []
         report.append("# Bitbucket to GitHub Migration Report")
@@ -2278,6 +2970,47 @@ class BitbucketToGitHubMigrator:
         report.append(f"- **Total Issues Migrated:** {len(self.issue_records)}")
         report.append(f"  - Real Issues: {len([r for r in self.issue_records if r['state'] != 'deleted'])}")
         report.append(f"  - Placeholders: {len([r for r in self.issue_records if r['state'] == 'deleted'])}")
+
+        # Issue Type Migration Summary
+        if self.is_org_repo:
+            report.append("")
+            report.append("### Issue Type Migration")
+            report.append("")
+            
+            if self.org_issue_types:
+                report.append(f"**Organization Issue Types Available:** {', '.join(self.org_issue_types.keys())}")
+                report.append("")
+                
+                # Analyze which Bitbucket types were mapped
+                bb_types_found = {}
+                for record in self.issue_records:
+                    if record.get('kind'):
+                        bb_types_found[record['kind']] = bb_types_found.get(record['kind'], 0) + 1
+                
+                if bb_types_found:
+                    report.append("| Bitbucket Type | Count | GitHub Mapping | Status |")
+                    report.append("|----------------|-------|----------------|--------|")
+                    
+                    for bb_type, count in sorted(bb_types_found.items()):
+                        gh_type, is_available = self.map_bitbucket_type_to_github(bb_type)
+                        if gh_type and is_available:
+                            status = "✓ Using native type"
+                        elif gh_type:
+                            status = f"⚠️ Using label ('{gh_type}' not configured)"
+                        else:
+                            status = "⚠️ Using label (no mapping)"
+                        
+                        gh_mapping = gh_type if gh_type else f"type: {bb_type}"
+                        report.append(f"| {bb_type} | {count} | {gh_mapping} | {status} |")
+                    
+                    report.append("")
+                    report.append("**To use native issue types instead of labels:**")
+                    report.append("1. Create missing issue types in your organization settings")
+                    report.append("2. Re-run the migration (issues will use native types)")
+                    report.append("")
+            else:
+                report.append("**No organization issue types configured.** Issues use labels for type classification.")
+                report.append("")
 
         if self.milestone_mapping:
             report.append(f"- **Milestones Created:** {len(self.milestone_mapping)}")
@@ -2454,6 +3187,84 @@ class BitbucketToGitHubMigrator:
         
         report.append("")
         
+        # Account ID Resolution Section
+        if self.account_id_to_username or self.account_id_to_display_name:
+            report.append("---")
+            report.append("")
+            report.append("## Account ID Resolution")
+            report.append("")
+            report.append("Bitbucket uses internal account IDs for @mentions in some contexts.")
+            report.append("The migration script automatically resolves these to usernames or display names.")
+            report.append("")
+            
+            # Collect all unique account IDs
+            all_account_ids = set(self.account_id_to_username.keys()) | set(self.account_id_to_display_name.keys())
+            
+            if all_account_ids:
+                report.append(f"**Total Account IDs Found:** {len(all_account_ids)}")
+                report.append("")
+                report.append("| Account ID | Bitbucket Username | Display Name | GitHub Mapping | Status |")
+                report.append("|------------|-------------------|--------------|----------------|--------|")
+                
+                for account_id in sorted(all_account_ids):
+                    username = self.account_id_to_username.get(account_id, 'N/A')
+                    display_name = self.account_id_to_display_name.get(account_id, 'N/A')
+                    
+                    # Try to get GitHub mapping
+                    gh_username = self.map_mention(account_id)
+                    
+                    if gh_username:
+                        gh_mapping = f"`@{gh_username}`"
+                        status = "✓ Mapped"
+                    else:
+                        gh_mapping = "-"
+                        if username != 'N/A' or display_name != 'N/A':
+                            status = "⚠️ Not mapped"
+                        else:
+                            status = "❌ Not resolved"
+                    
+                    # Truncate long account IDs for display
+                    display_id = account_id if len(account_id) <= 40 else account_id[:37] + '...'
+                    username_display = username if username != 'N/A' else '-'
+                    display_name_display = display_name if display_name != 'N/A' else '-'
+                    
+                    report.append(f"| `{display_id}` | {username_display} | {display_name_display} | {gh_mapping} | {status} |")
+                
+                report.append("")
+                report.append("**Resolution Methods:**")
+                report.append("- **From Repository Data**: Account IDs found in issue/PR participants")
+                report.append("- **Via API Lookup**: Account IDs not found in repo data, looked up via Bitbucket API")
+                report.append("- **Display Name Only**: Username not available, using display name for mapping")
+                report.append("")
+                
+                # Count statuses
+                mapped_count = sum(1 for aid in all_account_ids if self.map_mention(aid))
+                unmapped_count = len(all_account_ids) - mapped_count
+                
+                report.append("**Summary:**")
+                report.append(f"- Mapped to GitHub: {mapped_count}")
+                report.append(f"- Not mapped: {unmapped_count}")
+                
+                if unmapped_count > 0:
+                    report.append("")
+                    report.append("**Action Required for Unmapped Account IDs:**")
+                    report.append("")
+                    report.append("Add mappings to your config based on username or display name:")
+                    report.append("```json")
+                    report.append('"user_mapping": {')
+                    
+                    for account_id in sorted(all_account_ids):
+                        if not self.map_mention(account_id):
+                            username = self.account_id_to_username.get(account_id)
+                            display_name = self.account_id_to_display_name.get(account_id)
+                            key = username if username else display_name if display_name else account_id
+                            report.append(f'  "{key}": "their-github-username",')
+                    
+                    report.append('}')
+                    report.append("```")
+                report.append("")
+
+
         # Unmapped Mentions
         if self.unmapped_mentions:
             report.append("---")
@@ -2697,15 +3508,15 @@ class BitbucketToGitHubMigrator:
         
         return report_filename
     
-    def print_summary(self):
-        """Print migration summary statistics"""
+    def print_summary(self) -> None:
+        """Print migration summary statistics."""
         self.log("="*80)
         self.log("MIGRATION SUMMARY")
         self.log("="*80)
-        
+
         self.log(f"Issues:")
         self.log(f"  Total migrated: {len(self.issue_mapping)}")
-        
+
         if self.milestone_mapping:
             self.log(f"Milestones:")
             self.log(f"  Total created/mapped: {len(self.milestone_mapping)}")
@@ -2716,7 +3527,7 @@ class BitbucketToGitHubMigrator:
         self.log(f"  Migrated as GitHub Issues: {self.stats['prs_as_issues']}")
         self.log(f"    - Due to merged/closed state: {self.stats['pr_merged_as_issue']}")
         self.log(f"    - Due to missing branches: {self.stats['pr_branch_missing']}")
-        
+
         skipped_prs = len([r for r in self.pr_records if r['gh_type'] == 'Skipped'])
         if skipped_prs > 0:
             self.log(f"  Skipped (not migrated as issues): {skipped_prs}")
@@ -2724,12 +3535,12 @@ class BitbucketToGitHubMigrator:
         self.log(f"Attachments:")
         self.log(f"  Total downloaded: {len(self.attachments)}")
         self.log(f"  Location: {self.attachment_dir}/")
-        
+
         self.log(f"Link Rewriting:")
         self.log(f"  Issues with rewritten links: {self.link_rewrites['issues']}")
         self.log(f"  PRs with rewritten links: {self.link_rewrites['prs']}")
         self.log(f"  Total links rewritten: {self.link_rewrites['total_links']}")
-      
+
         if self.cross_repo_links_rewritten > 0:
             self.log(f"  Cross-repository links rewritten: {self.cross_repo_links_rewritten}")
 
@@ -2750,13 +3561,18 @@ class BitbucketToGitHubMigrator:
             self.log(f"  ✓ migration_report_dry_run.md - Comprehensive migration report")
         else:
             self.log(f"  ✓ migration_report.md - Comprehensive migration report")
-        
+
         self.log("="*80)
 
-    def diagnose_mentions(self, bb_issues: List[dict], bb_prs: List[dict]):
-        """Diagnostic: scan all content for @ symbols and account IDs
-        
+    def diagnose_mentions(self, bb_issues: List[Dict[str, Any]], bb_prs: List[Dict[str, Any]]) -> None:
+        """
+        Diagnostic: scan all content for @ symbols and account IDs.
+
         This helps identify where account ID mentions are coming from.
+
+        Args:
+            bb_issues: List of Bitbucket issues to scan
+            bb_prs: List of Bitbucket pull requests to scan
         """
         self.log("\n" + "="*80)
         self.log("DIAGNOSTIC: Scanning for @ mentions and account IDs")
@@ -3023,10 +3839,6 @@ class BitbucketToGitHubMigrator:
         
         self.log("="*80 + "\n")
 
-def load_config(config_file: str) -> dict:
-    """Load configuration from JSON file"""
-    with open(config_file, 'r') as f:
-        return json.load(f)
 
 
 def main():
@@ -3118,30 +3930,20 @@ Example:
     args = parser.parse_args()
     
     # Load configuration
-    config = load_config(args.config)
-    
-    # Validate configuration
-    required_keys = ['bitbucket', 'github', 'user_mapping']
-    for key in required_keys:
-        if key not in config:
-            print(f"ERROR: Missing required key '{key}' in configuration file")
-            sys.exit(1)
+    try:
+        config = ConfigLoader.load_from_file(args.config)
+    except ConfigurationError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+    except ValidationError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"ERROR: Unexpected error loading configuration: {e}")
+        sys.exit(1)
     
     # Create migrator
-    migrator = BitbucketToGitHubMigrator(
-        bb_workspace=config['bitbucket']['workspace'],
-        bb_repo=config['bitbucket']['repo'],
-        bb_email=config['bitbucket']['email'],
-        bb_token=config['bitbucket']['token'],
-        gh_owner=config['github']['owner'],
-        gh_repo=config['github']['repo'],
-        gh_token=config['github']['token'],
-        user_mapping=config.get('user_mapping', {}),
-        repository_mapping=config.get('repository_mapping', {}),
-        dry_run=args.dry_run,
-        skip_pr_as_issue=args.skip_pr_as_issue,
-        use_gh_cli=args.use_gh_cli
-    )
+    migrator = BitbucketToGitHubMigrator(config)
     
     if args.dry_run:
         migrator.log("="*80)
@@ -3178,8 +3980,50 @@ Example:
         bb_issues = migrator.fetch_bb_issues() if not args.skip_issues else []
         bb_prs = migrator.fetch_bb_prs() if not args.skip_prs else []
         
+        # Check if repository is under an organization and fetch issue types
+        migrator.log("\nChecking repository type and issue type support...")
+        migrator.is_org_repo = migrator.check_if_organization()
+        if migrator.is_org_repo:
+            migrator.org_issue_types = migrator.fetch_org_issue_types()
+
         # Build account ID mappings from the fetched data
         migrator.build_account_id_mappings(bb_issues, bb_prs)
+
+        # Scan comments for additional account IDs
+        # This catches account IDs in @mentions within comment text
+        migrator.scan_comments_for_account_ids(bb_issues, bb_prs)
+
+        # Lookup any unresolved account IDs via API before migration
+        if migrator.account_id_to_display_name:
+            migrator.log("\nChecking for unresolved account IDs...")
+            
+            # Find account IDs that have display names but no usernames
+            unresolved_ids = []
+            for account_id in migrator.account_id_to_display_name.keys():
+                if account_id not in migrator.account_id_to_username or migrator.account_id_to_username[account_id] is None:
+                    unresolved_ids.append(account_id)
+            
+            if unresolved_ids:
+                migrator.log(f"  Found {len(unresolved_ids)} account ID(s) without usernames")
+                migrator.log(f"  Attempting API lookup to resolve usernames...")
+                
+                resolved_count = 0
+                for account_id in unresolved_ids:
+                    user_info = migrator.lookup_account_id_via_api(account_id)
+                    if user_info:
+                        username = user_info.get('username') or user_info.get('nickname')
+                        display_name = user_info.get('display_name')
+                        
+                        if username:
+                            migrator.account_id_to_username[account_id] = username
+                            resolved_count += 1
+                            migrator.log(f"    ✓ Resolved {account_id[:40]}... → {username}")
+                        if display_name and account_id not in migrator.account_id_to_display_name:
+                            migrator.account_id_to_display_name[account_id] = display_name
+                
+                if resolved_count > 0:
+                    migrator.log(f"  ✓ Resolved {resolved_count} account ID(s) to usernames")
+                migrator.log("")
 
         # Fetch and create milestones before migration
         bb_milestones = migrator.fetch_bb_milestones()
@@ -3202,25 +4046,27 @@ Example:
         migrator.log("Testing GitHub connection...")
         try:
             # Test API access (read-only)
-            test_url = f"https://api.github.com/repos/{config['github']['owner']}/{config['github']['repo']}"
+            test_url = f"https://api.github.com/repos/{migrator.gh_owner}/{migrator.gh_repo}"
             test_response = migrator.gh_session.get(test_url)
             test_response.raise_for_status()
-            
-            if args.dry_run:
+
+            if migrator.dry_run:
                 migrator.log("  ✓ GitHub connection successful (read-only check)")
             else:
                 migrator.log("  ✓ GitHub connection successful")
         except requests.exceptions.HTTPError as e:
             if test_response.status_code == 401:
                 migrator.log("  ✗ ERROR: GitHub authentication failed")
-                migrator.log("  Please check your GitHub token in migration_config.json")
-                sys.exit(1)
+                migrator.log("  Please check your GitHub token in configuration file")
+                raise AuthenticationError("GitHub authentication failed. Please check your token.")
             elif test_response.status_code == 404:
-                migrator.log(f"  ✗ ERROR: Repository not found: {config['github']['owner']}/{config['github']['repo']}")
+                migrator.log(f"  ✗ ERROR: Repository not found: {migrator.gh_owner}/{migrator.gh_repo}")
                 migrator.log("  Please verify the repository exists and you have access")
-                sys.exit(1)
+                raise APIError(f"Repository not found: {migrator.gh_owner}/{migrator.gh_repo}", status_code=404)
             else:
-                raise
+                raise APIError(f"GitHub API error: {e}", status_code=test_response.status_code)
+        except requests.exceptions.RequestException as e:
+            raise NetworkError(f"Network error testing GitHub connection: {e}")
         
         # Perform migration
         if not args.skip_issues:
@@ -3268,7 +4114,7 @@ Example:
                 migrator.log("3. Drag and drop the file from attachments_temp/")
                 migrator.log("4. The file will be uploaded and embedded")
                 migrator.log("Example:")
-                migrator.log(f"  - Open: https://github.com/{config['github']['owner']}/{config['github']['repo']}/issues/1")
+                migrator.log(f"  - Open: https://github.com/{migrator.gh_owner}/{migrator.gh_repo}/issues/1")
                 migrator.log(f"  - Drag: {migrator.attachment_dir}/screenshot.png")
                 migrator.log("  - File will appear in comment with URL")
                 migrator.log("Note: Comments already note which attachments belonged to each issue.")
@@ -3298,8 +4144,28 @@ Example:
         migrator.log("Migration interrupted by user")
         migrator.save_mapping('migration_mapping_partial.json')
         sys.exit(1)
+    except ConfigurationError as e:
+        migrator.log(f"CONFIGURATION ERROR: {e}")
+        sys.exit(1)
+    except AuthenticationError as e:
+        migrator.log(f"AUTHENTICATION ERROR: {e}")
+        migrator.log("Please check your API tokens and permissions")
+        sys.exit(1)
+    except NetworkError as e:
+        migrator.log(f"NETWORK ERROR: {e}")
+        migrator.log("Please check your internet connection and try again")
+        sys.exit(1)
+    except ValidationError as e:
+        migrator.log(f"VALIDATION ERROR: {e}")
+        sys.exit(1)
+    except MigrationError as e:
+        migrator.log(f"MIGRATION ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        migrator.save_mapping('migration_mapping_partial.json')
+        sys.exit(1)
     except Exception as e:
-        migrator.log(f"ERROR: {e}")
+        migrator.log(f"UNEXPECTED ERROR: {e}")
         import traceback
         traceback.print_exc()
         migrator.save_mapping('migration_mapping_partial.json')
