@@ -824,7 +824,7 @@ def run_migration(args, dry_run=False):
         orchestrator.logger.info("  • PR migration strategy (which become PRs vs issues)")
         orchestrator.logger.info("  • Exact GitHub issue/PR numbers that will be created")
         orchestrator.logger.info("")
-        orchestrator.logger.info("After successful dry-run, remove --dry-run flag to migrate")
+        orchestrator.logger.info("After successful dry-run, use migrate subcommand to perform actual migration")
         orchestrator.logger.info("="*80 + "\n")
 
     # Run migration using orchestrator

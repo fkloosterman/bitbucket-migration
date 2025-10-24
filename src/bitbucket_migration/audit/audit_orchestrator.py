@@ -230,6 +230,7 @@ class AuditOrchestrator:
     def _generate_report(self) -> Dict[str, Any]:
         """Generate comprehensive audit report."""
         print("   Generating audit report...")
+        print("   Note: Currently generating JSON report only. Markdown report generation is not implemented yet.")
 
         # Get structural analysis
         structure_analysis = self.audit_utils.analyze_repository_structure(
@@ -326,6 +327,7 @@ class AuditOrchestrator:
         with open(json_file, 'w') as f:
             json.dump(report, f, indent=2, default=str)
         print(f"📄 JSON report saved: {json_file}")
+        print("   Note: Only JSON report is being saved. Markdown report generation is not implemented yet.")
 
         # Save detailed data
         issues_file = output_path / 'bitbucket_issues_detail.json'
@@ -370,8 +372,8 @@ class AuditOrchestrator:
                 "step_3": "Set github.repo to your target repository name",
                 "step_4": "For each user in user_mapping - set to their GitHub username if they have an account, or set to null/empty if they don't",
                 "step_5": "Bitbucket credentials are pre-filled from audit",
-                "step_6": "Run with dry-run first - python migrate_bitbucket_to_github.py --config migration_config.json --dry-run",
-                "step_7": "After dry-run succeeds, remove --dry-run to perform actual migration"
+                "step_6": "Run dry-run first - migrate_bitbucket_to_github dry-run --config migration_config.json",
+                "step_7": "After dry-run succeeds, use migrate subcommand to perform actual migration"
             },
             "bitbucket": {
                 "workspace": self.workspace,
@@ -412,7 +414,7 @@ class AuditOrchestrator:
         print("   - Map Bitbucket users to GitHub usernames")
         print("     (use null for users without GitHub accounts)")
         print("\n2. Test with dry run:")
-        print(f"   python migrate_bitbucket_to_github.py --config {filename} --dry-run")
+        print(f"   migrate_bitbucket_to_github dry-run --config {filename}")
         print("\n3. Run actual migration:")
-        print(f"   python migrate_bitbucket_to_github.py --config {filename}")
+        print(f"   migrate_bitbucket_to_github migrate --config {filename}")
         print(f"{'='*80}")
