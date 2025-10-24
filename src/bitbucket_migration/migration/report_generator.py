@@ -31,12 +31,15 @@ class ReportGenerator:
         self.logger = logger
 
     def generate_migration_report(self, issue_records: List[Dict[str, Any]],
-                                  pr_records: List[Dict[str, Any]],
-                                  stats: Dict[str, Any],
-                                  bb_workspace: str, bb_repo: str,
-                                  gh_owner: str, gh_repo: str,
-                                  dry_run: bool = False,
-                                  report_filename: str = 'migration_report.md') -> str:
+                                   pr_records: List[Dict[str, Any]],
+                                   stats: Dict[str, Any],
+                                   bb_workspace: str, bb_repo: str,
+                                   gh_owner: str, gh_repo: str,
+                                   dry_run: bool = False,
+                                   report_filename: str = 'migration_report.md',
+                                   user_mapping_data: Optional[List[Dict[str, Any]]] = None,
+                                   attachment_data: Optional[List[Dict[str, Any]]] = None,
+                                   link_data: Optional[Dict[str, Any]] = None) -> str:
         """
         Generate a comprehensive markdown migration report.
 
@@ -50,6 +53,9 @@ class ReportGenerator:
             gh_repo: GitHub repository name
             dry_run: Whether this is a dry run
             report_filename: Output filename for the report
+            user_mapping_data: Optional list of user mapping records with keys: bb_user, gh_user, success, timestamp, reason
+            attachment_data: Optional list of attachment records with keys: file_path, size, type, uploaded, url, error, instructions
+            link_data: Optional dict with link rewriting data including total_processed, successful, failed, and details list
 
         Returns:
             The filename where the report was saved
@@ -93,7 +99,10 @@ class ReportGenerator:
         report.append("")
         report.append("1. [Issues Migration](#issues-migration)")
         report.append("2. [Pull Requests Migration](#pull-requests-migration)")
-        report.append("3. [Migration Statistics](#migration-statistics)")
+        report.append("3. [User Mapping](#user-mapping)")
+        report.append("4. [Attachment Handling](#attachment-handling)")
+        report.append("5. [Link Rewriting](#link-rewriting)")
+        report.append("6. [Migration Statistics](#migration-statistics)")
         report.append("")
 
         # Issues Migration
@@ -165,6 +174,152 @@ class ReportGenerator:
             report.append(f"| {bb_link} | {gh_link} | {gh_type} | {title} | {author} | {state} | {branches} | {comments} | {links} | {remarks} |")
 
         report.append("")
+
+        # User Mapping
+        report.append("---")
+        report.append("")
+        report.append("## User Mapping")
+        report.append("")
+
+        if user_mapping_data:
+            total_users = len(user_mapping_data)
+            successful_mappings = len([u for u in user_mapping_data if u.get('success', False)])
+            failed_mappings = total_users - successful_mappings
+
+            report.append(f"**Total Users Processed:** {total_users}")
+            report.append(f"  - Successfully Mapped: {successful_mappings}")
+            report.append(f"  - Failed Mappings: {failed_mappings}")
+            report.append("")
+
+            # User mapping table
+            report.append("| Bitbucket User | GitHub User | Success | Timestamp | Reason |")
+            report.append("|----------------|-------------|---------|-----------|--------|")
+
+            for user in user_mapping_data:
+                bb_user = user.get('bb_user', 'N/A')
+                gh_user = user.get('gh_user', 'N/A')
+                success = '✅' if user.get('success', False) else '❌'
+                timestamp = user.get('timestamp', 'N/A')
+                reason = user.get('reason', '-')
+
+                report.append(f"| {bb_user} | {gh_user} | {success} | {timestamp} | {reason} |")
+
+            report.append("")
+
+            # Recommendations
+            if failed_mappings > 0:
+                report.append("### Recommendations for Failed Mappings")
+                report.append("")
+                report.append("For users that failed to map:")
+                report.append("- Verify that the GitHub user exists and is spelled correctly in the mapping configuration.")
+                report.append("- Check if the user has a GitHub account and update the mapping accordingly.")
+                report.append("- For account IDs, ensure they are resolved to usernames via API lookup.")
+                report.append("- Consider manual intervention: Create GitHub accounts or update mappings in the configuration file.")
+                report.append("")
+        else:
+            report.append("No user mapping data available.")
+            report.append("")
+
+        # Attachment Handling
+        report.append("---")
+        report.append("")
+        report.append("## Attachment Handling")
+        report.append("")
+
+        if attachment_data:
+            total_attachments = len(attachment_data)
+            successful_uploads = len([a for a in attachment_data if a.get('uploaded', False)])
+            manual_uploads = total_attachments - successful_uploads
+
+            report.append(f"**Total Attachments Processed:** {total_attachments}")
+            report.append(f"  - Successfully Uploaded: {successful_uploads}")
+            report.append(f"  - Require Manual Upload: {manual_uploads}")
+            report.append("")
+
+            # Attachment table
+            report.append("| File Path | Size | Type | Uploaded | Target URL | Error/Instructions |")
+            report.append("|-----------|------|------|----------|------------|---------------------|")
+
+            for attachment in attachment_data:
+                file_path = attachment.get('file_path', 'N/A')
+                size = attachment.get('size', 'N/A')
+                file_type = attachment.get('type', 'N/A')
+                uploaded = '✅' if attachment.get('uploaded', False) else '❌'
+                url = attachment.get('url', '-')
+                error_or_instructions = attachment.get('error', attachment.get('instructions', '-'))
+
+                report.append(f"| {file_path} | {size} | {file_type} | {uploaded} | {url} | {error_or_instructions} |")
+
+            report.append("")
+
+            # Errors and instructions
+            if manual_uploads > 0 or any(a.get('error') for a in attachment_data):
+                report.append("### Manual Upload Instructions")
+                report.append("")
+                report.append("For attachments requiring manual upload:")
+                report.append("1. Locate the file in the attachments directory (e.g., `attachments_temp/`).")
+                report.append("2. Navigate to the corresponding GitHub issue.")
+                report.append("3. Drag and drop the file into the comment box to upload and embed it.")
+                report.append("4. If size limits are encountered, consider compressing the file or splitting large attachments.")
+                report.append("")
+
+                errors = [a for a in attachment_data if a.get('error')]
+                if errors:
+                    report.append("### Errors Encountered")
+                    report.append("")
+                    for error in errors:
+                        report.append(f"- **{error.get('file_path', 'Unknown')}**: {error.get('error', 'Unknown error')}")
+                        if error.get('instructions'):
+                            report.append(f"  - Suggested Resolution: {error.get('instructions')}")
+                    report.append("")
+        else:
+            report.append("No attachment data available.")
+            report.append("")
+
+        # Link Rewriting
+        report.append("---")
+        report.append("")
+        report.append("## Link Rewriting")
+        report.append("")
+
+        if link_data:
+            total_processed = link_data.get('total_processed', 0)
+            successful = link_data.get('successful', 0)
+            failed = link_data.get('failed', 0)
+
+            report.append(f"**Total Links and Mentions Processed:** {total_processed}")
+            report.append(f"  - Successfully Rewritten: {successful}")
+            report.append(f"  - Failed Rewrites: {failed}")
+            report.append("")
+
+            # Link rewriting table
+            report.append("| Original | Rewritten | Type | Reason |")
+            report.append("|----------|-----------|------|--------|")
+
+            details = link_data.get('details', [])
+            for detail in details:
+                original = detail.get('original', 'N/A')
+                rewritten = detail.get('rewritten', 'N/A')
+                link_type = detail.get('type', 'N/A')
+                reason = detail.get('reason', '-')
+
+                report.append(f"| {original} | {rewritten} | {link_type} | {reason} |")
+
+            report.append("")
+
+            # Instructions for failed rewrites
+            if failed > 0:
+                report.append("### Manual Update Instructions")
+                report.append("")
+                report.append("For links that failed to rewrite:")
+                report.append("- **Internal Links**: Search for the original Bitbucket issue/PR number in the GitHub repository and replace with the new GitHub link.")
+                report.append("- **External Links**: Verify if the external resource still exists and update the URL if necessary.")
+                report.append("- **User Mentions**: Ensure the user mapping is correct; update mentions to the corresponding GitHub usernames.")
+                report.append("- Use search and replace tools in GitHub or scripts to bulk update failed rewrites.")
+                report.append("")
+        else:
+            report.append("No link rewriting data available.")
+            report.append("")
 
         # Migration Statistics
         report.append("---")

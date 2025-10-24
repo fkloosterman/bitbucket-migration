@@ -201,7 +201,7 @@ class IssueMigrator:
                 state='open' if bb_issue.get('state') in ['new', 'open'] else 'closed',
                 assignees=assignees,
                 milestone=milestone_number,
-                issue_type=issue_type_id
+                type=issue_type_name
             )
 
             self.issue_mapping[issue_num] = gh_issue['number']

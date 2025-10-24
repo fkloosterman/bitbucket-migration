@@ -134,12 +134,16 @@ class PullRequestMigrator:
                                 'type': 'inline_image'
                             })
 
-                        gh_pr = self._create_gh_pr(
-                            title=title,
-                            body=body,
-                            head=source_branch,
-                            base=dest_branch
-                        )
+                        try:
+                            gh_pr = self._create_gh_pr(
+                                title=title,
+                                body=body,
+                                head=source_branch,
+                                base=dest_branch
+                            )
+                        except ValidationError as e:
+                            self.logger.warning(f"  ✗ Failed to create GitHub PR: {e}. Falling back to issue migration.")
+                            gh_pr = None
 
                         # Apply milestone to PR (must be done after creation)
                         if milestone_number and gh_pr:
@@ -154,6 +158,16 @@ class PullRequestMigrator:
                         if gh_pr:
                             self.pr_mapping[pr_num] = gh_pr['number']
                             self.stats['prs_as_prs'] += 1
+
+                            # Apply labels to the migrated PR
+                            labels = ['migrated-from-bitbucket']
+                            try:
+                                self.gh_client.update_issue(gh_pr['number'], labels=labels)
+                                self.logger.info(f"    Applied labels to PR #{gh_pr['number']}")
+                            except (APIError, AuthenticationError, NetworkError, ValidationError):
+                                self.logger.warning(f"    Warning: Could not apply labels to PR")
+                            except Exception as e:
+                                self.logger.warning(f"    Warning: Unexpected error applying labels to PR: {e}")
 
                             # Get commit_id for inline comments
                             commit_id = gh_pr.get('head', {}).get('sha')
@@ -181,7 +195,7 @@ class PullRequestMigrator:
                                 
                                 # Format comment
                                 formatter = self.formatter_factory.get_comment_formatter()
-                                comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='pr', item_number=pr_num, use_gh_cli=self.attachment_handler.use_gh_cli)
+                                comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='pr', item_number=pr_num, commit_id=commit_id, use_gh_cli=self.attachment_handler.use_gh_cli)
                                 links_in_comments += comment_links
                                 
                                 # Add annotation for pending
@@ -380,6 +394,18 @@ class PullRequestMigrator:
             self.pr_mapping[pr_num] = gh_issue['number']
             self.stats['prs_as_issues'] += 1
 
+            # Get commit_id for inline comments
+            commit_id = None
+            if source_branch:
+                try:
+                    response = self.gh_client.session.get(f"{self.gh_client.base_url}/branches/{source_branch}")
+                    response.raise_for_status()
+                    commit_id = response.json()['commit']['sha']
+                    self.logger.info(f"  Commit ID fetched for branch {source_branch}: {commit_id}")
+                except Exception:
+                    # Expected for PRs migrated as issues if branch doesn't exist
+                    commit_id = None
+
             # Add comments
             comments = self._fetch_bb_pr_comments(pr_num)
             # Sort comments topologically (parents before children)
@@ -399,7 +425,7 @@ class PullRequestMigrator:
                 
                 # Format comment
                 formatter = self.formatter_factory.get_comment_formatter()
-                comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='pr', item_number=pr_num, use_gh_cli=self.attachment_handler.use_gh_cli)
+                comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='pr', item_number=pr_num, commit_id=commit_id, use_gh_cli=self.attachment_handler.use_gh_cli)
                 links_in_comments += comment_links
                 
                 # Add annotation for pending
@@ -418,8 +444,13 @@ class PullRequestMigrator:
 
                 parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
                 if parent_id:
-                    # Add note for reply since GitHub issue comments don't support threading
-                    comment_body = f"**[Reply to Bitbucket Comment {parent_id}]**\n\n{comment_body}"
+                    # Add note for reply using GitHub comment link if available
+                    gh_parent_id = self.comment_mapping.get(parent_id)
+                    if gh_parent_id:
+                        gh_url = f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/issues/{gh_issue['number']}#issuecomment-{gh_parent_id}"
+                        comment_body = f"**[Reply to GitHub Comment]({gh_url})**\n\n{comment_body}"
+                    else:
+                        comment_body = f"**[Reply to Bitbucket Comment {parent_id}]**\n\n{comment_body}"
                 gh_comment = self._create_gh_comment(gh_issue['number'], comment_body)
                 self.comment_mapping[comment['id']] = gh_comment['id']
                 migrated_comments_count += 1

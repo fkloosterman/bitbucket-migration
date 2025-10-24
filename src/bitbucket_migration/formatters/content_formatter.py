@@ -209,7 +209,7 @@ class CommentContentFormatter(ContentFormatter):
     Formatter for Bitbucket comments.
     """
 
-    def format(self, comment: Dict, item_type: str = 'issue', item_number: Optional[int] = None, **kwargs) -> Tuple[str, int, List[Dict]]:
+    def format(self, comment: Dict, item_type: str = 'issue', item_number: Optional[int] = None, commit_id: Optional[str] = None, **kwargs) -> Tuple[str, int, List[Dict]]:
         """
         Format Bitbucket comment for GitHub.
 
@@ -217,6 +217,7 @@ class CommentContentFormatter(ContentFormatter):
             comment: Bitbucket comment data
             item_type: 'issue' or 'pr' for link rewriting context
             item_number: The issue/PR number for link rewriting context
+            commit_id: Optional commit ID for inline comments
 
         Returns:
             Tuple of (formatted_comment, links_rewritten_count, inline_images)
@@ -245,19 +246,27 @@ class CommentContentFormatter(ContentFormatter):
         inline_data = comment.get('inline')
         code_context = ""
 
-        if inline_data and item_type == 'pr':
+        if inline_data:
             # This is an inline comment - add context information
             file_path = inline_data.get('path', 'unknown file')
             line_from = inline_data.get('from')
             line_to = inline_data.get('to')
+            start_from = inline_data.get('start_from')
+            start_to = inline_data.get('start_to')
 
-            if line_from:
-                if line_to and line_to != line_from:
-                    line_info = f"lines {line_from}-{line_to}"
+            if line_to:
+                if start_to and start_to != line_to:
+                    line_info = f"lines {start_to}-{line_to}"
                 else:
-                    line_info = f"line {line_from}"
+                    line_info = f"line {line_to}"
 
-                code_context = f"\n\n> 💬 **Code comment on `{file_path}` ({line_info})**\n"
+                if line_from and line_from != line_to:
+                    line_info += f" (was line {line_from})"
+
+                code_context = f"\n\n> 💬 **Code comment on `{file_path}` ({line_info})"
+                if commit_id:
+                    code_context += f" (commit: `{commit_id[:7]}`)"
+                code_context += "**\n"
 
         comment_body = f"""**Comment by {author_mention} on {created}:**
 {code_context}

@@ -382,6 +382,62 @@ class MigrationOrchestrator:
                 self.logger.error(f"  ✗ ERROR: {e}")
             raise
 
+    def _collect_user_mapping_data(self) -> List[Dict[str, Any]]:
+        """Collect user mapping data for the report."""
+        from datetime import datetime
+        data = []
+        for bb_user, gh_user in self.config.user_mapping.items():
+            success = gh_user is not None and gh_user != ""
+            if isinstance(gh_user, dict):
+                gh_user = gh_user.get('github', 'N/A')
+            reason = "Mapped successfully" if success else "No GitHub user found or invalid mapping"
+            data.append({
+                'bb_user': bb_user,
+                'gh_user': gh_user or 'N/A',
+                'success': success,
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'reason': reason
+            })
+        return data
+
+    def _collect_attachment_data(self) -> List[Dict[str, Any]]:
+        """Collect attachment data for the report."""
+        data = []
+        for attachment in self.attachment_handler.attachments:
+            file_path = attachment.get('filepath', 'N/A')
+            filename = attachment.get('filename', 'N/A')
+            # Assume size and type need to be calculated or added
+            size = "Unknown"  # Placeholder
+            file_type = "Unknown"  # Placeholder
+            uploaded = False  # Placeholder, need to track in attachment_handler
+            url = "-"  # Placeholder
+            error = "-"  # Placeholder
+            instructions = "Drag and drop to GitHub issue" if not uploaded else "-"
+            data.append({
+                'file_path': file_path,
+                'size': size,
+                'type': file_type,
+                'uploaded': uploaded,
+                'url': url,
+                'error': error,
+                'instructions': instructions
+            })
+        return data
+
+    def _collect_link_data(self) -> Dict[str, Any]:
+        """Collect link rewriting data for the report."""
+        # Placeholder: Need to collect from link_rewriter
+        total_processed = 0  # Placeholder
+        successful = 0  # Placeholder
+        failed = 0  # Placeholder
+        details = []  # Placeholder
+        return {
+            'total_processed': total_processed,
+            'successful': successful,
+            'failed': failed,
+            'details': details
+        }
+
     def _generate_reports(self) -> None:
         """Generate migration reports."""
         self.logger.info("Generating migration reports...")
@@ -389,6 +445,11 @@ class MigrationOrchestrator:
         # Combine records from migrators
         issue_records = self.issue_migrator.issue_records
         pr_records = self.pr_migrator.pr_records
+
+        # Collect data from services
+        user_mapping_data = self._collect_user_mapping_data()
+        attachment_data = self._collect_attachment_data()
+        link_data = self._collect_link_data()
 
         # Save mapping
         self.report_generator.save_mapping(
@@ -404,14 +465,20 @@ class MigrationOrchestrator:
                 issue_records, pr_records, self.stats,
                 self.config.bitbucket.workspace, self.config.bitbucket.repo,
                 self.config.github.owner, self.config.github.repo,
-                dry_run=True, report_filename="migration_report_dry_run.md"
+                dry_run=True, report_filename="migration_report_dry_run.md",
+                user_mapping_data=user_mapping_data,
+                attachment_data=attachment_data,
+                link_data=link_data
             )
         else:
             self.report_generator.generate_migration_report(
                 issue_records, pr_records, self.stats,
                 self.config.bitbucket.workspace, self.config.bitbucket.repo,
                 self.config.github.owner, self.config.github.repo,
-                dry_run=False
+                dry_run=False,
+                user_mapping_data=user_mapping_data,
+                attachment_data=attachment_data,
+                link_data=link_data
             )
 
     def _print_summary(self) -> None:
