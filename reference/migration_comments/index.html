@@ -617,6 +617,15 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#special-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Special Handling
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -901,6 +910,15 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#special-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Special Handling
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -941,9 +959,18 @@
 <li>❌ <strong>Comment Author</strong>: Shows as migration account.</li>
 <li>❌ <strong>Comment Date</strong>: Shows as migration date.</li>
 <li>❌ <strong>Comment Edit History</strong>: Only final version migrated.</li>
-<li>❌ <strong>Threaded Replies</strong>: Flattened to sequential comments.</li>
-<li>❌ <strong>Inline Code Comments</strong>: PR code review comments are not migrated.</li>
+<li>❌ <strong>Threaded Replies</strong>: For PRs migrated as issues, replies are flattened with notes. For PRs migrated as PRs, inline review comments support threading.</li>
+<li>❌ <strong>Inline Code Comments</strong>: PR code review comments are not migrated (except for threaded support in PRs).</li>
 <li>❌ <strong>Resolved/Unresolved Status</strong>: Comment resolution status not preserved.</li>
+</ul>
+<h2 id="special-handling">Special Handling</h2>
+<ul>
+<li>✅ <strong>Deleted Comments</strong>: Comments marked as deleted in Bitbucket are skipped during migration to avoid data pollution.</li>
+<li>✅ <strong>Pending Comments</strong>: Comments marked as pending approval in Bitbucket are migrated with a clear annotation: <strong>[PENDING APPROVAL]</strong> at the top of the comment body.</li>
+<li>✅ <strong>Threaded Replies</strong>:</li>
+<li>For PRs migrated as GitHub PRs, inline review comments support threading using GitHub's <code>in_reply_to</code> field.</li>
+<li>For PRs migrated as issues or other cases, replies are flattened with a note: <strong>[Reply to Bitbucket Comment {ID}]</strong>.</li>
+<li>Comments are processed in topological order to ensure parents are created before replies.</li>
 </ul>
 
 
