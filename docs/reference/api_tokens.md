@@ -10,9 +10,11 @@ The migration process requires multiple authentication methods depending on whic
 
 | Tool | Bitbucket Token | GitHub PAT | GitHub CLI | Purpose |
 |------|----------------|------------|------------|---------|
-| `audit_bitbucket.py` | ✅ Required | ❌ Not needed | ❌ Not needed | Audit repository content |
-| `migrate_bitbucket_to_github.py` | ✅ Required | ✅ Required | ❌ Optional | Migrate issues/PRs |
-| `migrate_bitbucket_to_github.py --use-gh-cli` | ✅ Required | ✅ Required | ✅ Required | Auto-upload attachments |
+| `migrate_bitbucket_to_github test-auth` | ✅ Required | ✅ Required | ❌ Optional | Test authentication |
+| `migrate_bitbucket_to_github audit` | ✅ Required | ❌ Not needed | ❌ Not needed | Audit repository content |
+| `migrate_bitbucket_to_github dry-run` | ✅ Required | ✅ Required | ❌ Optional | Dr-run migrate issues/PRs |
+| `migrate_bitbucket_to_github migrate` | ✅ Required | ✅ Required | ❌ Optional | Migrate issues/PRs |
+| `migrate_bitbucket_to_github migrate --use-gh-cli` | ✅ Required | ✅ Required | ✅ Required | Auto-upload attachments |
 
 **Choose your path:**
 
@@ -23,7 +25,7 @@ The migration process requires multiple authentication methods depending on whic
 
 ## 🔑 Bitbucket Cloud API Token
 
-**Required for:** `audit_bitbucket.py`, `migrate_bitbucket_to_github.py`
+**Required for:** `migrate_bitbucket_to_github audit`, `migrate_bitbucket_to_github migrate`
 
 ### Creating Your Token
 
@@ -62,7 +64,7 @@ The migration process requires multiple authentication methods depending on whic
 
 ## 🔑 GitHub Authentication
 
-**Required for:** `migrate_bitbucket_to_github.py`
+**Required for:** `migrate_bitbucket_to_github dry-run` and `migrate_bitbucket_to_github migrate`
 
 ### GitHub Personal Access Token (PAT)
 
@@ -144,7 +146,7 @@ BITBUCKET_TOKEN=ATAT1234...
 GITHUB_TOKEN=ghp_abcd123...
 
 # Load in your scripts
-python audit_bitbucket.py --workspace $BITBUCKET_WORKSPACE --repo $BITBUCKET_REPO --email $BITBUCKET_EMAIL --token $BITBUCKET_TOKEN
+migrate_bitbucket_to_github audit --workspace $BITBUCKET_WORKSPACE --repo $BITBUCKET_REPO --email $BITBUCKET_EMAIL --token $BITBUCKET_TOKEN
 ```
 
 ### Security Guidelines
@@ -174,7 +176,7 @@ python audit_bitbucket.py --workspace $BITBUCKET_WORKSPACE --repo $BITBUCKET_REP
 Use the provided test script to verify your Bitbucket token:
 
 ```bash
-python test_auth.py --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com --token ATAT1234...
+migrate_bitbucket_to_github test-auth --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com --token ATAT1234...
 ```
 
 **Expected output:**
@@ -298,7 +300,7 @@ gh auth login
 
 1. **Test Bitbucket authentication:**
     ```bash
-    python test_auth.py --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com --token ATAT1234...
+    migrate_bitbucket_to_github test-auth --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com --token ATAT1234...
     ```
 
 2. **Verify repository access:**
@@ -308,7 +310,7 @@ gh auth login
 
 3. **Run audit script:**
     ```bash
-    python audit_bitbucket.py --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com --token ATAT1234...
+    migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com --token ATAT1234...
     ```
 
 ### Before Running Migration Script
@@ -331,7 +333,7 @@ gh auth login
 
 4. **Run dry-run migration:**
     ```bash
-    python migrate_bitbucket_to_github.py --config config.json --dry-run
+    migrate_bitbucket_to_github dry-run --config config.json
     ```
 
 ### After Authentication Issues
@@ -349,16 +351,16 @@ gh auth login
 ### Basic Setup (No Attachments)
 ```bash
 # 1. Test Bitbucket token
-python test_auth.py --workspace myteam --repo myrepo --email me@company.com --token ATAT123...
+migrate_bitbucket_to_github test-auth --workspace myteam --repo myrepo --email me@company.com --token ATAT123...
 
 # 2. Run audit
-python audit_bitbucket.py --workspace myteam --repo myrepo --email me@company.com --token ATAT123...
+migrate_bitbucket_to_github audit --workspace myteam --repo myrepo --email me@company.com --token ATAT123...
 
 # 3. Test GitHub PAT
 curl -H "Authorization: token ghp_456..." https://api.github.com/user
 
 # 4. Run migration dry-run
-python migrate_bitbucket_to_github.py --config config.json --dry-run
+migrate_bitbucket_to_github dry-run --config config.json
 ```
 
 ### Advanced Setup (With Auto-Upload)
@@ -370,7 +372,7 @@ gh auth login
 gh auth status
 
 # 3. Run migration with auto-upload
-python migrate_bitbucket_to_github.py --config config.json --use-gh-cli
+migrate_bitbucket_to_github migrate --config config.json --use-gh-cli
 ```
 
 ---

@@ -64,8 +64,8 @@ pipx install bitbucket-migration
 
 **Example Usage:**
 ```bash
-audit_bitbucket --workspace YOUR_WORKSPACE --repo YOUR_REPO --generate-config
-migrate_bitbucket_to_github --config migration_config.json --dry-run
+migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO
+migrate_bitbucket_to_github dry-run --config migration_config.json
 ```
 
 ---
@@ -90,7 +90,7 @@ migrate_bitbucket_to_github --config migration_config.json --dry-run
 
     Command-line interface guide for audit, migration, and authentication scripts.
 
--   **[� User Mapping](reference/user_mapping.md)**
+-   **[👥 User Mapping](reference/user_mapping.md)**
 
     How to map Bitbucket users to GitHub accounts and handle unmapped users.
 

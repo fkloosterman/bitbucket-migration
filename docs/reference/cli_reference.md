@@ -1,60 +1,66 @@
 # CLI Reference Guide
 
-This comprehensive guide covers the command-line interfaces for the three main migration scripts: `test_auth.py`, `audit_bitbucket.py`, and `migrate_bitbucket_to_github.py`. Each script serves a specific purpose in the migration workflow.
+This comprehensive guide covers the command-line interface for the unified migration tool `migrate_bitbucket_to_github`, which includes subcommands for authentication testing, repository auditing, and data migration. All functionality is integrated into a single script with subcommands for a streamlined workflow.
 
 ---
 
-## 📋 Script Overview
+## 📋 Subcommand Overview
 
-| Script | Purpose | When to Use |
-|--------|---------|-------------|
-| test_auth.py | Authentication testing | Before audit to verify API access |
-| audit_bitbucket.py | Repository analysis | Before migration to understand scope |
-| migrate_bitbucket_to_github.py | Data migration | After audit and preparation |
+| Subcommand | Purpose | When to Use |
+|------------|---------|-------------|
+| test-auth | Authentication testing | Before audit to verify API access |
+| audit | Repository analysis | Before migration to understand scope |
+| dry-run | Simulate migration | To validate setup without making changes |
+| migrate | Data migration | After audit and preparation |
+
 
 ---
 
-## 🔐 Authentication Testing: `test_auth.py`
+## 🔐 Authentication Testing: `test-auth` Subcommand
 
-Tests Bitbucket API authentication and permissions before running the full audit.
+Tests Bitbucket and GitHub API authentication and permissions before running the audit.
 
 ### Basic Syntax
 ```bash
-python test_auth.py --workspace WORKSPACE --repo REPO --email EMAIL [OPTIONS]
+migrate_bitbucket_to_github test-auth --workspace WORKSPACE --repo REPO --email EMAIL [OPTIONS]
 ```
 
-### Required Arguments
+### Arguments
+**Note**: missing arguments will be prompted if not provided.
 | Argument | Description | Example |
 |----------|-------------|---------|
 | `--workspace` | Bitbucket workspace name | `myteam` |
 | `--repo` | Repository name | `myproject` |
 | `--email` | Atlassian account email | `user@example.com` |
+| `--token` | Bitbucket API token | `ATAT123...` |
+| `--gh-owner` | GitHub owner | `myusername` |
+| `--gh-repo` | GitHub repository name | `myproject` |
+| `--gh-token` | GitHub API token | `ghp_...` |
 
-### Optional Arguments
-| Argument | Description | Example |
-|----------|-------------|---------|
-| `--token` | API token (prompts if not provided) | `ATAT123...` |
 
 ### Examples
 
 #### Simple Authentication Test
 ```bash
-# Token will be prompted interactively
-python test_auth.py --workspace myteam --repo myproject --email user@example.com
+# Tokens will be prompted interactively
+migrate_bitbucket_to_github test-auth --workspace myteam --repo myproject --email user@example.com --gh-owner myusername --gh-repo myproject
 ```
 
-#### Authentication Test with Token
+#### Authentication Test with Tokens
 ```bash
-python test_auth.py --workspace myteam --repo myproject \
+migrate_bitbucket_to_github test-auth --workspace myteam --repo myproject \
   --email user@example.com \
-  --token ATAT1234567890abcdef
+  --token ATAT1234567890abcdef \
+  --gh-owner myusername \
+  --gh-repo myproject \
+  --gh-token ghp_1234567890abcdef
 ```
 
 #### Batch Testing Multiple Repositories
 ```bash
 # Test multiple repos in the same workspace
 for repo in repo1 repo2 repo3; do
-  python test_auth.py --workspace myteam --repo $repo --email user@example.com --token $TOKEN
+  migrate_bitbucket_to_github test-auth --workspace myteam --repo $repo --email user@example.com --token $TOKEN --gh-owner myusername --gh-repo $repo --gh-token $GH_TOKEN
 done
 ```
 
@@ -101,13 +107,13 @@ You can now run the full audit script.
 
 ---
 
-## 🔍 Repository Audit: `audit_bitbucket.py`
+## 🔍 Repository Audit: `audit` Subcommand
 
 Performs comprehensive analysis of Bitbucket repository content for migration planning.
 
 ### Basic Syntax
 ```bash
-python audit_bitbucket.py --workspace WORKSPACE --repo REPO --email EMAIL [OPTIONS]
+migrate_bitbucket_to_github audit --workspace WORKSPACE --repo REPO --email EMAIL [OPTIONS]
 ```
 
 ### Required Arguments
@@ -116,35 +122,36 @@ python audit_bitbucket.py --workspace WORKSPACE --repo REPO --email EMAIL [OPTIO
 | `--workspace` | Bitbucket workspace name | `myteam` |
 | `--repo` | Repository name | `myproject` |
 | `--email` | Atlassian account email | `user@example.com` |
+| `--token` | API token (prompts if not provided) | `ATAT123...` |
 
 ### Optional Arguments
 | Argument | Description | Example |
 |----------|-------------|---------|
-| `--token` | API token (prompts if not provided) | `ATAT123...` |
-| `--generate-config` | Generate migration configuration template | |
+| `--no-config` | Do not generate migration configuration template (default is to generate) | |
 | `--gh-owner` | GitHub username/org for config template | `myusername` |
 | `--gh-repo` | GitHub repository name for config template | `myproject` |
+
+**Note:** Missing required arguments will be prompted for interactively.
 
 ### Examples
 
 #### Basic Repository Audit
 ```bash
 # Token will be prompted interactively
-python audit_bitbucket.py --workspace myteam --repo myproject --email user@example.com
+migrate_bitbucket_to_github audit --workspace myteam --repo myproject --email user@example.com
 ```
 
 #### Audit with Token Provided
 ```bash
-python audit_bitbucket.py --workspace myteam --repo myproject \
+migrate_bitbucket_to_github audit --workspace myteam --repo myproject \
   --email user@example.com \
   --token ATAT1234567890abcdef
 ```
 
 #### Generate Migration Configuration
 ```bash
-python audit_bitbucket.py --workspace myteam --repo myproject \
+migrate_bitbucket_to_github audit --workspace myteam --repo myproject \
   --email user@example.com \
-  --generate-config \
   --gh-owner mygithubusername \
   --gh-repo myproject
 ```
@@ -160,12 +167,11 @@ TOKEN="ATAT123..."
 
 for repo in $(cat repos_to_migrate.txt); do
   echo "Auditing $repo..."
-  python audit_bitbucket.py \
+  migrate_bitbucket_to_github audit \
     --workspace $WORKSPACE \
     --repo $repo \
     --email $EMAIL \
     --token $TOKEN \
-    --generate-config \
     --gh-owner mygithubusername \
     --gh-repo $repo
 
@@ -196,14 +202,14 @@ Human-readable markdown report with:
 - Migration estimates
 - Next steps and recommendations
 
-#### `migration_config.json` (with `--generate-config`)
+#### `migration_config.json`
 Migration configuration template with:
 
 - Pre-filled Bitbucket credentials
 - User mapping template
 - GitHub repository settings
 
-#### `user_mapping_template.txt` (with `--generate-config`)
+#### `user_mapping_template.txt`
 User mapping reference showing:
 
 - All users found in repository
@@ -255,13 +261,13 @@ Report saved to: bitbucket_audit_report.json
 
 ---
 
-## 🚀 Data Migration: `migrate_bitbucket_to_github.py`
+## 🚀 Data Migration: `migrate` Subcommand
 
 Migrates repository data from Bitbucket to GitHub with intelligent handling of different content types.
 
 ### Basic Syntax
 ```bash
-python migrate_bitbucket_to_github.py --config CONFIG_FILE [OPTIONS]
+migrate_bitbucket_to_github migrate --config CONFIG_FILE [OPTIONS]
 ```
 
 ### Required Arguments
@@ -270,45 +276,48 @@ python migrate_bitbucket_to_github.py --config CONFIG_FILE [OPTIONS]
 | `--config` | Path to configuration JSON file | `migration_config.json` |
 
 ### Optional Arguments
+
+**Note:** Missing required arguments will be prompted for interactively.
+
 | Argument | Description | Example |
 |----------|-------------|---------|
-| `--dry-run` | Simulate migration without making changes | |
-| `--skip-issues` | Skip issue migration phase | |
-| `--skip-prs` | Skip pull request migration phase | |
-| `--skip-pr-as-issue` | Skip migrating closed PRs as issues | |
-| `--use-gh-cli` | Auto-upload attachments using GitHub CLI | |
+| `--dry-run` | Simulate migration without making changes |
+| `--skip-issues` | Skip issue migration phase |
+| `--skip-prs` | Skip pull request migration phase |
+| `--skip-pr-as-issue` | Skip migrating closed PRs as issues |
+| `--use-gh-cli` | Auto-upload attachments using GitHub CLI |
 
 ### Examples
 
 #### Dry Run (Recommended First Step)
 ```bash
-python migrate_bitbucket_to_github.py --config migration_config.json --dry-run
+migrate_bitbucket_to_github --config migration_config.json --dry-run
 ```
 
 #### Full Migration (Basic)
 ```bash
-python migrate_bitbucket_to_github.py --config migration_config.json
+migrate_bitbucket_to_github --config migration_config.json
 ```
 
 #### Issues Only Migration
 ```bash
-python migrate_bitbucket_to_github.py --config migration_config.json --skip-prs
+migrate_bitbucket_to_github --config migration_config.json --skip-prs
 ```
 
 #### Pull Requests Only Migration
 ```bash
-python migrate_bitbucket_to_github.py --config migration_config.json --skip-issues
+migrate_bitbucket_to_github --config migration_config.json --skip-issues
 ```
 
 #### Migration with Automatic Attachment Upload
 ```bash
 # Requires GitHub CLI installed and authenticated
-python migrate_bitbucket_to_github.py --config migration_config.json --use-gh-cli
+migrate_bitbucket_to_github --config migration_config.json --use-gh-cli
 ```
 
 #### Advanced Migration with Selective Options
 ```bash
-python migrate_bitbucket_to_github.py --config migration_config.json \
+migrate_bitbucket_to_github --config migration_config.json \
   --skip-pr-as-issue \
   --use-gh-cli
 ```
@@ -329,7 +338,7 @@ for config in $CONFIG_DIR/*.json; do
   mkdir -p "$ATTACHMENTS_DIR/$repo_name"
 
   # Run migration with auto-upload
-  python migrate_bitbucket_to_github.py \
+  migrate_bitbucket_to_github \
     --config "$config" \
     --use-gh-cli
 
@@ -401,13 +410,12 @@ Directory containing downloaded attachments for manual upload (unless using `--u
 
 ### Phase 1: Preparation and Testing
 ```bash
-# 1. Test Bitbucket authentication
-python test_auth.py --workspace myteam --repo myproject --email user@example.com
+# 1. Test authentication
+migrate_bitbucket_to_github test-auth --workspace myteam --repo myproject --email user@example.com --gh-owner mygithubusername --gh-repo myproject
 
 # 2. Run comprehensive audit
-python audit_bitbucket.py --workspace myteam --repo myproject \
+migrate_bitbucket_to_github audit --workspace myteam --repo myproject \
   --email user@example.com \
-  --generate-config \
   --gh-owner mygithubusername \
   --gh-repo myproject
 
@@ -423,7 +431,7 @@ vim user_mapping_template.txt
 ### Phase 2: Pre-Migration Validation
 ```bash
 # 5. Test migration setup (dry run)
-python migrate_bitbucket_to_github.py --config migration_config.json --dry-run
+migrate_bitbucket_to_github --config migration_config.json --dry-run
 
 # 6. Review dry-run results
 cat migration_report_dry_run.md
@@ -437,7 +445,7 @@ cat migration_report_dry_run.md
 ### Phase 3: Actual Migration
 ```bash
 # 8. Run the migration
-python migrate_bitbucket_to_github.py --config migration_config.json
+migrate_bitbucket_to_github --config migration_config.json
 
 # 9. Review migration results
 cat migration_report.md
@@ -466,31 +474,31 @@ rm -rf attachments_temp/
 ### Use Case 1: Simple Repository Migration
 ```bash
 # For straightforward migrations with minimal attachments
-python test_auth.py --workspace myteam --repo myproject --email user@example.com
-python audit_bitbucket.py --workspace myteam --repo myproject --email user@example.com --generate-config --gh-owner myuser --gh-repo myproject
-python migrate_bitbucket_to_github.py --config migration_config.json --dry-run
-python migrate_bitbucket_to_github.py --config migration_config.json
+migrate_bitbucket_to_github test-auth --workspace myteam --repo myproject --email user@example.com --gh-owner myuser --gh-repo myproject
+migrate_bitbucket_to_github audit --workspace myteam --repo myproject --email user@example.com --gh-owner myuser --gh-repo myproject
+migrate_bitbucket_to_github dry-run --config migration_config.json
+migrate_bitbucket_to_github migrate --config migration_config.json
 ```
 
 ### Use Case 2: Large Repository with Many Attachments
 ```bash
 # For repositories with many/large attachments
-python test_auth.py --workspace myteam --repo large-repo --email user@example.com
-python audit_bitbucket.py --workspace myteam --repo large-repo --email user@example.com --generate-config --gh-owner myuser --gh-repo large-repo
+migrate_bitbucket_to_github test-auth --workspace myteam --repo large-repo --email user@example.com --gh-owner myuser --gh-repo large-repo
+migrate_bitbucket_to_github audit --workspace myteam --repo large-repo --email user@example.com --gh-owner myuser --gh-repo large-repo
 
 # Install and setup GitHub CLI for auto-upload
 gh auth login
 
 # Run migration with auto-upload
-python migrate_bitbucket_to_github.py --config migration_config.json --use-gh-cli
+migrate_bitbucket_to_github migrate --config migration_config.json --use-gh-cli
 ```
 
 ### Use Case 3: Issues-Only Migration
 ```bash
 # When you only want to migrate issues, not PRs
-python test_auth.py --workspace myteam --repo issues-only --email user@example.com
-python audit_bitbucket.py --workspace myteam --repo issues-only --email user@example.com --generate-config --gh-owner myuser --gh-repo issues-only
-python migrate_bitbucket_to_github.py --config migration_config.json --skip-prs
+migrate_bitbucket_to_github test-auth --workspace myteam --repo issues-only --email user@example.com --gh-owner myuser --gh-repo issues-only
+migrate_bitbucket_to_github audit --workspace myteam --repo issues-only --email user@example.com --gh-owner myuser --gh-repo issues-only
+migrate_bitbucket_to_github migrate --config migration_config.json --skip-prs
 ```
 
 ### Use Case 4: Enterprise Migration with Multiple Repositories
@@ -507,14 +515,14 @@ for repo in $(cat repo_list.txt); do
   echo "Migrating $ORG/$repo..."
 
   # Test and audit
-  python test_auth.py --workspace $ORG --repo $repo --email $EMAIL
-  python audit_bitbucket.py --workspace $ORG --repo $repo --email $EMAIL --generate-config --gh-owner $GH_ORG --gh-repo $repo
+  migrate_bitbucket_to_github test-auth --workspace $ORG --repo $repo --email $EMAIL --gh-owner $GH_ORG --gh-repo $repo
+  migrate_bitbucket_to_github audit --workspace $ORG --repo $repo --email $EMAIL --gh-owner $GH_ORG --gh-repo $repo
 
   # Edit configuration with enterprise settings
   # ... manual step: edit migration_config.json ...
 
   # Migrate
-  python migrate_bitbucket_to_github.py --config migration_config.json --use-gh-cli
+  migrate_bitbucket_to_github migrate --config migration_config.json --use-gh-cli
 
   echo "Completed migration for $repo"
 done
@@ -527,7 +535,7 @@ done
 ### Authentication Problems
 ```bash
 # Always test authentication first
-python test_auth.py --workspace WORKSPACE --repo REPO --email EMAIL --token TOKEN
+migrate_bitbucket_to_github test-auth --workspace WORKSPACE --repo REPO --email EMAIL --gh-owner GH_OWNER --gh-repo REPO --token TOKEN --gh-token GH_TOKEN
 
 # If GitHub authentication fails
 curl -H "Authorization: token ghp_..." https://api.github.com/user
@@ -546,8 +554,8 @@ curl -H "Authorization: token ghp_..." https://api.github.com/repos/OWNER/REPO
 ### Large Repository Handling
 ```bash
 # For large repositories, run phases separately
-python migrate_bitbucket_to_github.py --config config.json --skip-prs    # Issues only
-python migrate_bitbucket_to_github.py --config config.json --skip-issues  # PRs only
+migrate_bitbucket_to_github --config config.json --skip-prs    # Issues only
+migrate_bitbucket_to_github --config config.json --skip-issues  # PRs only
 ```
 
 ### Network and Timeout Issues
@@ -610,4 +618,4 @@ For detailed error information, check:
 
 ---
 
-*This CLI reference focuses on the three main migration scripts. For complete migration instructions, see the [Migration Guide](../migration_guide.md).*
+*This CLI reference focuses on the unified migration tool with subcommands. For complete migration instructions, see the [Migration Guide](../migration_guide.md).*

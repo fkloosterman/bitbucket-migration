@@ -35,22 +35,22 @@ This guide explains how to migrate a **Bitbucket** Cloud repository to **GitHub*
     Then use as follows. See [CLI Reference Guide](reference/cli_reference.md) for detailed description
     of the command line interface of the included scripts.
     ```bash
-    audit_bitbucket --workspace YOUR_WORKSPACE --repo YOUR_REPO --generate-config
-    migrate_bitbucket_to_github --config migration_config.json --dry-run
+    migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO
+    migrate_bitbucket_to_github dry-run --config migration_config.json
     ```
 
     ??? "Alternative installation methods"
 
         **Run Directly**
         ```bash
-        pipx run bitbucket-migration audit_bitbucket --workspace YOUR_WORKSPACE --repo YOUR_REPO --generate-config
+        pipx run bitbucket-migration migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO
         ```
 
         **From Source**
         ```bash
         git clone https://github.com/fkloosterman/bitbucket-migration.git
         cd bitbucket-migration
-        python audit_bitbucket.py --workspace YOUR_WORKSPACE --repo YOUR_REPO --generate-config
+        python migrate_bitbucket_to_github.py audit --workspace YOUR_WORKSPACE --repo YOUR_REPO
         ```
 
 2. **Set up Bitbucket and Github Tokens**
@@ -74,7 +74,7 @@ A(
   **2. Mirror Git Repository**
   Copy commits, branches, and tags.
 )
-click A "#step-1-run-audit" "Audit Bitbucket Repo"
+click A "#step-1-run-audit" "migrate_bitbucket_to_github audit"
 click B "#step-2-prepare-github-repository" "Mirror Git Repo"
 
 B --> C(
@@ -118,11 +118,10 @@ click G "#step-7-verify-and-clean-up" "Verify"
 Generates the initial configuration and user mapping.
 
 ```bash
-python audit_bitbucket.py \
+migrate_bitbucket_to_github audit \
   --workspace WORKSPACE \
   --repo REPO \
   --email YOU@DOMAIN \
-  --generate-config \
   --gh-owner GITHUB_USER \
   --gh-repo REPO
 ```
@@ -186,9 +185,8 @@ Edit `migration_config.json` to set your tokens and user mappings. See [Migratio
 Run a simulation of the migration to validate your configuration without making any changes.
 
 ```bash
-python migrate_bitbucket_to_github.py \
-  --config migration_config.json \
-  --dry-run
+migrate_bitbucket_to_github dry-run \
+  --config migration_config.json
 ```
 
 **What it does:**
@@ -214,7 +212,7 @@ python migrate_bitbucket_to_github.py \
 Execute the actual migration of issues, PRs, comments, and attachments.
 
 ```bash
-python migrate_bitbucket_to_github.py \
+migrate_bitbucket_to_github migrate \
   --config migration_config.json
 ```
 
@@ -240,7 +238,7 @@ Attachments are downloaded locally because GitHub’s API doesn’t support dire
 Add `--use-gh-cli` to the migration command for automatic attachment upload:
 
 ```bash
-python migrate_bitbucket_to_github.py --config migration_config.json --use-gh-cli
+migrate_bitbucket_to_github migrate --config migration_config.json --use-gh-cli
 ```
 
 This requires GitHub CLI installed and authenticated.

@@ -273,13 +273,13 @@ The migration tool includes comprehensive validation and error handling for user
 ---
 ## 🛠️ Integration with Audit Script
 
-The audit script (`audit_bitbucket.py`) is essential for effective user mapping configuration.
+The audit subcommand (`migrate_bitbucket_to_github audit`) is essential for effective user mapping configuration.
 
 ### User Discovery Process
 
 1. **Run Initial Audit:**
 ```bash
-python audit_bitbucket.py --workspace YOUR_WORKSPACE --repo YOUR_REPO --email YOUR_EMAIL
+migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --email YOUR_EMAIL
 ```
 
 2. **Review Generated Files:**
@@ -319,8 +319,8 @@ python audit_bitbucket.py --workspace YOUR_WORKSPACE --repo YOUR_REPO --email YO
 
 **Generate Complete Configuration:**
 ```bash
-python audit_bitbucket.py --workspace YOUR_WORKSPACE --repo YOUR_REPO --email YOUR_EMAIL \
-  --generate-config --gh-owner YOUR_GITHUB_USER --gh-repo YOUR_REPO
+migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --email YOUR_EMAIL \
+  --gh-owner YOUR_GITHUB_USER --gh-repo YOUR_REPO
 ```
 
 **Generated Files:**
@@ -334,7 +334,7 @@ python audit_bitbucket.py --workspace YOUR_WORKSPACE --repo YOUR_REPO --email YO
 ### Step 1: Run Audit for User Discovery
 
 ```bash
-python audit_bitbucket.py --workspace myworkspace --repo myrepo --email user@example.com
+migrate_bitbucket_to_github audit --workspace myworkspace --repo myrepo --email user@example.com
 ```
 
 ### Step 2: Review User Activity
@@ -374,7 +374,7 @@ Examine `audit_report.md` and `user_mapping_template.txt`:
 ### Step 4: Test Configuration
 
 ```bash
-python migrate_bitbucket_to_github.py --config migration_config.json --dry-run
+migrate_bitbucket_to_github dry-run --config migration_config.json
 ```
 
 Review the output for:
@@ -431,7 +431,7 @@ Review the output for:
 1. **Verify API Permissions:**
 ```bash
 # Ensure your Bitbucket API token has user read permissions
-python audit_bitbucket.py --workspace WORKSPACE --repo REPO --email EMAIL
+migrate_bitbucket_to_github audit --workspace WORKSPACE --repo REPO --email EMAIL
 ```
 
 2. **Check Account ID Format:**
@@ -529,7 +529,7 @@ python audit_bitbucket.py --workspace WORKSPACE --repo REPO --email EMAIL
 ## 🎯 Best Practices
 
 ### 1. Always Run Audit First
-The audit script provides essential user discovery and analysis capabilities.
+The audit subcommand provides essential user discovery and analysis capabilities.
 
 ### 2. Use Enhanced Format for @Mentions
 When @mentions are important to your team, use the enhanced mapping format.

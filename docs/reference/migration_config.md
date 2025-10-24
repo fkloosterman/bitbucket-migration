@@ -6,7 +6,7 @@ This file defines how the migration tool connects to Bitbucket and GitHub, and h
 
 ## 🔧 File Overview
 
-`migration_config.json` is generated automatically when you run the audit script with `--generate-config`. You can edit it before running the actual migration.
+`migration_config.json` is generated automatically when you run the audit script. You can edit it before running the actual migration.
 
 ```json
 {
