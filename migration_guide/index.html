@@ -247,6 +247,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../reference/architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -974,6 +993,28 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1204,18 +1245,18 @@
 </code></pre></div>
     Then use as follows. See <a href="../reference/cli_reference/">CLI Reference Guide</a> for detailed description
     of the command line interface of the included scripts.
-    <div class="highlight"><pre><span></span><code>audit_bitbucket<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--generate-config
-migrate_bitbucket_to_github<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--dry-run
+    <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO
+migrate_bitbucket_to_github<span class="w"> </span>dry-run<span class="w"> </span>--config<span class="w"> </span>migration_config.json
 </code></pre></div></p>
 <details>
 <summary>Alternative installation methods</summary>
 <p><strong>Run Directly</strong>
-<div class="highlight"><pre><span></span><code>pipx<span class="w"> </span>run<span class="w"> </span>bitbucket-migration<span class="w"> </span>audit_bitbucket<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--generate-config
+<div class="highlight"><pre><span></span><code>pipx<span class="w"> </span>run<span class="w"> </span>bitbucket-migration<span class="w"> </span>migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO
 </code></pre></div></p>
 <p><strong>From Source</strong>
 <div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/fkloosterman/bitbucket-migration.git
 <span class="nb">cd</span><span class="w"> </span>bitbucket-migration
-python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--generate-config
+python<span class="w"> </span>migrate_bitbucket_to_github.py<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO
 </code></pre></div></p>
 </details>
 </li>
@@ -1237,7 +1278,7 @@ A(
   **2. Mirror Git Repository**
   Copy commits, branches, and tags.
 )
-click A "#step-1-run-audit" "Audit Bitbucket Repo"
+click A "#step-1-run-audit" "migrate_bitbucket_to_github audit"
 click B "#step-2-prepare-github-repository" "Mirror Git Repo"
 
 B --&gt; C(
@@ -1274,11 +1315,10 @@ click G "#step-7-verify-and-clean-up" "Verify"</code></pre>
 <h2 id="step-by-step-migration">Step-by-Step Migration</h2>
 <h3 id="step-1-run-audit">Step 1 — Run Audit</h3>
 <p>Generates the initial configuration and user mapping.</p>
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span><span class="se">\</span>
+<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--workspace<span class="w"> </span>WORKSPACE<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--repo<span class="w"> </span>REPO<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--email<span class="w"> </span>YOU@DOMAIN<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--generate-config<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--gh-owner<span class="w"> </span>GITHUB_USER<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--gh-repo<span class="w"> </span>REPO
 </code></pre></div>
@@ -1337,9 +1377,8 @@ git<span class="w"> </span>push<span class="w"> </span>--mirror<span class="w"> 
 <hr />
 <h3 id="step-4-dry-run-migration">Step 4 — Dry Run Migration</h3>
 <p>Run a simulation of the migration to validate your configuration without making any changes.</p>
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>migrate_bitbucket_to_github.py<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--dry-run
+<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>dry-run<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--config<span class="w"> </span>migration_config.json
 </code></pre></div>
 <p><strong>What it does:</strong>
 - Validates tokens and permissions.
@@ -1361,7 +1400,7 @@ git<span class="w"> </span>push<span class="w"> </span>--mirror<span class="w"> 
 <hr />
 <h3 id="step-5-run-full-migration">Step 5 — Run Full Migration</h3>
 <p>Execute the actual migration of issues, PRs, comments, and attachments.</p>
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>migrate_bitbucket_to_github.py<span class="w"> </span><span class="se">\</span>
+<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--config<span class="w"> </span>migration_config.json
 </code></pre></div>
 <p><strong>What it does:</strong>
@@ -1382,7 +1421,7 @@ git<span class="w"> </span>push<span class="w"> </span>--mirror<span class="w"> 
 <p>Attachments are downloaded locally because GitHub’s API doesn’t support direct upload. Use the <code>--use-gh-cli</code> option in the migration script for automated upload, or follow the manual steps below.</p>
 <h4 id="automated-upload-recommended">Automated Upload (Recommended)</h4>
 <p>Add <code>--use-gh-cli</code> to the migration command for automatic attachment upload:</p>
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>migrate_bitbucket_to_github.py<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--use-gh-cli
+<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--use-gh-cli
 </code></pre></div>
 <p>This requires GitHub CLI installed and authenticated.</p>
 <h4 id="manual-upload">Manual Upload</h4>

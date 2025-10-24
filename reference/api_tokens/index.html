@@ -249,6 +249,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -1172,6 +1191,28 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1585,21 +1626,35 @@
 </thead>
 <tbody>
 <tr>
-<td><code>audit_bitbucket.py</code></td>
+<td><code>migrate_bitbucket_to_github test-auth</code></td>
+<td>✅ Required</td>
+<td>✅ Required</td>
+<td>❌ Optional</td>
+<td>Test authentication</td>
+</tr>
+<tr>
+<td><code>migrate_bitbucket_to_github audit</code></td>
 <td>✅ Required</td>
 <td>❌ Not needed</td>
 <td>❌ Not needed</td>
 <td>Audit repository content</td>
 </tr>
 <tr>
-<td><code>migrate_bitbucket_to_github.py</code></td>
+<td><code>migrate_bitbucket_to_github dry-run</code></td>
+<td>✅ Required</td>
+<td>✅ Required</td>
+<td>❌ Optional</td>
+<td>Dr-run migrate issues/PRs</td>
+</tr>
+<tr>
+<td><code>migrate_bitbucket_to_github migrate</code></td>
 <td>✅ Required</td>
 <td>✅ Required</td>
 <td>❌ Optional</td>
 <td>Migrate issues/PRs</td>
 </tr>
 <tr>
-<td><code>migrate_bitbucket_to_github.py --use-gh-cli</code></td>
+<td><code>migrate_bitbucket_to_github migrate --use-gh-cli</code></td>
 <td>✅ Required</td>
 <td>✅ Required</td>
 <td>✅ Required</td>
@@ -1614,7 +1669,7 @@
 </ul>
 <hr />
 <h2 id="bitbucket-cloud-api-token">🔑 Bitbucket Cloud API Token</h2>
-<p><strong>Required for:</strong> <code>audit_bitbucket.py</code>, <code>migrate_bitbucket_to_github.py</code></p>
+<p><strong>Required for:</strong> <code>migrate_bitbucket_to_github audit</code>, <code>migrate_bitbucket_to_github migrate</code></p>
 <h3 id="creating-your-token">Creating Your Token</h3>
 <ol>
 <li>Go to <strong>Atlassian Account Settings → Security → Create and manage API tokens</strong></li>
@@ -1643,7 +1698,7 @@
 </code></pre></div>
 <hr />
 <h2 id="github-authentication">🔑 GitHub Authentication</h2>
-<p><strong>Required for:</strong> <code>migrate_bitbucket_to_github.py</code></p>
+<p><strong>Required for:</strong> <code>migrate_bitbucket_to_github dry-run</code> and <code>migrate_bitbucket_to_github migrate</code></p>
 <h3 id="github-personal-access-token-pat">GitHub Personal Access Token (PAT)</h3>
 <h4 id="creating-your-token_1">Creating Your Token</h4>
 <ol>
@@ -1731,7 +1786,7 @@ winget<span class="w"> </span>install<span class="w"> </span>--id<span class="w"
 <span class="nv">GITHUB_TOKEN</span><span class="o">=</span>ghp_abcd123...
 
 <span class="c1"># Load in your scripts</span>
-python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span>--workspace<span class="w"> </span><span class="nv">$BITBUCKET_WORKSPACE</span><span class="w"> </span>--repo<span class="w"> </span><span class="nv">$BITBUCKET_REPO</span><span class="w"> </span>--email<span class="w"> </span><span class="nv">$BITBUCKET_EMAIL</span><span class="w"> </span>--token<span class="w"> </span><span class="nv">$BITBUCKET_TOKEN</span>
+migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span><span class="nv">$BITBUCKET_WORKSPACE</span><span class="w"> </span>--repo<span class="w"> </span><span class="nv">$BITBUCKET_REPO</span><span class="w"> </span>--email<span class="w"> </span><span class="nv">$BITBUCKET_EMAIL</span><span class="w"> </span>--token<span class="w"> </span><span class="nv">$BITBUCKET_TOKEN</span>
 </code></pre></div>
 <h3 id="security-guidelines">Security Guidelines</h3>
 <ul>
@@ -1783,7 +1838,7 @@ python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span>--worksp
 <h2 id="authentication-testing">✅ Authentication Testing</h2>
 <h3 id="test-bitbucket-authentication">Test Bitbucket Authentication</h3>
 <p>Use the provided test script to verify your Bitbucket token:</p>
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>test_auth.py<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com<span class="w"> </span>--token<span class="w"> </span>ATAT1234...
+<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>test-auth<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com<span class="w"> </span>--token<span class="w"> </span>ATAT1234...
 </code></pre></div>
 <p><strong>Expected output:</strong>
 <div class="highlight"><pre><span></span><code>✅ All tests passed! Your API Token is working correctly.
@@ -1886,7 +1941,7 @@ gh<span class="w"> </span>issue<span class="w"> </span>create<span class="w"> </
 <ol>
 <li>
 <p><strong>Test Bitbucket authentication:</strong>
-    <div class="highlight"><pre><span></span><code>python<span class="w"> </span>test_auth.py<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com<span class="w"> </span>--token<span class="w"> </span>ATAT1234...
+    <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>test-auth<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com<span class="w"> </span>--token<span class="w"> </span>ATAT1234...
 </code></pre></div></p>
 </li>
 <li>
@@ -1896,7 +1951,7 @@ gh<span class="w"> </span>issue<span class="w"> </span>create<span class="w"> </
 </li>
 <li>
 <p><strong>Run audit script:</strong>
-    <div class="highlight"><pre><span></span><code>python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com<span class="w"> </span>--token<span class="w"> </span>ATAT1234...
+    <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com<span class="w"> </span>--token<span class="w"> </span>ATAT1234...
 </code></pre></div></p>
 </li>
 </ol>
@@ -1920,7 +1975,7 @@ gh<span class="w"> </span>repo<span class="w"> </span>view<span class="w"> </spa
 </li>
 <li>
 <p><strong>Run dry-run migration:</strong>
-    <div class="highlight"><pre><span></span><code>python<span class="w"> </span>migrate_bitbucket_to_github.py<span class="w"> </span>--config<span class="w"> </span>config.json<span class="w"> </span>--dry-run
+    <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>dry-run<span class="w"> </span>--config<span class="w"> </span>config.json
 </code></pre></div></p>
 </li>
 </ol>
@@ -1936,16 +1991,16 @@ gh<span class="w"> </span>repo<span class="w"> </span>view<span class="w"> </spa
 <h2 id="quick-start-commands">🚀 Quick Start Commands</h2>
 <h3 id="basic-setup-no-attachments">Basic Setup (No Attachments)</h3>
 <div class="highlight"><pre><span></span><code><span class="c1"># 1. Test Bitbucket token</span>
-python<span class="w"> </span>test_auth.py<span class="w"> </span>--workspace<span class="w"> </span>myteam<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>me@company.com<span class="w"> </span>--token<span class="w"> </span>ATAT123...
+migrate_bitbucket_to_github<span class="w"> </span>test-auth<span class="w"> </span>--workspace<span class="w"> </span>myteam<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>me@company.com<span class="w"> </span>--token<span class="w"> </span>ATAT123...
 
 <span class="c1"># 2. Run audit</span>
-python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span>--workspace<span class="w"> </span>myteam<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>me@company.com<span class="w"> </span>--token<span class="w"> </span>ATAT123...
+migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>myteam<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>me@company.com<span class="w"> </span>--token<span class="w"> </span>ATAT123...
 
 <span class="c1"># 3. Test GitHub PAT</span>
 curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token ghp_456...&quot;</span><span class="w"> </span>https://api.github.com/user
 
 <span class="c1"># 4. Run migration dry-run</span>
-python<span class="w"> </span>migrate_bitbucket_to_github.py<span class="w"> </span>--config<span class="w"> </span>config.json<span class="w"> </span>--dry-run
+migrate_bitbucket_to_github<span class="w"> </span>dry-run<span class="w"> </span>--config<span class="w"> </span>config.json
 </code></pre></div>
 <h3 id="advanced-setup-with-auto-upload">Advanced Setup (With Auto-Upload)</h3>
 <div class="highlight"><pre><span></span><code><span class="c1"># 1. Install and setup GitHub CLI</span>
@@ -1955,7 +2010,7 @@ gh<span class="w"> </span>auth<span class="w"> </span>login
 gh<span class="w"> </span>auth<span class="w"> </span>status
 
 <span class="c1"># 3. Run migration with auto-upload</span>
-python<span class="w"> </span>migrate_bitbucket_to_github.py<span class="w"> </span>--config<span class="w"> </span>config.json<span class="w"> </span>--use-gh-cli
+migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>config.json<span class="w"> </span>--use-gh-cli
 </code></pre></div>
 <hr />
 <h2 id="token-requirements-summary">📋 Token Requirements Summary</h2>

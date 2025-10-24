@@ -249,6 +249,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -1289,6 +1308,28 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -2035,12 +2076,12 @@ Becomes: <span class="ni">@unknown</span>-user <span class="ge">*(Bitbucket user
 </ul>
 <hr />
 <h2 id="integration-with-audit-script">🛠️ Integration with Audit Script</h2>
-<p>The audit script (<code>audit_bitbucket.py</code>) is essential for effective user mapping configuration.</p>
+<p>The audit subcommand (<code>migrate_bitbucket_to_github audit</code>) is essential for effective user mapping configuration.</p>
 <h3 id="user-discovery-process">User Discovery Process</h3>
 <ol>
 <li>
 <p><strong>Run Initial Audit:</strong>
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>YOUR_EMAIL
+<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>YOUR_EMAIL
 </code></pre></div></p>
 </li>
 <li>
@@ -2082,8 +2123,8 @@ Becomes: <span class="ni">@unknown</span>-user <span class="ge">*(Bitbucket user
 </ul>
 <h3 id="configuration-generation">Configuration Generation</h3>
 <p><strong>Generate Complete Configuration:</strong>
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>YOUR_EMAIL<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--generate-config<span class="w"> </span>--gh-owner<span class="w"> </span>YOUR_GITHUB_USER<span class="w"> </span>--gh-repo<span class="w"> </span>YOUR_REPO
+<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>YOUR_EMAIL<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--gh-owner<span class="w"> </span>YOUR_GITHUB_USER<span class="w"> </span>--gh-repo<span class="w"> </span>YOUR_REPO
 </code></pre></div></p>
 <p><strong>Generated Files:</strong></p>
 <ul>
@@ -2093,7 +2134,7 @@ Becomes: <span class="ni">@unknown</span>-user <span class="ge">*(Bitbucket user
 <hr />
 <h2 id="setup-and-configuration">🔧 Setup and Configuration</h2>
 <h3 id="step-1-run-audit-for-user-discovery">Step 1: Run Audit for User Discovery</h3>
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span>--workspace<span class="w"> </span>myworkspace<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>user@example.com
+<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>myworkspace<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>user@example.com
 </code></pre></div>
 <h3 id="step-2-review-user-activity">Step 2: Review User Activity</h3>
 <p>Examine <code>audit_report.md</code> and <code>user_mapping_template.txt</code>:</p>
@@ -2124,7 +2165,7 @@ Becomes: <span class="ni">@unknown</span>-user <span class="ge">*(Bitbucket user
 <span class="p">}</span>
 </code></pre></div></p>
 <h3 id="step-4-test-configuration">Step 4: Test Configuration</h3>
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>migrate_bitbucket_to_github.py<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--dry-run
+<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>dry-run<span class="w"> </span>--config<span class="w"> </span>migration_config.json
 </code></pre></div>
 <p>Review the output for:</p>
 <ul>
@@ -2184,7 +2225,7 @@ Becomes: <span class="ni">@unknown</span>-user <span class="ge">*(Bitbucket user
 <li>
 <p><strong>Verify API Permissions:</strong>
 <div class="highlight"><pre><span></span><code><span class="c1"># Ensure your Bitbucket API token has user read permissions</span>
-python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span>--workspace<span class="w"> </span>WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>REPO<span class="w"> </span>--email<span class="w"> </span>EMAIL
+migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>REPO<span class="w"> </span>--email<span class="w"> </span>EMAIL
 </code></pre></div></p>
 </li>
 <li>
@@ -2298,7 +2339,7 @@ python<span class="w"> </span>audit_bitbucket.py<span class="w"> </span>--worksp
 <hr />
 <h2 id="best-practices">🎯 Best Practices</h2>
 <h3 id="1-always-run-audit-first">1. Always Run Audit First</h3>
-<p>The audit script provides essential user discovery and analysis capabilities.</p>
+<p>The audit subcommand provides essential user discovery and analysis capabilities.</p>
 <h3 id="2-use-enhanced-format-for-mentions">2. Use Enhanced Format for @Mentions</h3>
 <p>When @mentions are important to your team, use the enhanced mapping format.</p>
 <h3 id="3-test-thoroughly-with-dry-run">3. Test Thoroughly with Dry-Run</h3>
