@@ -384,7 +384,7 @@ def run_audit(args, parser=None):
             auditor.save_migration_config(config, 'migration_config.json')
 
         print("\n✅ Audit completed successfully!")
-        print("📄 Reports saved: bitbucket_audit_report.json, audit_report.md")
+        print("📄 Reports saved: bitbucket_audit_report.json, bitbucket_audit_report.md")
         if not getattr(args, 'no_config', False):
             print("📋 Migration config generated: migration_config.json")
 

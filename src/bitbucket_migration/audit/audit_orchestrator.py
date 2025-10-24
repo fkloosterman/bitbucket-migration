@@ -227,10 +227,10 @@ class AuditOrchestrator:
         )
 
         print("   ✓ Analysis complete")
+
     def _generate_report(self) -> Dict[str, Any]:
         """Generate comprehensive audit report."""
         print("   Generating audit report...")
-        print("   Note: Currently generating JSON report only. Markdown report generation is not implemented yet.")
 
         # Get structural analysis
         structure_analysis = self.audit_utils.analyze_repository_structure(
@@ -289,6 +289,10 @@ class AuditOrchestrator:
             'users': {
                 'total_unique': len(self.users),
                 'list': sorted(list(self.users)),
+                'mappings': {
+                    'account_id_to_username': self.user_mapper.account_id_to_username,
+                    'username_to_account_id': {v: k for k, v in self.user_mapper.account_id_to_username.items()},
+                },
             },
             'milestones': {
                 'total': len(self.milestones),
@@ -303,6 +307,156 @@ class AuditOrchestrator:
         }
 
         return report
+
+    def _generate_markdown_report(self, report: Dict[str, Any]) -> str:
+        """Generate markdown audit report."""
+        from datetime import datetime
+
+        md = []
+        md.append("# Bitbucket Repository Audit Report")
+        md.append("")
+        md.append(f"**Audit Date:** {report['repository']['audit_date']}")
+        md.append(f"**Repository:** {report['repository']['workspace']}/{report['repository']['repo']}")
+        md.append("")
+
+        # Executive Summary
+        md.append("## Executive Summary")
+        md.append("")
+        summary = report['summary']
+        md.append(f"- **Total Issues:** {summary['total_issues']}")
+        md.append(f"- **Total Pull Requests:** {summary['total_prs']}")
+        md.append(f"- **Total Users:** {summary['total_users']}")
+        md.append(f"- **Total Attachments:** {summary['total_attachments']} ({summary['total_attachment_size_mb']} MB)")
+        md.append(f"- **Estimated Migration Time:** {summary['estimated_migration_time_minutes']} minutes")
+        md.append("")
+
+        # Table of Contents
+        md.append("## Table of Contents")
+        md.append("")
+        md.append("1. [Issues Analysis](#issues-analysis)")
+        md.append("2. [Pull Requests Analysis](#pull-requests-analysis)")
+        md.append("3. [Attachments](#attachments)")
+        md.append("4. [Users](#users)")
+        md.append("5. [Milestones](#milestones)")
+        md.append("6. [Migration Analysis](#migration-analysis)")
+        md.append("")
+
+        # Issues Analysis
+        md.append("---")
+        md.append("")
+        md.append("## Issues Analysis")
+        md.append("")
+        issues = report['issues']
+        md.extend(self._format_dict_as_markdown(issues, ''))
+        md.append("")
+
+        # Pull Requests Analysis
+        md.append("---")
+        md.append("")
+        md.append("## Pull Requests Analysis")
+        md.append("")
+        prs = report['pull_requests']
+        md.extend(self._format_dict_as_markdown(prs, ''))
+        md.append("")
+
+        # Attachments
+        md.append("---")
+        md.append("")
+        md.append("## Attachments")
+        md.append("")
+        attachments = report['attachments']
+        md.extend(self._format_dict_as_markdown(attachments, ''))
+        md.append("")
+
+        # Users
+        md.append("---")
+        md.append("")
+        md.append("## Users")
+        md.append("")
+        users = report['users']
+        md.append(f"**Total Unique Users:** {users['total_unique']}")
+        md.append("")
+        md.append("### User List")
+        md.append("")
+        for user in users['list']:
+            md.append(f"- {user}")
+        md.append("")
+        md.append("### User Mappings")
+        md.append("")
+        mappings = users['mappings']
+        md.append("#### Account ID to Username")
+        md.append("")
+        md.extend(self._format_dict_as_markdown(mappings['account_id_to_username'], '  '))
+        md.append("")
+        md.append("#### Username to Account ID")
+        md.append("")
+        md.extend(self._format_dict_as_markdown(mappings['username_to_account_id'], '  '))
+        md.append("")
+
+        # Milestones
+        md.append("---")
+        md.append("")
+        md.append("## Milestones")
+        md.append("")
+        milestones = report['milestones']
+        md.append(f"**Total Milestones:** {milestones['total']}")
+        md.append("")
+        md.append("### Milestone List")
+        md.append("")
+        for milestone in milestones['list']:
+            md.append(f"- {milestone}")
+        md.append("")
+
+        # Migration Analysis
+        md.append("---")
+        md.append("")
+        md.append("## Migration Analysis")
+        md.append("")
+        migration = report['migration_analysis']
+        md.extend(self._format_dict_as_markdown(migration, ''))
+        md.append("")
+
+        # Footer
+        md.append("---")
+        md.append("")
+        md.append("## Notes")
+        md.append("")
+        md.append("- This audit report provides a comprehensive overview of the repository structure.")
+        md.append("- All data is based on the current state of the Bitbucket repository.")
+        md.append("- User mappings and migration estimates are included for planning purposes.")
+        md.append(f"**Audit completed:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        md.append("")
+        md.append("---")
+        md.append("")
+        md.append("*This report was automatically generated by the Bitbucket Audit Orchestrator.*")
+
+        return '\n'.join(md)
+
+    def _prettify_key(self, key: str) -> str:
+        """Prettify dictionary keys by replacing underscores and capitalizing."""
+        words = key.replace('_', ' ').split()
+        return ' '.join(word.capitalize() for word in words)
+
+    def _format_dict_as_markdown(self, data, prefix='') -> List[str]:
+        """Convert a dict or list to nested bulleted markdown list."""
+        lines = []
+        if isinstance(data, dict):
+            for k, v in data.items():
+                pretty_k = self._prettify_key(k)
+                if isinstance(v, (dict, list)):
+                    lines.append(f"{prefix}- {pretty_k}:")
+                    lines.extend(self._format_dict_as_markdown(v, prefix + '  '))
+                else:
+                    lines.append(f"{prefix}- {pretty_k}: {v}")
+        elif isinstance(data, (list, tuple)):
+            for item in data:
+                if isinstance(item, (dict, list)):
+                    lines.extend(self._format_dict_as_markdown(item, prefix + '  '))
+                else:
+                    lines.append(f"{prefix}- {item}")
+        else:
+            lines.append(f"{prefix}{data}")
+        return lines
 
     def _get_current_iso_date(self) -> str:
         """Get current date in ISO format."""
@@ -327,7 +481,13 @@ class AuditOrchestrator:
         with open(json_file, 'w') as f:
             json.dump(report, f, indent=2, default=str)
         print(f"📄 JSON report saved: {json_file}")
-        print("   Note: Only JSON report is being saved. Markdown report generation is not implemented yet.")
+
+        # Save Markdown report
+        markdown_content = self._generate_markdown_report(report)
+        markdown_file = output_path / 'bitbucket_audit_report.md'
+        with open(markdown_file, 'w', encoding='utf-8') as f:
+            f.write(markdown_content)
+        print(f"📄 Markdown report saved: {markdown_file}")
 
         # Save detailed data
         issues_file = output_path / 'bitbucket_issues_detail.json'
