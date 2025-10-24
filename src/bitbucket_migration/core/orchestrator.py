@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ..clients.bitbucket_client import BitbucketClient
 from ..clients.github_client import GitHubClient
+from ..clients.github_cli_client import GitHubCliClient
 from ..services.user_mapper import UserMapper
 from ..services.link_rewriter import LinkRewriter
 from ..services.attachment_handler import AttachmentHandler
@@ -80,6 +81,14 @@ class MigrationOrchestrator:
             dry_run=self.config.dry_run
         )
 
+        # Setup GitHub CLI client if needed
+        self.gh_cli_client = None
+        if self.config.use_gh_cli:
+            self.gh_cli_client = GitHubCliClient(
+                token=self.config.github.token,
+                dry_run=self.config.dry_run
+            )
+
         # Fetch issue type mapping for organization repositories
         type_mapping = {}
         try:
@@ -106,7 +115,7 @@ class MigrationOrchestrator:
             self.config.github.owner, self.config.github.repo, self.user_mapper
         )
         self.attachment_handler = AttachmentHandler(
-            Path('attachments_temp'), self.config.use_gh_cli, self.config.dry_run
+            Path('attachments_temp'), self.gh_cli_client, self.config.dry_run
         )
         self.formatter_factory = FormatterFactory(
             self.user_mapper, self.link_rewriter, self.attachment_handler
@@ -210,12 +219,21 @@ class MigrationOrchestrator:
         """Setup and validate the migration environment."""
         self.logger.info("Setting up migration environment...")
 
-        # Check if gh CLI is available when requested
+        # Check and setup GitHub CLI if requested
         if self.config.use_gh_cli and not self.config.dry_run:
-            if not self._check_gh_cli_available():
+            if not self.gh_cli_client.is_available():
                 self.logger.error("--use-gh-cli specified but GitHub CLI is not available")
                 self.logger.error("Please install gh CLI: https://cli.github.com/")
                 raise ConfigurationError("GitHub CLI not available. Please install from https://cli.github.com/")
+
+            if not self.gh_cli_client.is_authenticated():
+                self.logger.info("GitHub CLI is not authenticated. Attempting automatic authentication...")
+                if not self.gh_cli_client.authenticate():
+                    self.logger.error("Failed to authenticate GitHub CLI automatically")
+                    self.logger.error("Please run 'gh auth login' manually or use test-auth command")
+                    raise ConfigurationError("GitHub CLI authentication failed. Please authenticate manually.")
+                else:
+                    self.logger.info("GitHub CLI authenticated successfully")
 
         # Check repository type and fetch issue types
         self.logger.info("Checking repository type and issue type support...")
@@ -457,41 +475,6 @@ class MigrationOrchestrator:
             self.logger.info("Merged PRs are labeled 'pr-merged' so you can easily identify them.")
             self.logger.info("="*80)
 
-    def _check_gh_cli_available(self) -> bool:
-        """Check if GitHub CLI is available."""
-        import subprocess
-
-        try:
-            # Check if gh is installed
-            result = subprocess.run(['gh', '--version'],
-                                  capture_output=True,
-                                  text=True,
-                                  timeout=5)
-            if result.returncode != 0:
-                return False
-
-            self.logger.info(f"  ✓ GitHub CLI found: {result.stdout.split()[2]}")
-
-            # Check if gh is authenticated
-            result = subprocess.run(['gh', 'auth', 'status'],
-                                  capture_output=True,
-                                  text=True,
-                                  timeout=5)
-            if result.returncode != 0:
-                self.logger.warning("  ✗ GitHub CLI is not authenticated. Run: gh auth login")
-                return False
-
-            self.logger.info("  ✓ GitHub CLI is authenticated")
-            return True
-
-        except FileNotFoundError:
-            return False
-        except subprocess.TimeoutExpired:
-            self.logger.warning("  ✗ GitHub CLI check timed out")
-            return False
-        except Exception as e:
-            self.logger.warning(f"  ✗ Error checking GitHub CLI: {e}")
-            return False
 
     def _save_partial_mapping(self) -> None:
         """Save partial mapping in case of interruption."""

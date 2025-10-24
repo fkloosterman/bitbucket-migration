@@ -8,8 +8,10 @@ and error handling.
 
 from .bitbucket_client import BitbucketClient
 from .github_client import GitHubClient
+from .github_cli_client import GitHubCliClient
 
 __all__ = [
     'BitbucketClient',
-    'GitHubClient'
+    'GitHubClient',
+    'GitHubCliClient'
 ]

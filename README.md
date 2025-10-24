@@ -12,7 +12,7 @@ The goal is to provide a **reliable, transparent, and repeatable migration workf
 
 These migration tools were developed with assistance from Claude.ai, an AI language model by Anthropic. While every effort has been made to ensure the tools are reliable and safe:
 
-- **Use at your own risk**: Always perform a dry run (`--dry-run` flag) before actual migration
+- **Use at your own risk**: Always perform a dry run (`dry-run` subcommand) before actual migration
 - **Backup your data**: Ensure you have backups of your Bitbucket repositories before migration
 - **Review and verify**: Carefully review the migration report and verify the results
 - **Test thoroughly**: Test the migration process in a non-production environment first
@@ -23,7 +23,7 @@ The tools follow a conservative migration strategy (e.g., closed PRs become issu
 
 ## ✨ Features
 
-* **🆕 Unified Migration Toolkit**: Single entry point with `audit`, `migrate`, and `dry-run` subcommands
+* **🆕 Unified Migration Toolkit**: Single entry point with `audit`, `migrate`, `dry-run`, and `test-auth` subcommands
 * **🔍 Interactive Audit**: Pre-migration analysis with automatic configuration generation and user prompting
 * **📊 Comprehensive Analysis**: Repository structure, user activity, migration estimates, and gap detection
 * **🔄 Intelligent PR Migration**: OPEN PRs with existing branches become GitHub PRs, others become issues (safest approach)
@@ -64,7 +64,7 @@ It includes:
 
 ## 🧰 Requirements
 
-* Python 3.7+
+* Python 3.12+
 * Git 2.x+
 * Bitbucket API token
 * GitHub Personal Access Token (with `repo` scope)
@@ -94,16 +94,6 @@ migrate_bitbucket_to_github migrate --config migration_config.json
 # 6. Follow documentation for attachment upload and verification
 ```
 
-### Legacy Scripts (Still Supported)
-
-```bash
-# Run audit script directly
-pipx run bitbucket-migration audit_bitbucket --workspace WORKSPACE --repo REPO --generate-config
-
-# Run migration script directly
-pipx run bitbucket-migration migrate_bitbucket_to_github --config migration_config.json
-```
-
 **Alternative: Clone from source**
 ```bash
 git clone https://github.com/fkloosterman/bitbucket-migration.git
@@ -112,8 +102,9 @@ cd bitbucket-migration
 # Use unified toolkit
 python migrate_bitbucket_to_github.py audit --workspace WORKSPACE --repo REPO --email EMAIL --generate-config
 
-# Or use legacy scripts
-python audit_bitbucket.py --workspace WORKSPACE --repo REPO --email EMAIL --generate-config
+# Or use the short alias (after installing package)
+pip install -e .
+bb2gh audit --workspace WORKSPACE --repo REPO --email EMAIL --generate-config
 ```
 
 For full instructions, visit the [Migration Guide](https://fkloosterman.github.io/bitbucket-migration/migration_guide/).
@@ -123,18 +114,31 @@ For full instructions, visit the [Migration Guide](https://fkloosterman.github.i
 ```bash
 # Show all available commands
 migrate_bitbucket_to_github --help
+# Or using the short alias
+bb2gh --help
 
 # Audit repository (interactive prompts for missing args)
 migrate_bitbucket_to_github audit --workspace WORKSPACE --repo REPO --email EMAIL
+# Or using the short alias
+bb2gh audit --workspace WORKSPACE --repo REPO --email EMAIL
 
 # Generate configuration from audit
 migrate_bitbucket_to_github audit --workspace WORKSPACE --repo REPO --email EMAIL --generate-config
+# Or using the short alias
+bb2gh audit --workspace WORKSPACE --repo REPO --email EMAIL --generate-config
+
+# Test authentication (Bitbucket and GitHub APIs, plus GitHub CLI)
+migrate_bitbucket_to_github test-auth --workspace WORKSPACE --repo REPO --email EMAIL --gh-owner GH_OWNER --gh-repo GH_REPO
 
 # Dry run migration (validate configuration)
 migrate_bitbucket_to_github dry-run --config migration_config.json
+# Or using the short alias
+bb2gh dry-run --config migration_config.json
 
 # Full migration
 migrate_bitbucket_to_github migrate --config migration_config.json
+# Or using the short alias
+bb2gh migrate --config migration_config.json
 
 # Migrate only issues
 migrate_bitbucket_to_github migrate --config migration_config.json --skip-prs
@@ -157,4 +161,4 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE.txt
 
 ---
 
-© 2025 F Kloosterman. All rights reserved.
+© 2025 Fabian Kloosterman. All rights reserved.

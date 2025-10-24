@@ -2,11 +2,14 @@ import requests
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from ..clients.github_cli_client import GitHubCliClient
+
 class AttachmentHandler:
-    def __init__(self, attachment_dir: Path, use_gh_cli: bool = False, dry_run: bool = False):
+    def __init__(self, attachment_dir: Path, gh_cli_client: Optional[GitHubCliClient] = None, dry_run: bool = False):
         self.attachment_dir = attachment_dir
         self.attachment_dir.mkdir(exist_ok=True)
-        self.use_gh_cli = use_gh_cli
+        self.gh_cli_client = gh_cli_client
+        self.use_gh_cli = gh_cli_client is not None
         self.dry_run = dry_run
         self.attachments: List[Dict] = []
     
@@ -38,37 +41,11 @@ class AttachmentHandler:
     
     def upload_to_github(self, filepath: Path, issue_number: int, github_client, gh_owner: str, gh_repo: str) -> Optional[str]:
         """Upload attachment to GitHub issue"""
-        if self.use_gh_cli:
-            return self._upload_via_cli(filepath, issue_number, gh_owner, gh_repo)
+        if self.use_gh_cli and self.gh_cli_client:
+            return self.gh_cli_client.upload_attachment(filepath, issue_number, gh_owner, gh_repo)
         else:
             return self._create_upload_comment(filepath, issue_number, github_client)
     
-    def _upload_via_cli(self, filepath: Path, issue_number: int, gh_owner: str, gh_repo: str) -> Optional[str]:
-        """Upload attachment using GitHub CLI"""
-        import subprocess
-        try:
-            file_size = filepath.stat().st_size
-            size_mb = round(file_size / (1024 * 1024), 2)
-            
-            # Create a comment with the attached file
-            result = subprocess.run([
-                'gh', 'issue', 'comment', str(issue_number),
-                '--repo', f'{gh_owner}/{gh_repo}',
-                '--body', f'📎 **Attachment from Bitbucket**: `{filepath.name}` ({size_mb} MB)',
-                '--attach', str(filepath)
-            ], capture_output=True, text=True, timeout=60)
-            
-            if result.returncode == 0:
-                return f"Uploaded via gh CLI"
-            else:
-                print(f"ERROR uploading via CLI: {result.stderr}")
-                return None
-        except subprocess.TimeoutExpired:
-            print(f"ERROR: gh CLI command timed out for {filepath.name}")
-            return None
-        except Exception as e:
-            print(f"ERROR in _upload_via_cli: {e}")
-            return None
     
     def _create_upload_comment(self, filepath: Path, issue_number: int, github_client) -> str:
         """Create comment noting attachment for manual upload"""

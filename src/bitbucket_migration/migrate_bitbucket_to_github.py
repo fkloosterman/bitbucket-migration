@@ -2,88 +2,67 @@
 """
 Bitbucket to GitHub Migration Toolkit
 
-⚠️  DISCLAIMER: This migration tool was developed with assistance from Claude.ai, an AI language model.
-    Use at your own risk. Always perform dry runs and verify results before production use.
+Comprehensive migration toolkit for transferring Bitbucket repositories to GitHub while
+preserving metadata, comments, attachments, and cross-references between issues and pull requests.
 
-Comprehensive migration toolkit that provides audit, dry-run, and full migration capabilities
-for transferring Bitbucket repositories to GitHub while preserving all metadata, comments,
-attachments, and cross-references between issues and pull requests.
+.. warning::
+   This tool was developed with AI assistance. Use at your own risk.
+   Always perform dry runs and verify results before production use.
 
-ARCHITECTURE:
-    The tool uses a modular architecture with separate components:
-    - MigrationOrchestrator: Coordinates the overall migration process
-    - AuditOrchestrator: Handles pre-migration analysis and planning
-    - IssueMigrator: Handles issue migration with attachments and comments
-    - PullRequestMigrator: Handles PR migration with branch checking
-    - ReportGenerator: Generates comprehensive migration reports
-    - SecureConfigLoader: Loads configuration with security enhancements
+Architecture
+------------
+The tool uses a modular architecture with separate components:
+- MigrationOrchestrator: Coordinates the overall migration process
+- AuditOrchestrator: Handles pre-migration analysis and planning
+- IssueMigrator: Handles issue migration with attachments and comments
+- PullRequestMigrator: Handles PR migration with branch checking
+- ReportGenerator: Generates comprehensive migration reports
+- SecureConfigLoader: Loads configuration with security enhancements
 
-SUBCOMMANDS:
-    audit     Audit repository for migration planning and generate configuration
-    migrate   Run full migration (requires configuration file)
-    dry-run   Simulate migration without making changes to GitHub
-    test-auth Test Bitbucket and GitHub API authentication
+Subcommands
+-----------
+audit     Audit repository for migration planning and generate configuration
+migrate   Run full migration (requires configuration file)
+dry-run   Simulate migration without making changes to GitHub
+test-auth Test Bitbucket and GitHub API authentication
 
-Purpose:
-    Provides complete migration workflow from Bitbucket to GitHub with intelligent handling of:
-    - Issues with full comment history and metadata preservation
-    - Pull requests using smart migration strategy (open PRs → GitHub PRs, others → issues)
-    - User mapping from Bitbucket display names to GitHub usernames
-    - Attachments downloaded locally for manual upload to GitHub
-    - Automatic link rewriting to maintain issue/PR references
-    - Placeholder issues for deleted/missing content to preserve numbering
-    - Pre-migration audit and planning capabilities
-    - Authentication testing for both Bitbucket and GitHub APIs
-    - GitHub CLI availability and authentication checking
+Migration Strategy
+------------------
+Issues: All Bitbucket issues become GitHub issues, preserving original numbering with placeholders
+Pull Requests:
+    - OPEN PRs with existing branches → GitHub PRs (remain open)
+    - OPEN PRs with missing branches → GitHub Issues
+    - MERGED/DECLINED/SUPERSEDED PRs → GitHub Issues (safest approach)
 
-Migration Strategy:
-     Issues: All Bitbucket issues become GitHub issues, preserving original numbering with placeholders
-     Pull Requests:
-         - OPEN PRs with existing branches → GitHub PRs (remain open)
-         - OPEN PRs with missing branches → GitHub Issues
-         - MERGED/DECLINED/SUPERSEDED PRs → GitHub Issues (safest approach)
+Security Features
+-----------------
+- Tokens can be loaded from environment variables (BITBUCKET_TOKEN, GITHUB_TOKEN)
+- Token format validation for added security
+- Structured logging with file rotation
+- Secure configuration loading with validation
 
-SECURITY ENHANCEMENTS:
-     - Tokens can be loaded from environment variables (BITBUCKET_TOKEN, GITHUB_TOKEN)
-     - Token format validation for added security
-     - Structured logging with file rotation
-     - Secure configuration loading with validation
+Prerequisites
+-------------
+1. Create empty GitHub repository
+2. Push git history: git push --mirror <github-url>
+3. Generate Bitbucket API token with repository read access
+4. Generate GitHub personal access token with repository write access
+5. Run audit to understand migration scope and generate configuration
 
-Prerequisites:
-    1. Create empty GitHub repository
-    2. Push git history: git push --mirror <github-url>
-    3. Generate Bitbucket API token with repository read access
-    4. Generate GitHub personal access token with repository write access
-    5. Run audit to understand migration scope and generate configuration
+Examples
+--------
+# Audit repository before migration (recommended first step)
+python migrate_bitbucket_to_github.py audit --workspace myteam --repo myproject --email user@example.com
 
-Examples:
-    # Audit repository before migration (recommended first step)
-    python migrate_bitbucket_to_github.py audit --workspace myteam --repo myproject --email user@example.com
+# Test authentication before migration
+python migrate_bitbucket_to_github.py test-auth --workspace myteam --repo myproject \\
+    --email user@example.com --gh-owner myuser --gh-repo myproject
 
-    # Generate migration config from audit (default)
-    python migrate_bitbucket_to_github.py audit --workspace myteam --repo myproject --email user@example.com
+# Dry run to validate configuration
+python migrate_bitbucket_to_github.py dry-run --config config.json
 
-    # Skip config generation
-    python migrate_bitbucket_to_github.py audit --workspace myteam --repo myproject --email user@example.com --no-config
-
-    # Test authentication before migration
-    python migrate_bitbucket_to_github.py test-auth --workspace myteam --repo myproject --email user@example.com --gh-owner myuser --gh-repo myproject
-
-    # Dry run to validate configuration
-    python migrate_bitbucket_to_github.py dry-run --config config.json
-
-    # Full migration
-    python migrate_bitbucket_to_github.py migrate --config config.json
-
-    # Migrate only issues
-    python migrate_bitbucket_to_github.py migrate --config config.json --skip-prs
-
-    # Migrate only pull requests
-    python migrate_bitbucket_to_github.py migrate --config config.json --skip-issues
-
-DEPRECATED SCRIPTS:
-    - test_auth.py: Use 'python migrate_bitbucket_to_github.py test-auth' instead
-    - audit_bitbucket.py: Use 'python migrate_bitbucket_to_github.py audit' instead
+# Full migration
+python migrate_bitbucket_to_github.py migrate --config config.json
 """
 
 import argparse
@@ -126,6 +105,7 @@ from bitbucket_migration.config.secure_config import SecureConfigLoader
 # Import API clients
 from bitbucket_migration.clients.bitbucket_client import BitbucketClient
 from bitbucket_migration.clients.github_client import GitHubClient
+from bitbucket_migration.clients.github_cli_client import GitHubCliClient
 
 # Import services
 from bitbucket_migration.services.user_mapper import UserMapper
@@ -149,7 +129,22 @@ from bitbucket_migration.audit.audit_orchestrator import AuditOrchestrator
 
 
 def create_main_parser():
-    """Create the main argument parser with subcommands."""
+    """Create and configure the main argument parser with subcommands.
+
+    Sets up the command-line interface with comprehensive help text, subcommands
+    for audit, migrate, dry-run, and test-auth operations, along with all
+    required and optional arguments for each subcommand.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        Configured argument parser with all subcommands and options.
+
+    Notes
+    -----
+    The parser includes detailed help text and examples in the epilog.
+    All subcommands support interactive prompting for missing required arguments.
+    """
     parser = argparse.ArgumentParser(
         description='Bitbucket to GitHub Migration Tools',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -258,7 +253,40 @@ to avoid storing sensitive data in configuration files.
 
 
 def prompt_for_missing_args(args, required_fields, parser=None):
-    """Prompt user for missing required arguments."""
+    """Prompt user for missing required command-line arguments.
+
+    Interactively prompts the user to input missing required arguments, with special
+    handling for sensitive fields like API tokens using getpass for secure input.
+    Attempts to provide helpful prompts by extracting help text from the argument parser.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        The parsed command-line arguments object to be updated.
+    required_fields : list of str
+        List of field names that need to be prompted if missing.
+    parser : argparse.ArgumentParser, optional
+        The argument parser instance for extracting help text, by default None.
+
+    Returns
+    -------
+    argparse.Namespace
+        Updated args object with user-provided values for missing fields.
+
+    Side Effects
+    ------------
+    - Prompts user for input via stdin
+    - Uses getpass for secure token input
+    - Modifies the input args object in-place
+
+    Examples
+    --------
+    >>> args = argparse.Namespace(workspace='myteam', repo='myproject')
+    >>> required = ['workspace', 'repo', 'email', 'token']
+    >>> updated_args = prompt_for_missing_args(args, required)
+    >>> print(updated_args.email)
+    user@example.com
+    """
     import getpass
 
     for field in required_fields:
@@ -287,7 +315,47 @@ def prompt_for_missing_args(args, required_fields, parser=None):
 
 
 def run_audit(args, parser=None):
-    """Run audit with interactive prompting for missing arguments."""
+    """Run comprehensive audit of Bitbucket repository for migration planning.
+
+    Performs a complete analysis of the Bitbucket repository including issues, pull
+    requests, branches, and user mappings. Generates detailed reports and optionally
+    creates a migration configuration file. Prompts for any missing required arguments.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Command-line arguments containing workspace, repo, email, token, and optional
+        flags like no_config, gh_owner, gh_repo.
+    parser : argparse.ArgumentParser, optional
+        The argument parser instance for extracting help text during prompting.
+
+    Side Effects
+    ------------
+    - Prompts user for missing arguments interactively
+    - Creates BitbucketClient and AuditOrchestrator instances
+    - Makes API calls to Bitbucket
+    - Generates and saves audit reports (bitbucket_audit_report.json, audit_report.md)
+    - Optionally generates migration configuration file (migration_config.json)
+
+    Raises
+    ------
+    APIError
+        If Bitbucket API calls fail.
+    AuthenticationError
+        If Bitbucket authentication fails.
+    NetworkError
+        If network connectivity issues occur.
+    ValidationError
+        If provided arguments are invalid.
+    KeyboardInterrupt
+        If user interrupts the audit process.
+
+    Examples
+    --------
+    >>> args = argparse.Namespace(workspace='myteam', repo='myproject')
+    >>> run_audit(args)
+    # Prompts for email and token, then runs audit
+    """
     # Prompt for missing arguments
     required_fields = ['workspace', 'repo', 'email', 'token']
     args = prompt_for_missing_args(args, required_fields, parser)
@@ -333,10 +401,31 @@ def run_audit(args, parser=None):
         sys.exit(1)
 
 
-def _check_gh_cli_available() -> Dict[str, Any]:
-    """Check if GitHub CLI is available and authenticated."""
-    import subprocess
+def _check_gh_cli_available(gh_token: str) -> Dict[str, Any]:
+    """Check if GitHub CLI is available and authenticated.
 
+    Verifies the installation and authentication status of the GitHub CLI tool,
+    which is required for automatic attachment uploads during migration.
+
+    Parameters
+    ----------
+    gh_token : str
+        GitHub personal access token for authentication checks.
+
+    Returns
+    -------
+    dict
+        Dictionary containing check results with the following keys:
+        - 'available' (bool): Whether GitHub CLI is installed
+        - 'authenticated' (bool): Whether GitHub CLI is authenticated
+        - 'details' (str): Human-readable description of the status
+        - 'version' (str): GitHub CLI version if available, empty string otherwise
+
+    Notes
+    -----
+    This is a private helper function used by authentication testing.
+    Uses GitHubCliClient for checks.
+    """
     result = {
         'available': False,
         'authenticated': False,
@@ -345,33 +434,22 @@ def _check_gh_cli_available() -> Dict[str, Any]:
     }
 
     try:
-        # Check if gh is installed
-        gh_result = subprocess.run(['gh', '--version'],
-                                 capture_output=True,
-                                 text=True,
-                                 timeout=5)
-        if gh_result.returncode == 0:
+        # Create CLI client for checks
+        cli_client = GitHubCliClient(gh_token)
+
+        if cli_client.is_available():
             result['available'] = True
-            result['version'] = gh_result.stdout.split()[2] if len(gh_result.stdout.split()) > 2 else 'unknown'
+            result['version'] = cli_client.get_version() or 'unknown'
             result['details'] = f"GitHub CLI {result['version']} is installed"
 
-            # Check if gh is authenticated
-            auth_result = subprocess.run(['gh', 'auth', 'status'],
-                                       capture_output=True,
-                                       text=True,
-                                       timeout=5)
-            if auth_result.returncode == 0:
+            if cli_client.is_authenticated():
                 result['authenticated'] = True
                 result['details'] += " and authenticated"
             else:
                 result['details'] += " but not authenticated"
         else:
-            result['details'] = "GitHub CLI not found"
+            result['details'] = "GitHub CLI not installed"
 
-    except FileNotFoundError:
-        result['details'] = "GitHub CLI not installed"
-    except subprocess.TimeoutExpired:
-        result['details'] = "GitHub CLI check timed out"
     except Exception as e:
         result['details'] = f"Error checking GitHub CLI: {e}"
 
@@ -379,28 +457,41 @@ def _check_gh_cli_available() -> Dict[str, Any]:
 
 
 def _authenticate_gh_cli(token: str) -> Dict[str, Any]:
-    """Attempt to authenticate GitHub CLI using the provided token."""
-    import subprocess
+    """Authenticate GitHub CLI using the provided personal access token.
 
+    Attempts to authenticate the GitHub CLI tool using the provided token.
+    This enables automatic attachment uploads during the migration process.
+
+    Parameters
+    ----------
+    token : str
+        GitHub personal access token with repository permissions.
+
+    Returns
+    -------
+    dict
+        Dictionary containing authentication results with keys:
+        - 'success' (bool): Whether authentication was successful
+        - 'error' (str): Error message if authentication failed, empty if successful
+
+    Notes
+    -----
+    This is a private helper function used by authentication testing.
+    Uses GitHubCliClient for authentication.
+    """
     result = {
         'success': False,
         'error': ''
     }
 
     try:
-        # Use gh auth login with token
-        auth_result = subprocess.run([
-            'gh', 'auth', 'login',
-            '--with-token'
-        ], input=token, text=True, capture_output=True, timeout=10)
-
-        if auth_result.returncode == 0:
+        # Create CLI client and attempt authentication
+        cli_client = GitHubCliClient(token)
+        if cli_client.authenticate():
             result['success'] = True
         else:
-            result['error'] = auth_result.stderr.strip() or "Authentication failed"
+            result['error'] = "Authentication failed"
 
-    except subprocess.TimeoutExpired:
-        result['error'] = "Authentication timed out"
     except Exception as e:
         result['error'] = f"Authentication error: {e}"
 
@@ -408,7 +499,39 @@ def _authenticate_gh_cli(token: str) -> Dict[str, Any]:
 
 
 def run_test_auth(args, parser=None):
-    """Run authentication testing with interactive prompting for missing arguments."""
+    """Test authentication for both Bitbucket and GitHub APIs plus GitHub CLI.
+
+    Performs comprehensive authentication testing for all services required during
+    migration: Bitbucket API, GitHub API, and GitHub CLI. Provides detailed feedback
+    and troubleshooting guidance for any failures. Prompts for missing arguments.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Command-line arguments containing all required authentication parameters:
+        workspace, repo, email, token, gh_owner, gh_repo, gh_token.
+    parser : argparse.ArgumentParser, optional
+        The argument parser instance for extracting help text during prompting.
+
+    Side Effects
+    ------------
+    - Prompts user for missing authentication parameters
+    - Makes API calls to Bitbucket and GitHub
+    - Checks and potentially modifies GitHub CLI authentication state
+    - Prints detailed status and troubleshooting information to stdout
+    - May exit the program with error code 1 if authentication fails
+
+    Raises
+    ------
+    SystemExit
+        Exits with code 1 if any authentication tests fail.
+
+    Examples
+    --------
+    >>> args = argparse.Namespace(workspace='myteam', repo='myproject')
+    >>> run_test_auth(args)
+    # Prompts for all missing auth parameters, then tests connections
+    """
     # Prompt for missing arguments
     required_fields = ['workspace', 'repo', 'email', 'token', 'gh_owner', 'gh_repo', 'gh_token']
     args = prompt_for_missing_args(args, required_fields, parser)
@@ -502,7 +625,7 @@ def run_test_auth(args, parser=None):
     # Test GitHub CLI availability and authentication
     print("Testing GitHub CLI...")
     try:
-        gh_cli_result = _check_gh_cli_available()
+        gh_cli_result = _check_gh_cli_available(args.gh_token)
         results['gh_cli']['available'] = gh_cli_result['available']
         results['gh_cli']['authenticated'] = gh_cli_result['authenticated']
         results['gh_cli']['details'] = gh_cli_result['details']
@@ -603,7 +726,48 @@ def run_test_auth(args, parser=None):
 
 
 def run_migration(args, dry_run=False):
-    """Run migration or dry-run with configuration file."""
+    """Execute migration or dry-run using configuration file.
+
+    Loads migration configuration and executes either a full migration or a dry-run
+    simulation. In dry-run mode, all validation and planning occurs without making
+    any changes to GitHub. Supports overriding configuration values via command-line.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Command-line arguments containing config path and optional overrides:
+        config (required), skip_issues, skip_prs, skip_pr_as_issue, use_gh_cli.
+    dry_run : bool, optional
+        If True, simulate migration without making changes to GitHub, by default False.
+
+    Side Effects
+    ------------
+    - Loads configuration from JSON file
+    - Creates MigrationOrchestrator instance
+    - Makes API calls to Bitbucket and GitHub (read-only in dry-run mode)
+    - Downloads attachments to local directory
+    - Prints detailed logging information to console and files
+    - In full migration mode: creates issues, PRs, comments, and labels on GitHub
+
+    Raises
+    ------
+    ConfigurationError
+        If configuration file is invalid or missing required fields.
+    ValidationError
+        If configuration values are invalid.
+    APIError
+        If API calls to Bitbucket or GitHub fail.
+    AuthenticationError
+        If authentication with either service fails.
+    NetworkError
+        If network connectivity issues occur.
+
+    Examples
+    --------
+    >>> args = argparse.Namespace(config='migration_config.json')
+    >>> run_migration(args, dry_run=True)  # Simulate migration
+    >>> run_migration(args, dry_run=False)  # Execute full migration
+    """
     # Load configuration securely
     try:
         config = SecureConfigLoader.load_from_file(args.config)
@@ -668,7 +832,34 @@ def run_migration(args, dry_run=False):
 
 
 def main():
-    """Main entry point with subcommand support."""
+    """Main entry point for the Bitbucket to GitHub migration CLI tool.
+
+    Parses command-line arguments and routes execution to the appropriate subcommand
+    handler (audit, migrate, dry-run, or test-auth). Provides comprehensive error
+    handling and user-friendly error messages.
+
+    Side Effects
+    ------------
+    - Parses command-line arguments using argparse
+    - Routes to appropriate subcommand handler function
+    - May prompt user for missing required arguments
+    - Exits program with appropriate error codes on failures
+    - Prints status messages and errors to stdout/stderr
+
+    Raises
+    ------
+    SystemExit
+        Always exits with code 0 on success, 1 on error.
+
+    Examples
+    --------
+    Run from command line with subcommands:
+
+    $ python migrate_bitbucket_to_github.py audit --workspace myteam --repo myproject
+    $ python migrate_bitbucket_to_github.py migrate --config migration_config.json
+    $ python migrate_bitbucket_to_github.py dry-run --config migration_config.json
+    $ python migrate_bitbucket_to_github.py test-auth --workspace myteam --repo myproject
+    """
     parser = create_main_parser()
     args = parser.parse_args()
 

@@ -31,5 +31,4 @@ docs = [
 
 [project.scripts]
     migrate_bitbucket_to_github = "bitbucket_migration.migrate_bitbucket_to_github:main"
-    audit_bitbucket = "bitbucket_migration.audit_bitbucket:main"
-    test_bitbucket_auth = "bitbucket_migration.test_auth:main"
+    bb2gh = "bitbucket_migration.migrate_bitbucket_to_github:main"
