@@ -80,7 +80,7 @@ It includes:
 pipx install bitbucket-migration
 
 # 2. Audit Bitbucket repo (generates configuration)
-migrate_bitbucket_to_github audit --workspace WORKSPACE --repo REPO --email EMAIL --generate-config
+migrate_bitbucket_to_github audit --workspace WORKSPACE --repo REPO --email EMAIL
 
 # 3. Edit configuration
 vim migration_config.json
@@ -100,11 +100,11 @@ git clone https://github.com/fkloosterman/bitbucket-migration.git
 cd bitbucket-migration
 
 # Use unified toolkit
-python migrate_bitbucket_to_github.py audit --workspace WORKSPACE --repo REPO --email EMAIL --generate-config
+migrate_bitbucket_to_github audit --workspace WORKSPACE --repo REPO --email EMAIL
 
 # Or use the short alias (after installing package)
 pip install -e .
-bb2gh audit --workspace WORKSPACE --repo REPO --email EMAIL --generate-config
+bb2gh audit --workspace WORKSPACE --repo REPO --email EMAIL
 ```
 
 For full instructions, visit the [Migration Guide](https://fkloosterman.github.io/bitbucket-migration/migration_guide/).
@@ -123,9 +123,9 @@ migrate_bitbucket_to_github audit --workspace WORKSPACE --repo REPO --email EMAI
 bb2gh audit --workspace WORKSPACE --repo REPO --email EMAIL
 
 # Generate configuration from audit
-migrate_bitbucket_to_github audit --workspace WORKSPACE --repo REPO --email EMAIL --generate-config
+migrate_bitbucket_to_github audit --workspace WORKSPACE --repo REPO --email EMAIL
 # Or using the short alias
-bb2gh audit --workspace WORKSPACE --repo REPO --email EMAIL --generate-config
+bb2gh audit --workspace WORKSPACE --repo REPO --email EMAIL
 
 # Test authentication (Bitbucket and GitHub APIs, plus GitHub CLI)
 migrate_bitbucket_to_github test-auth --workspace WORKSPACE --repo REPO --email EMAIL --gh-owner GH_OWNER --gh-repo GH_REPO
