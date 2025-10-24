@@ -21,6 +21,14 @@ Comments are added to issues/PRs with attribution:
 - ❌ **Comment Author**: Shows as migration account.
 - ❌ **Comment Date**: Shows as migration date.
 - ❌ **Comment Edit History**: Only final version migrated.
-- ❌ **Threaded Replies**: Flattened to sequential comments.
-- ❌ **Inline Code Comments**: PR code review comments are not migrated.
+- ❌ **Threaded Replies**: For PRs migrated as issues, replies are flattened with notes. For PRs migrated as PRs, inline review comments support threading.
+- ❌ **Inline Code Comments**: PR code review comments are not migrated (except for threaded support in PRs).
 - ❌ **Resolved/Unresolved Status**: Comment resolution status not preserved.
+
+## Special Handling
+- ✅ **Deleted Comments**: Comments marked as deleted in Bitbucket are skipped during migration to avoid data pollution.
+- ✅ **Pending Comments**: Comments marked as pending approval in Bitbucket are migrated with a clear annotation: **[PENDING APPROVAL]** at the top of the comment body.
+- ✅ **Threaded Replies**:
+  - For PRs migrated as GitHub PRs, inline review comments support threading using GitHub's `in_reply_to` field.
+  - For PRs migrated as issues or other cases, replies are flattened with a note: **[Reply to Bitbucket Comment {ID}]**.
+  - Comments are processed in topological order to ensure parents are created before replies.

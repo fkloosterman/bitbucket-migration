@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
 from pathlib import Path
 
-from exceptions import ConfigurationError, ValidationError
+from ..exceptions import ConfigurationError, ValidationError
 
 
 @dataclass
@@ -76,6 +76,8 @@ class MigrationConfig:
         user_mapping: Mapping of Bitbucket users to GitHub users
         repository_mapping: Cross-repository link mappings
         dry_run: Whether to simulate migration without making changes
+        skip_issues: Whether to skip issue migration
+        skip_prs: Whether to skip PR migration
         skip_pr_as_issue: Whether to skip migrating closed PRs as issues
         use_gh_cli: Whether to use GitHub CLI for attachment uploads
     """
@@ -83,9 +85,11 @@ class MigrationConfig:
     github: GitHubConfig
     user_mapping: Dict[str, Any]
     repository_mapping: Optional[Dict[str, str]] = field(default_factory=dict)
-    dry_run: bool = False
-    skip_pr_as_issue: bool = False
-    use_gh_cli: bool = False
+    dry_run: bool = field(default=False)
+    skip_issues: bool = field(default=False)
+    skip_prs: bool = field(default=False)
+    skip_pr_as_issue: bool = field(default=False)
+    use_gh_cli: bool = field(default=False)
 
     def __post_init__(self):
         """Validate configuration after initialization."""
@@ -217,9 +221,11 @@ class ConfigLoader:
                 github=github_config,
                 user_mapping=data['user_mapping'],
                 repository_mapping=data.get('repository_mapping', {}),
-                dry_run=data.get('dry_run', False),
-                skip_pr_as_issue=data.get('skip_pr_as_issue', False),
-                use_gh_cli=data.get('use_gh_cli', False)
+                dry_run=bool(data.get('dry_run', False)),
+                skip_issues=bool(data.get('skip_issues', False)),
+                skip_prs=bool(data.get('skip_prs', False)),
+                skip_pr_as_issue=bool(data.get('skip_pr_as_issue', False)),
+                use_gh_cli=bool(data.get('use_gh_cli', False))
             )
 
         except TypeError as e:
@@ -261,9 +267,11 @@ class ConfigLoader:
                 github=github_config,
                 user_mapping=data['user_mapping'],
                 repository_mapping=data.get('repository_mapping', {}),
-                dry_run=data.get('dry_run', False),
-                skip_pr_as_issue=data.get('skip_pr_as_issue', False),
-                use_gh_cli=data.get('use_gh_cli', False)
+                dry_run=bool(data.get('dry_run', False)),
+                skip_issues=bool(data.get('skip_issues', False)),
+                skip_prs=bool(data.get('skip_prs', False)),
+                skip_pr_as_issue=bool(data.get('skip_pr_as_issue', False)),
+                use_gh_cli=bool(data.get('use_gh_cli', False))
             )
 
         except TypeError as e:
@@ -295,9 +303,11 @@ class ConfigLoader:
             },
             'user_mapping': config.user_mapping,
             'repository_mapping': config.repository_mapping,
-            'dry_run': config.dry_run,
-            'skip_pr_as_issue': config.skip_pr_as_issue,
-            'use_gh_cli': config.use_gh_cli
+            'dry_run': bool(config.dry_run),
+            'skip_issues': bool(config.skip_issues),
+            'skip_prs': bool(config.skip_prs),
+            'skip_pr_as_issue': bool(config.skip_pr_as_issue),
+            'use_gh_cli': bool(config.use_gh_cli)
         }
 
         try:
