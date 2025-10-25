@@ -80,6 +80,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 import subprocess
 import shutil
+from dotenv import load_dotenv
 
 # Import custom exceptions
 from bitbucket_migration.exceptions import (
@@ -269,6 +270,7 @@ def prompt_for_missing_args(args, required_fields, parser=None):
     Interactively prompts the user to input missing required arguments, with special
     handling for sensitive fields like API tokens using getpass for secure input.
     Attempts to provide helpful prompts by extracting help text from the argument parser.
+    Checks environment variables and .env file for tokens before prompting.
 
     Parameters
     ----------
@@ -300,9 +302,27 @@ def prompt_for_missing_args(args, required_fields, parser=None):
     """
     import getpass
 
+    # Load environment variables from .env file if it exists
+    load_dotenv()
+
     for field in required_fields:
         value = getattr(args, field, None)
         if not value or (isinstance(value, str) and not value.strip()):
+            # Check environment variables for tokens before prompting
+            if field == 'token':
+                # Check for Bitbucket token in environment
+                env_token = os.getenv('BITBUCKET_TOKEN') or os.getenv('BITBUCKET_API_TOKEN')
+                if env_token:
+                    setattr(args, field, env_token)
+                    continue
+            elif field == 'gh_token':
+                # Check for GitHub token in environment
+                env_token = os.getenv('GITHUB_TOKEN') or os.getenv('GITHUB_API_TOKEN')
+                if env_token:
+                    setattr(args, field, env_token)
+                    continue
+
+            # If not found in env vars, prompt the user
             if field in ['token', 'gh_token']:
                 prompt_text = 'GitHub API token: ' if field == 'gh_token' else 'Bitbucket API token: '
                 setattr(args, field, getpass.getpass(prompt_text))
