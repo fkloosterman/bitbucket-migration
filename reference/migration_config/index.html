@@ -816,7 +816,49 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#issue-type-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      Issue Type Mapping
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Issue Type Mapping">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      How It Works
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      Requirements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tips
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tips_1" class="md-nav__link">
     <span class="md-ellipsis">
       💡 Tips
     </span>
@@ -1018,7 +1060,49 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#issue-type-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      Issue Type Mapping
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Issue Type Mapping">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      How It Works
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      Requirements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tips
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tips_1" class="md-nav__link">
     <span class="md-ellipsis">
       💡 Tips
     </span>
@@ -1070,6 +1154,11 @@
 <span class="w">  </span><span class="nt">&quot;repository_mapping&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">&quot;workspace/other-repo&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;github-owner/other-repo&quot;</span><span class="p">,</span>
 <span class="w">    </span><span class="nt">&quot;workspace/shared-lib&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;shared-lib&quot;</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;issue_type_mapping&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;bug&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Bug&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;task&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Task&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;enhancement&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Feature Request&quot;</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
 </code></pre></div>
@@ -1129,6 +1218,11 @@
 <td>Repository mapping</td>
 <td>Maps Bitbucket repositories to GitHub repositories for cross-repo link rewriting</td>
 </tr>
+<tr>
+<td><code>issue_type_mapping</code></td>
+<td>Issue type mapping</td>
+<td>Maps Bitbucket issue types to GitHub issue types</td>
+</tr>
 </tbody>
 </table>
 <hr />
@@ -1172,7 +1266,35 @@
 <p>If you don't specify a GitHub owner (e.g., "shared-lib"), it uses the same owner as the current repository.</p>
 <p>All unmapped/unsafe cross-repo links appear in the "Unhandled Links" report.</p>
 <hr />
-<h2 id="tips">💡 Tips</h2>
+<h2 id="issue-type-mapping">Issue Type Mapping</h2>
+<p>This optional section allows mapping Bitbucket issue types (kinds) to GitHub issue types. GitHub issue types are organization-specific and must be configured in your GitHub organization settings.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">&quot;issue_type_mapping&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;bug&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Bug&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;task&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Task&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;enhancement&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Feature Request&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="how-it-works">How It Works</h3>
+<ul>
+<li>The tool fetches available GitHub issue types for your organization.</li>
+<li>It applies your custom mappings first, then attempts automatic matching based on case-insensitive name similarity (e.g., "bug" → "Bug").</li>
+<li>If a Bitbucket issue type is not mapped, it falls back to using labels or no type.</li>
+<li>Mappings are case-insensitive for both Bitbucket and GitHub types.</li>
+</ul>
+<h3 id="requirements">Requirements</h3>
+<ul>
+<li>Only available for GitHub organizations (not personal repositories).</li>
+<li>GitHub issue types must be enabled and configured in your organization.</li>
+<li>If the specified GitHub type does not exist, the mapping is skipped with a warning.</li>
+</ul>
+<h3 id="tips">Tips</h3>
+<ul>
+<li>Use the audit report (<code>audit_report.md</code>) to see all unique Bitbucket issue types.</li>
+<li>Map only the types you need; unmapped types will use fallback methods.</li>
+<li>Common mappings: "bug" → "Bug", "task" → "Task", "enhancement" → "Feature Request".</li>
+</ul>
+<hr />
+<h2 id="tips_1">💡 Tips</h2>
 <ul>
 <li>Use the audit report (<code>audit_report.md</code>) to find active users.</li>
 <li>Focus mapping on high-activity users.</li>

@@ -1031,6 +1031,7 @@
 <li>✅ <strong>Source/Destination Branches</strong>: Noted in description.</li>
 <li>✅ <strong>Commit Count</strong>: Noted in description.</li>
 <li>✅ <strong>Participant Count</strong>: Noted in description.</li>
+<li>✅ <strong>All Comments</strong>: General comments, inline code comments, and PR updates are migrated as GitHub comments, preserving the timeline.</li>
 </ul>
 <h2 id="what-is-not-preserved">What Is NOT Preserved</h2>
 <ul>
@@ -1039,7 +1040,6 @@
 <li>❌ <strong>Original Creation Date</strong>: Shows migration date.</li>
 <li>❌ <strong>Reviewers</strong>: Cannot be set via API during creation (noted in description).</li>
 <li>❌ <strong>Approval Status</strong>: PR reviews cannot be migrated (noted in description).</li>
-<li>❌ <strong>Code Review Comments</strong>: Inline code comments are not migrated (general comments are).</li>
 <li>❌ <strong>Diff View</strong>: For PRs migrated as issues, no interactive diff available.</li>
 </ul>
 <h2 id="handling-non-migratable-information">Handling Non-Migratable Information</h2>
@@ -1050,6 +1050,7 @@
 <li><strong>Unmapped Users</strong>: Mentioned as "<strong>Name</strong> <em>(no GitHub account)</em>".</li>
 <li><strong>Labels</strong>: Added based on original state (e.g., 'pr-merged', 'pr-declined', 'original-pr').</li>
 <li><strong>Reviewers</strong>: Listed in PR description but not set as official reviewers.</li>
+<li><strong>PR Updates</strong>: Changes to PR title, description, reviewers, or new commits are migrated as comments to preserve the activity timeline.</li>
 </ul>
 
 
