@@ -7,6 +7,7 @@ strategy for handling different PR states.
 """
 
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 
 from ..clients.bitbucket_client import BitbucketClient
 from ..clients.github_client import GitHubClient
@@ -63,6 +64,27 @@ class PullRequestMigrator:
             'pr_branch_missing': 0,  # PRs that couldn't be migrated due to missing branches
             'pr_merged_as_issue': 0,  # Merged PRs migrated as issues (safest approach)
         }
+
+    def _format_date(self, date_str: str) -> str:
+        """
+        Format a date string to a more readable format with UTC timezone.
+
+        Args:
+            date_str: ISO 8601 date string
+
+        Returns:
+            Formatted date string like "March 5, 2020 at 12:44 PM UTC"
+        """
+        if not date_str:
+            return ''
+        try:
+            # Parse the ISO format
+            dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            # Format to readable string with UTC
+            return dt.strftime('%B %d, %Y at %I:%M %p UTC')
+        except ValueError:
+            # If parsing fails, return as is
+            return date_str
 
     def migrate_pull_requests(self, bb_prs: List[Dict[str, Any]],
                                milestone_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
@@ -187,7 +209,7 @@ class PullRequestMigrator:
                                 'links_rewritten': 0,  # Will be updated in second pass
                                 'bb_url': bb_pr.get('links', {}).get('html', {}).get('href', ''),
                                 'gh_url': f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/pull/{gh_pr['number']}",
-                                'remarks': ['Migrated as GitHub PR', 'Branches exist on GitHub', 'Content updated in second pass']
+                                'remarks': ['Migrated as GitHub PR', 'Branches exist on GitHub']
                             })
 
                             # Migrate PR attachments
@@ -348,7 +370,7 @@ class PullRequestMigrator:
                 'links_rewritten': 0,  # Will be updated in second pass
                 'bb_url': bb_pr.get('links', {}).get('html', {}).get('href', ''),
                 'gh_url': f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/issues/{gh_issue['number']}",
-                'remarks': remarks + ['Content updated in second pass']
+                'remarks': remarks
             })
 
             self.logger.info(f"  ✓ Created Issue #{gh_issue['number']} (content and comments will be added in second pass)")
@@ -493,6 +515,88 @@ class PullRequestMigrator:
             self.logger.warning(f"    Warning: Unexpected error fetching PR comments: {e}")
             return []
 
+    def _fetch_bb_pr_activity(self, pr_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch activity log for a Bitbucket PR.
+
+        Args:
+            pr_id: The Bitbucket pull request ID
+
+        Returns:
+            List of activity dictionaries
+        """
+        try:
+            return self.bb_client.get_activity(pr_id)
+        except (APIError, AuthenticationError, NetworkError) as e:
+            self.logger.warning(f"    Warning: Could not fetch PR activity: {e}")
+            return []
+        except Exception as e:
+            self.logger.warning(f"    Warning: Unexpected error fetching PR activity: {e}")
+            return []
+
+    def _generate_update_comment(self, update: Dict[str, Any], author: str, date: str, is_first: bool = False) -> Optional[str]:
+        """
+        Generate a comment body for a PR update.
+
+        Args:
+            update: The update data from activity
+            author: The author of the update
+            date: The date of the update
+            is_first: Whether this is the first activity (likely PR opening)
+
+        Returns:
+            Comment body string or None if no meaningful content
+        """
+        changes = update.get('changes', {})
+        if changes:
+            # Summarize changes
+            change_parts = []
+            for field, change in changes.items():
+                old = change.get('old')
+                new = change.get('new')
+                if old != new:
+                    if field == 'title':
+                        change_parts.append(f"Title updated from '{old}' to '{new}'")
+                    elif field == 'description':
+                        change_parts.append(f"Description updated")
+                    elif field == 'reviewers':
+                        added = change.get('added', [])
+                        removed = change.get('removed', [])
+                        if added:
+                            change_parts.append(f"Reviewers added: {', '.join(r.get('display_name', 'Unknown') for r in added)}")
+                        if removed:
+                            change_parts.append(f"Reviewers removed: {', '.join(r.get('display_name', 'Unknown') for r in removed)}")
+                    elif field == 'status':
+                        formatted_date = self._format_date(date)
+                        if new == 'fulfilled':
+                            change_parts.append(f"PR merged by {author} on {formatted_date}")
+                        elif new == 'rejected':
+                            change_parts.append(f"PR declined by {author} on {formatted_date}")
+                        else:
+                            change_parts.append(f"Status updated from '{old}' to '{new}' by {author} on {formatted_date}")
+                    else:
+                        change_parts.append(f"{field.capitalize()} updated")
+            if change_parts:
+                formatted_date = self._format_date(date)
+                return f"PR updated by {author} on {formatted_date}:\n- " + "\n- ".join(change_parts)
+        else:
+            # If it's the first activity, likely PR opening
+            if is_first:
+                formatted_date = self._format_date(date)
+                return f"{author} opened the pull request on {formatted_date}"
+            else:
+                # Check for new commit
+                source_commit = update.get('source', {}).get('commit', {}).get('hash')
+                if source_commit:
+                    formatted_date = self._format_date(date)
+                    return f"New commit added to PR: {source_commit} by {author} on {formatted_date}"
+                else:
+                    # Fallback
+                    formatted_date = self._format_date(date)
+                    return f"PR updated by {author} on {formatted_date}"
+
+        return None
+
     def _get_next_gh_number(self) -> int:
         """
         Get the next expected GitHub issue/PR number.
@@ -584,10 +688,19 @@ class PullRequestMigrator:
         except Exception as e:
             self.logger.warning(f"  Warning: Could not update PR/issue #{gh_number}: {e}")
 
-        # Create comments
-        comments = self._fetch_bb_pr_comments(pr_num)
-        # Sort comments topologically (parents before children)
-        sorted_comments = self._sort_comments_topologically(comments)
+        # Create comments from activity log
+        activities = self._fetch_bb_pr_activity(pr_num)
+        # Sort activities by date to maintain timeline
+        def get_activity_date(activity):
+            if 'update' in activity:
+                return activity['update'].get('date', '')
+            elif 'comment' in activity:
+                return activity['comment'].get('created_on', '')
+            elif 'approval' in activity:
+                return activity['approval'].get('date', '')
+            else:
+                return ''
+        sorted_activities = sorted(activities, key=get_activity_date)
         links_in_comments = 0
         migrated_comments_count = 0
 
@@ -601,92 +714,140 @@ class PullRequestMigrator:
             except Exception:
                 commit_id = None
 
-        for comment in sorted_comments:
-            # Check for deleted field
-            if comment.get('deleted', False):
-                self.logger.info(f"  Skipping deleted comment on PR #{pr_num}")
-                continue
+        for activity in sorted_activities:
+            if 'comment' in activity:
+                # Process as comment - fetch full comment data from API
+                comment_id = activity['comment']['id']
+                # Fetch all comments to get complete data
+                all_comments = self._fetch_bb_pr_comments(pr_num)
+                # Find the full comment data by ID
+                full_comment = next((c for c in all_comments if c['id'] == comment_id), None)
+                if full_comment:
+                    comment = full_comment
+                else:
+                    # Fallback to activity data if not found
+                    comment = activity['comment']
+                activity_id = comment.get('id', 'unknown')
+                # Check for deleted field
+                if comment.get('deleted', False):
+                    self.logger.info(f"  Skipping deleted comment on PR #{pr_num}")
+                    continue
 
-            # Check for pending field and annotate if true
-            is_pending = comment.get('pending', False)
-            if is_pending:
-                self.logger.info(f"  Annotating pending comment on PR #{pr_num}")
+                # Check for pending field and annotate if true
+                is_pending = comment.get('pending', False)
+                if is_pending:
+                    self.logger.info(f"  Annotating pending comment on PR #{pr_num}")
 
-            # Format comment
-            formatter = self.formatter_factory.get_comment_formatter()
-            comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='pr', item_number=pr_num, commit_id=commit_id, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli)
-            links_in_comments += comment_links
+                # Format comment
+                formatter = self.formatter_factory.get_comment_formatter()
+                comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='pr', item_number=pr_num, commit_id=commit_id, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli)
+                links_in_comments += comment_links
 
-            # Add annotation for pending
-            if is_pending:
-                comment_body = f"**[PENDING APPROVAL]**\n\n{comment_body}"
+                # Add annotation for pending
+                if is_pending:
+                    comment_body = f"**[PENDING APPROVAL]**\n\n{comment_body}"
 
-            # Track inline images from PR comments
-            for img in inline_images_comment:
-                self.attachment_handler.attachments.append({
-                    'pr_number': pr_num,
-                    'github_pr': gh_number,
-                    'filename': img['filename'],
-                    'filepath': img['filepath'],
-                    'type': 'inline_image_comment'
-                })
+                # Track inline images from PR comments
+                for img in inline_images_comment:
+                    self.attachment_handler.attachments.append({
+                        'pr_number': pr_num,
+                        'github_pr': gh_number,
+                        'filename': img['filename'],
+                        'filepath': img['filepath'],
+                        'type': 'inline_image_comment'
+                    })
 
-            # Check if this is an inline comment
-            inline_data = comment.get('inline')
-            parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
-            in_reply_to = self.comment_mapping.get(parent_id) if parent_id else None
+                # Check if this is an inline comment
+                inline_data = comment.get('inline')
+                parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
+                in_reply_to = self.comment_mapping.get(parent_id) if parent_id else None
 
-            if inline_data and commit_id:
-                # Attempt to create as inline review comment
-                try:
-                    path = inline_data.get('path')
-                    line = inline_data.get('to')
-                    start_line = inline_data.get('from')
-                    if path and line:
-                        gh_comment = self.gh_client.create_pr_review_comment(
-                            pull_number=gh_number,
-                            body=comment_body,
-                            path=path,
-                            line=line,
-                            side='RIGHT',  # Default to new file side
-                            start_line=start_line if start_line and start_line != line else None,
-                            start_side='LEFT' if start_line and start_line != line else None,  # Use 'LEFT' for start if multi-line
-                            commit_id=commit_id,
-                            in_reply_to=in_reply_to
-                        )
-                        self.comment_mapping[comment['id']] = gh_comment['id']
-                        self.logger.info(f"  Created inline comment on {path} (line {line}) for PR #{gh_number}")
-                    else:
-                        # Fallback if required fields missing
+                if inline_data and commit_id:
+                    # Attempt to create as inline review comment
+                    try:
+                        path = inline_data.get('path')
+                        line = inline_data.get('to')
+                        start_line = inline_data.get('from')
+                        if path and line:
+                            gh_comment = self.gh_client.create_pr_review_comment(
+                                pull_number=gh_number,
+                                body=comment_body,
+                                path=path,
+                                line=line,
+                                side='RIGHT',  # Default to new file side
+                                start_line=start_line if start_line and start_line != line else None,
+                                start_side='LEFT' if start_line and start_line != line else None,  # Use 'LEFT' for start if multi-line
+                                commit_id=commit_id,
+                                in_reply_to=in_reply_to
+                            )
+                            self.comment_mapping[activity_id] = gh_comment['id']
+                            self.logger.info(f"  Created inline comment on {path} (line {line}) for PR #{gh_number}")
+                        else:
+                            # Fallback if required fields missing
+                            gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
+                            self.comment_mapping[activity_id] = gh_comment['id']
+                            self.logger.warning(f"  Missing path or line for inline comment, using regular comment")
+                    except (APIError, AuthenticationError, NetworkError, ValidationError) as e:
+                        # Fallback to regular comment on failure
+                        self.logger.warning(f"  Failed to create inline comment: {e}. Using regular comment.")
                         gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
-                        self.comment_mapping[comment['id']] = gh_comment['id']
-                        self.logger.warning(f"  Missing path or line for inline comment, using regular comment")
-                except (APIError, AuthenticationError, NetworkError, ValidationError) as e:
-                    # Fallback to regular comment on failure
-                    self.logger.warning(f"  Failed to create inline comment: {e}. Using regular comment.")
+                        self.comment_mapping[activity_id] = gh_comment['id']
+                    except Exception as e:
+                        # Unexpected error, fallback
+                        self.logger.error(f"  Unexpected error creating inline comment: {e}. Using regular comment.")
+                        gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
+                        self.comment_mapping[activity_id] = gh_comment['id']
+                else:
+                    # Regular comment
+                    if parent_id and not in_reply_to:
+                        # Add note for reply since GitHub doesn't support threading for PR comments
+                        comment_body = f"**[Reply to Bitbucket Comment {parent_id}]**\n\n{comment_body}"
                     gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
-                    self.comment_mapping[comment['id']] = gh_comment['id']
-                except Exception as e:
-                    # Unexpected error, fallback
-                    self.logger.error(f"  Unexpected error creating inline comment: {e}. Using regular comment.")
-                    gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
-                    self.comment_mapping[comment['id']] = gh_comment['id']
-            else:
-                # Regular comment
-                if parent_id and not in_reply_to:
-                    # Add note for reply since GitHub doesn't support threading for PR comments
-                    comment_body = f"**[Reply to Bitbucket Comment {parent_id}]**\n\n{comment_body}"
-                gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
-                self.comment_mapping[comment['id']] = gh_comment['id']
+                    self.comment_mapping[activity_id] = gh_comment['id']
 
-            migrated_comments_count += 1
+                migrated_comments_count += 1
+
+            elif 'update' in activity:
+                # Process as update
+                update = activity['update']
+                activity_id = 'unknown'  # Updates do not have IDs
+                author = update.get('author', {}).get('display_name', 'Unknown')
+                date = update.get('date', '')
+
+                # Generate comment body for update
+                is_first = (activity is sorted_activities[0])
+                update_body = self._generate_update_comment(update, author, date, is_first)
+                if update_body:
+                    gh_comment = self._create_gh_comment(gh_number, update_body, is_pr=True)
+                    self.comment_mapping[activity_id] = gh_comment['id']
+                    migrated_comments_count += 1
+                    self.logger.info(f"  Created update comment for PR #{gh_number}")
+                else:
+                    self.logger.info(f"  Skipping update without meaningful content on PR #{pr_num}")
+
+            elif 'approval' in activity:
+                # Process as approval
+                approval = activity['approval']
+                activity_id = 'unknown'  # Approvals do not have IDs
+                user = approval.get('user', {}).get('display_name', 'Unknown')
+                date = approval.get('date', '')
+
+                # Generate comment body for approval
+                formatted_date = self._format_date(date)
+                approval_body = f"{user} approved the pull request on {formatted_date}"
+                gh_comment = self._create_gh_comment(gh_number, approval_body, is_pr=True)
+                self.comment_mapping[activity_id] = gh_comment['id']
+                migrated_comments_count += 1
+                self.logger.info(f"  Created approval comment for PR #{gh_number}")
+
+            else:
+                self.logger.info(f"  Skipping unknown activity type on PR #{pr_num}")
 
         # Update the record with actual counts
         for record in self.pr_records:
             if record['gh_number'] == gh_number:
                 record['comments'] = migrated_comments_count
                 record['links_rewritten'] = links_in_body + links_in_comments
-                record['remarks'].append('Content and comments updated in second pass')
                 break
 
         self.logger.info(f"  ✓ Updated PR/issue #{gh_number} with {migrated_comments_count} comments and {links_in_body + links_in_comments} links rewritten")

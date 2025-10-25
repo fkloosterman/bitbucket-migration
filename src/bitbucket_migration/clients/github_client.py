@@ -58,6 +58,9 @@ class GitHubClient:
         self.token = token
         self.dry_run = dry_run
 
+        # Simulated counter for dry-run mode
+        self.simulated_number_counter = 1
+
         # Setup authenticated session
         self.session = requests.Session()
         self.session.headers.update({
@@ -94,12 +97,14 @@ class GitHubClient:
 
         # In dry-run mode, return simulated data
         if self.dry_run:
+            number = self.simulated_number_counter
+            self.simulated_number_counter += 1
             return {
-                'number': 1,  # Simulated issue number
+                'number': number,
                 'title': title.strip(),
                 'body': body,
                 'state': kwargs.get('state', 'open'),
-                'html_url': f"https://github.com/{self.owner}/{self.repo}/issues/1"
+                'html_url': f"https://github.com/{self.owner}/{self.repo}/issues/{number}"
             }
 
         payload = {
@@ -161,8 +166,10 @@ class GitHubClient:
 
         # In dry-run mode, return simulated data
         if self.dry_run:
+            number = self.simulated_number_counter
+            self.simulated_number_counter += 1
             return {
-                'number': 1,  # Simulated PR number
+                'number': number,
                 'title': title.strip(),
                 'body': body or "",
                 'head': {
@@ -173,7 +180,7 @@ class GitHubClient:
                     'ref': base.strip()
                 },
                 'state': 'open',
-                'html_url': f"https://github.com/{self.owner}/{self.repo}/pull/1"
+                'html_url': f"https://github.com/{self.owner}/{self.repo}/pull/{number}"
             }
 
         payload = {

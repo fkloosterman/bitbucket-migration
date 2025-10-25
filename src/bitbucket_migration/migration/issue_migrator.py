@@ -235,7 +235,7 @@ class IssueMigrator:
                 'links_rewritten': 0,  # Will be updated in second pass
                 'bb_url': bb_issue.get('links', {}).get('html', {}).get('href', ''),
                 'gh_url': f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/issues/{gh_issue['number']}",
-                'remarks': ['Content updated in second pass']
+                'remarks': []
             })
 
             self.logger.info(f"  ✓ Created issue #{issue_num} -> #{gh_issue['number']} (content and comments will be added in second pass)")
@@ -540,7 +540,7 @@ class IssueMigrator:
             if record['gh_number'] == gh_issue_number:
                 record['comments'] = migrated_comments_count
                 record['links_rewritten'] = links_in_body + links_in_comments
-                record['remarks'].append('Content and comments updated in second pass')
+                record['remarks'].append('Content and comments updated')
                 break
 
         self.logger.info(f"  ✓ Updated issue #{gh_issue_number} with {migrated_comments_count} comments and {links_in_body + links_in_comments} links rewritten")

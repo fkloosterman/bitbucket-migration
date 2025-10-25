@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Tuple, List, Optional
+from datetime import datetime
 
 from ..services.user_mapper import UserMapper
 from ..services.link_rewriter import LinkRewriter
@@ -26,6 +27,27 @@ class ContentFormatter(ABC):
         self.user_mapper = user_mapper
         self.link_rewriter = link_rewriter
         self.attachment_handler = attachment_handler
+
+    def _format_date(self, date_str: str) -> str:
+        """
+        Format a date string to a more readable format with UTC timezone.
+
+        Args:
+            date_str: ISO 8601 date string
+
+        Returns:
+            Formatted date string like "March 5, 2020 at 12:44 PM UTC"
+        """
+        if not date_str:
+            return ''
+        try:
+            # Parse the ISO format
+            dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            # Format to readable string with UTC
+            return dt.strftime('%B %d, %Y at %I:%M %p UTC')
+        except ValueError:
+            # If parsing fails, return as is
+            return date_str
 
     @abstractmethod
     def format(self, item: Dict, skip_link_rewriting: bool = False, **kwargs) -> Tuple[str, int, List[Dict]]:
@@ -89,9 +111,10 @@ class IssueContentFormatter(ContentFormatter):
         # Extract and download inline images
         content, inline_images = self.attachment_handler.extract_and_download_inline_images(content, kwargs.get('use_gh_cli', False))
 
+        formatted_created = self._format_date(created)
         body = f"""**Migrated from Bitbucket**
 - Original Author: {reporter_mention}
-- Original Created: {created}
+- Original Created: {formatted_created}
 - Original URL: {bb_url}
 - Kind: {kind}
 - Priority: {priority}
@@ -161,13 +184,15 @@ class PullRequestContentFormatter(ContentFormatter):
         # Extract and download inline images
         description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, kwargs.get('use_gh_cli', False))
 
+        formatted_created = self._format_date(created)
+        formatted_updated = self._format_date(updated)
         body = f"""⚠️ **This was a Pull Request on Bitbucket (migrated as an issue)**
 
 **Original PR Metadata:**
 - Author: {author_mention}
 - State: {state}
-- Created: {created}
-- Updated: {updated}
+- Created: {formatted_created}
+- Updated: {formatted_updated}
 - Source Branch: `{source}`
 - Destination Branch: `{dest}`
 - Original URL: {bb_url}
@@ -216,9 +241,10 @@ class PullRequestContentFormatter(ContentFormatter):
         # Extract and download inline images
         description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, kwargs.get('use_gh_cli', False))
 
+        formatted_created = self._format_date(created)
         body = f"""**Migrated from Bitbucket**
 - Original Author: {author_mention}
-- Original Created: {created}
+- Original Created: {formatted_created}
 - Original URL: {bb_url}
 
 ---
@@ -314,7 +340,8 @@ class CommentContentFormatter(ContentFormatter):
             if changes_list:
                 changes_section = "\n" + "\n".join(changes_list) + "\n"
 
-        comment_body = f"""**Comment by {author_mention} on {created}:**
+        formatted_created = self._format_date(created)
+        comment_body = f"""**Comment by {author_mention} on {formatted_created}:**
 {changes_section}{code_context}
 {content if content else ''}
 """

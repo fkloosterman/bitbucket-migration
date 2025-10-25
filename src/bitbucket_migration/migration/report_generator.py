@@ -72,6 +72,7 @@ class ReportGenerator:
 
         if dry_run:
             report.append("**⚠️ DRY RUN MODE** - This is a simulation report")
+            report.append("**Note:** Issue and PR numbers in this report are simulated sequentially and do not reflect actual GitHub numbers.")
             report.append("")
 
         # Executive Summary
@@ -366,6 +367,13 @@ class ReportGenerator:
                 rewritten = detail.get('rewritten', 'N/A')
                 link_type = detail.get('type', 'N/A')
                 reason = detail.get('reason', '-')
+
+                # Enclose commit references in backticks for proper rendering
+                if link_type == 'commit_ref':
+                    if not original.startswith('`'):
+                        original = f"`{original}`"
+                    if not rewritten.startswith('`'):
+                        rewritten = f"`{rewritten}`"
 
                 report.append(f"| {original} | {rewritten} | {link_type} | {reason} |")
 

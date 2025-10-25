@@ -211,6 +211,34 @@ class BitbucketClient:
         except Exception as e:
             raise APIError(f"Unexpected error fetching Bitbucket comments: {e}")
 
+    def get_activity(self, pr_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch activity log for a Bitbucket pull request.
+
+        Args:
+            pr_id: The pull request ID
+
+        Returns:
+            List of activity dictionaries
+
+        Raises:
+            ValidationError: If pr_id is invalid
+            APIError: If the API request fails
+            AuthenticationError: If authentication fails
+            NetworkError: If there's a network connectivity issue
+        """
+        if not isinstance(pr_id, int) or pr_id <= 0:
+            raise ValidationError("Pull request ID must be a positive integer")
+
+        url = f"{self.base_url}/pullrequests/{pr_id}/activity"
+
+        try:
+            return self._paginate(url)
+        except (APIError, AuthenticationError, NetworkError):
+            raise  # Re-raise API-related errors
+        except Exception as e:
+            raise APIError(f"Unexpected error fetching Bitbucket PR activity: {e}")
+
     def get_attachments(self, item_type: str, item_id: int) -> List[Dict[str, Any]]:
         """
         Fetch attachments for a Bitbucket issue or pull request.
