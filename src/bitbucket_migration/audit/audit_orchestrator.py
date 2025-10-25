@@ -552,19 +552,21 @@ class AuditOrchestrator:
         config = {
             "_comment": "Bitbucket to GitHub Migration Configuration",
             "_instructions": {
-                "step_1": "Fill in your GitHub personal access token (needs 'repo' scope)",
-                "step_2": "Set github.owner to your GitHub username or organization",
-                "step_3": "Set github.repo to your target repository name",
-                "step_4": "For each user in user_mapping - set to their GitHub username if they have an account, or set to null/empty if they don't",
-                "step_5": "Bitbucket credentials are pre-filled from audit",
-                "step_6": "Run dry-run first - migrate_bitbucket_to_github dry-run --config migration_config.json",
-                "step_7": "After dry-run succeeds, use migrate subcommand to perform actual migration"
+                "step_1": "Set BITBUCKET_TOKEN or BITBUCKET_API_TOKEN environment variable (or in .env file) with your Bitbucket API token",
+                "step_2": "Fill in your GitHub personal access token (needs 'repo' scope) in github.token or set GITHUB_TOKEN environment variable",
+                "step_3": "Set github.owner to your GitHub username or organization",
+                "step_4": "Set github.repo to your target repository name",
+                "step_5": "For each user in user_mapping - set to their GitHub username if they have an account, or set to null/empty if they don't",
+                "step_6": "Bitbucket credentials (except token) are pre-filled from audit",
+                "step_7": "Secure or remove bitbucket_api_token.txt file to prevent token exposure",
+                "step_8": "Run dry-run first - migrate_bitbucket_to_github dry-run --config migration_config.json",
+                "step_9": "After dry-run succeeds, use migrate subcommand to perform actual migration"
             },
             "bitbucket": {
                 "workspace": self.workspace,
                 "repo": self.repo,
                 "email": self.email,
-                "token": self.token
+                "token": "SET_BITBUCKET_TOKEN_ENV_VAR"
             },
             "github": {
                 "owner": gh_owner,
@@ -593,11 +595,13 @@ class AuditOrchestrator:
         print(f"📋 Migration configuration template saved: {filename}")
         print(f"{'='*80}")
         print("\nNext steps:")
-        print("1. Edit migration_config.json:")
-        print("   - Add your GitHub token")
+        print("1. Set environment variables or edit migration_config.json:")
+        print("   - Set BITBUCKET_TOKEN or BITBUCKET_API_TOKEN (env var or .env file)")
+        print("   - Add your GitHub token (in config or set GITHUB_TOKEN env var)")
         print("   - Set github.owner to your GitHub username")
         print("   - Map Bitbucket users to GitHub usernames")
         print("     (use null for users without GitHub accounts)")
+        print("   - Secure or remove bitbucket_api_token.txt file")
         print("\n2. Test with dry run:")
         print(f"   migrate_bitbucket_to_github dry-run --config {filename}")
         print("\n3. Run actual migration:")

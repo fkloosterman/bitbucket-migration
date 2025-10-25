@@ -56,9 +56,11 @@ The migration process requires multiple authentication methods depending on whic
 ```json
 "bitbucket": {
   "email": "you@example.com",
-  "token": "ATAT1234..."
+  "token": "SET_BITBUCKET_TOKEN_ENV_VAR"
 }
 ```
+
+**Note:** Tokens are no longer stored in config files. Set them via environment variables instead.
 
 ---
 
@@ -91,9 +93,11 @@ The migration process requires multiple authentication methods depending on whic
 "github": {
   "owner": "my-org",
   "repo": "my-repo",
-  "token": "ghp_abcd123..."
+  "token": "YOUR_GITHUB_TOKEN_HERE"
 }
 ```
+
+**Note:** Tokens are no longer stored in config files. Set them via environment variables instead.
 
 ### GitHub CLI Authentication (Optional)
 
@@ -141,22 +145,27 @@ The migration process requires multiple authentication methods depending on whic
 
 ```bash
 # Create .env file
-BITBUCKET_EMAIL=you@example.com
 BITBUCKET_TOKEN=ATAT1234...
 GITHUB_TOKEN=ghp_abcd123...
 
-# Load in your scripts
-migrate_bitbucket_to_github audit --workspace $BITBUCKET_WORKSPACE --repo $BITBUCKET_REPO --email $BITBUCKET_EMAIL --token $BITBUCKET_TOKEN
+# Or set in shell
+export BITBUCKET_TOKEN="ATAT1234..."
+export GITHUB_TOKEN="ghp_abcd123..."
+
+# Run scripts (tokens loaded automatically from env vars or .env)
+migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com
 ```
 
 ### Security Guidelines
 
 * **Never commit tokens** to Git repositories
+* **Use environment variables** or .env files for token storage (recommended)
 * **Use read-only tokens** where possible (audit script only needs read access)
 * **Rotate tokens regularly** (especially after migration completion)
 * **Use separate tokens** for different purposes (audit vs migration)
 * **Delete unused tokens** once migration is verified
 * **Store securely** in password managers or secure credential storage
+* **Secure or remove** any token files like bitbucket_api_token.txt
 
 ### Token Permissions Matrix
 
@@ -298,40 +307,50 @@ gh auth login
 
 ### Before Running Audit Script
 
-1. **Test Bitbucket authentication:**
+1. **Set environment variables:**
     ```bash
-    migrate_bitbucket_to_github test-auth --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com --token ATAT1234...
+    export BITBUCKET_TOKEN="ATAT1234..."
     ```
 
-2. **Verify repository access:**
+2. **Test Bitbucket authentication:**
     ```bash
-    curl -u you@example.com:ATAT1234... https://api.bitbucket.org/2.0/repositories/YOUR_WORKSPACE/YOUR_REPO
+    migrate_bitbucket_to_github test-auth --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com
     ```
 
-3. **Run audit script:**
+3. **Verify repository access:**
     ```bash
-    migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com --token ATAT1234...
+    curl -u you@example.com:$BITBUCKET_TOKEN https://api.bitbucket.org/2.0/repositories/YOUR_WORKSPACE/YOUR_REPO
+    ```
+
+4. **Run audit script:**
+    ```bash
+    migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com
     ```
 
 ### Before Running Migration Script
 
-1. **Test GitHub PAT:**
+1. **Set environment variables:**
     ```bash
-    curl -H "Authorization: token ghp_123..." https://api.github.com/user
+    export GITHUB_TOKEN="ghp_123..."
     ```
 
-2. **Test repository access:**
+2. **Test GitHub PAT:**
     ```bash
-    curl -H "Authorization: token ghp_123..." https://api.github.com/repos/YOUR_ORG/YOUR_REPO
+    curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user
     ```
 
-3. **Test GitHub CLI (if using --use-gh-cli):**
+3. **Test repository access:**
+    ```bash
+    curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/YOUR_ORG/YOUR_REPO
+    ```
+
+4. **Test GitHub CLI (if using --use-gh-cli):**
     ```bash
     gh auth status
     gh repo view YOUR_ORG/YOUR_REPO
     ```
 
-4. **Run dry-run migration:**
+5. **Run dry-run migration:**
     ```bash
     migrate_bitbucket_to_github dry-run --config config.json
     ```
@@ -350,16 +369,20 @@ gh auth login
 
 ### Basic Setup (No Attachments)
 ```bash
-# 1. Test Bitbucket token
-migrate_bitbucket_to_github test-auth --workspace myteam --repo myrepo --email me@company.com --token ATAT123...
+# 1. Set environment variables
+export BITBUCKET_TOKEN="ATAT123..."
+export GITHUB_TOKEN="ghp_456..."
 
-# 2. Run audit
-migrate_bitbucket_to_github audit --workspace myteam --repo myrepo --email me@company.com --token ATAT123...
+# 2. Test Bitbucket token
+migrate_bitbucket_to_github test-auth --workspace myteam --repo myrepo --email me@company.com
 
-# 3. Test GitHub PAT
-curl -H "Authorization: token ghp_456..." https://api.github.com/user
+# 3. Run audit
+migrate_bitbucket_to_github audit --workspace myteam --repo myrepo --email me@company.com
 
-# 4. Run migration dry-run
+# 4. Test GitHub PAT
+curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user
+
+# 5. Run migration dry-run
 migrate_bitbucket_to_github dry-run --config config.json
 ```
 

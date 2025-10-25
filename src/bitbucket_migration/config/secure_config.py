@@ -14,6 +14,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
+from dotenv import load_dotenv
 
 from .migration_config import MigrationConfig, ConfigLoader, ConfigValidator, BitbucketConfig, GitHubConfig
 from ..exceptions import ConfigurationError, ValidationError
@@ -70,10 +71,10 @@ class SecureConfigLoader(ConfigLoader):
     @staticmethod
     def _load_tokens_from_env(data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Load tokens from environment variables if not present in config.
+        Load tokens from environment variables or .env file if not present in config.
 
         This allows users to store sensitive tokens in environment variables
-        instead of configuration files, improving security.
+        or a .env file instead of configuration files, improving security.
 
         Args:
             data: Configuration dictionary
@@ -81,6 +82,9 @@ class SecureConfigLoader(ConfigLoader):
         Returns:
             Updated configuration dictionary
         """
+        # Load from .env file if it exists
+        load_dotenv()
+
         # Bitbucket token
         if not data.get('bitbucket', {}).get('token'):
             bb_token = os.getenv('BITBUCKET_TOKEN') or os.getenv('BITBUCKET_API_TOKEN')
@@ -109,14 +113,14 @@ class SecureConfigLoader(ConfigLoader):
         # Validate Bitbucket token
         bb_token = data.get('bitbucket', {}).get('token')
         if not bb_token:
-            raise ValidationError("Bitbucket token is required. Set BITBUCKET_TOKEN environment variable or add to config file.")
+            raise ValidationError("Bitbucket token is required. Set BITBUCKET_TOKEN or BITBUCKET_API_TOKEN in environment variables, .env file, or add to config file.")
         if not SecureConfigLoader._is_valid_bitbucket_token(bb_token):
             raise ValidationError("Invalid Bitbucket token format. Expected app password or API token.")
 
         # Validate GitHub token
         gh_token = data.get('github', {}).get('token')
         if not gh_token:
-            raise ValidationError("GitHub token is required. Set GITHUB_TOKEN environment variable or add to config file.")
+            raise ValidationError("GitHub token is required. Set GITHUB_TOKEN or GITHUB_API_TOKEN in environment variables, .env file, or add to config file.")
         if not SecureConfigLoader._is_valid_github_token(gh_token):
             raise ValidationError("Invalid GitHub token format. Expected personal access token (ghp_ or github_pat_).")
 

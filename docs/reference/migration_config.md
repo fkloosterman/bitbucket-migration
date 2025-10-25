@@ -14,12 +14,12 @@ This file defines how the migration tool connects to Bitbucket and GitHub, and h
     "workspace": "myworkspace",
     "repo": "myrepo",
     "email": "you@example.com",
-    "token": "ATAT..."
+    "token": "SET_BITBUCKET_TOKEN_ENV_VAR"
   },
   "github": {
     "owner": "your-github-username",
     "repo": "myrepo",
-    "token": "ghp_..."
+    "token": "YOUR_GITHUB_TOKEN_HERE"
   },
   "user_mapping": {
     "Alice Smith": "alice-smith-gh",
@@ -47,15 +47,53 @@ This file defines how the migration tool connects to Bitbucket and GitHub, and h
 | `bitbucket.workspace` | Workspace name       | Bitbucket Cloud workspace containing the repo          |
 | `bitbucket.repo`      | Repository name      | Name of the Bitbucket repo                             |
 | `bitbucket.email`     | Your Atlassian email | Required for API authentication                        |
-| `bitbucket.token`     | API token            | Use full-access token; see [API Tokens](api_tokens.md) |
+| `bitbucket.token`     | API token            | Set via BITBUCKET_TOKEN env var or .env file; see [API Tokens](api_tokens.md) |
 | `github.owner`        | GitHub user/org name | Destination owner for repository                       |
 | `github.repo`         | Repository name      | Destination repo name (must exist and be empty)        |
-| `github.token`        | GitHub PAT           | Must include `repo` scope                              |
+| `github.token`        | GitHub PAT           | Set in config or via GITHUB_TOKEN env var; must include `repo` scope |
 | `user_mapping`        | Mapping table        | Links Bitbucket display names to GitHub usernames      |
 | `repository_mapping`  | Repository mapping   | Maps Bitbucket repositories to GitHub repositories for cross-repo link rewriting |
 | `issue_type_mapping`  | Issue type mapping   | Maps Bitbucket issue types to GitHub issue types       |
 
 ---
+
+## 🌍 Environment Variables
+
+For security, tokens can be set via environment variables instead of in the config file. This prevents sensitive data from being stored in plain text.
+
+### Supported Variables
+
+| Variable              | Description                          | Required |
+| --------------------- | ------------------------------------ | -------- |
+| `BITBUCKET_TOKEN`     | Bitbucket API token                   | Yes      |
+| `BITBUCKET_API_TOKEN` | Alternative Bitbucket API token       | Yes      |
+| `GITHUB_TOKEN`        | GitHub Personal Access Token          | Yes      |
+| `GITHUB_API_TOKEN`    | Alternative GitHub API token          | Yes      |
+
+### Usage
+
+1. Set the variables in your shell:
+   ```bash
+   export BITBUCKET_TOKEN="your_bitbucket_token"
+   export GITHUB_TOKEN="your_github_token"
+   ```
+
+2. Or create a `.env` file in the project root:
+   ```
+   BITBUCKET_TOKEN=your_bitbucket_token
+   GITHUB_TOKEN=your_github_token
+   ```
+
+3. The system will automatically load tokens from env vars if not present in the config file.
+
+### Security Benefits
+
+- Tokens are not stored in version control
+- Easier to manage in CI/CD environments
+- Reduces risk of accidental exposure
+
+---
+
 
 ## 👥 User Mapping Rules
 
