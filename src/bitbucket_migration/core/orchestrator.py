@@ -90,22 +90,59 @@ class MigrationOrchestrator:
             )
 
         # Fetch issue type mapping for organization repositories
-        type_mapping = {}
+        api_type_mapping = {}
         try:
             repo_info = self.gh_client.get_repository_info()
             owner_type = repo_info.get('owner', {}).get('type', 'User')
 
             if owner_type == 'Organization':
                 self.logger.info(f"Fetching issue types for organization: {self.config.github.owner}")
-                type_mapping = self.gh_client.get_issue_types(self.config.github.owner)
-                if type_mapping:
-                    self.logger.info(f"Found {len(type_mapping)} issue types: {', '.join(type_mapping.keys())}")
+                api_type_mapping = self.gh_client.get_issue_types(self.config.github.owner)
+                if api_type_mapping:
+                    self.logger.info(f"Found {len(api_type_mapping)} issue types: {', '.join(api_type_mapping.keys())}")
                 else:
                     self.logger.info("No issue types configured for this organization")
         except (APIError, AuthenticationError, NetworkError) as e:
             self.logger.warning(f"Could not fetch issue types: {e}")
         except Exception as e:
             self.logger.warning(f"Unexpected error fetching issue types: {e}")
+
+        # Build combined type mapping using config and API-fetched types
+        type_mapping = {}
+        
+        # Create case-insensitive lookup for GitHub types
+        api_type_mapping_lower = {k.lower(): (k, v) for k, v in api_type_mapping.items()}
+        
+        # Apply user-configured mappings first
+        if self.config.issue_type_mapping:
+            self.logger.info(f"Applying configurable issue type mappings: {list(self.config.issue_type_mapping.keys())}")
+            for bb_type, gh_type in self.config.issue_type_mapping.items():
+                bb_type_lower = bb_type.lower()
+                gh_type_lower = gh_type.lower()
+                if gh_type_lower in api_type_mapping_lower:
+                    original_gh_type, gh_id = api_type_mapping_lower[gh_type_lower]
+                    type_mapping[bb_type_lower] = {
+                        'id': gh_id,
+                        'name': original_gh_type,
+                        'configured_name': gh_type
+                    }
+                    self.logger.info(f"  Mapped '{bb_type}' -> '{gh_type}' (ID: {gh_id})")
+                else:
+                    self.logger.warning(f"  GitHub issue type '{gh_type}' not found for Bitbucket type '{bb_type}'. Skipping mapping.")
+        
+        # Auto-map Bitbucket types that exactly match GitHub types (case-insensitive)
+        # This covers common types like "bug" -> "Bug", "task" -> "Task", etc.
+        configured_bb_types = [k.lower() for k in self.config.issue_type_mapping.keys()]
+        for gh_type, gh_id in api_type_mapping.items():
+            gh_lower = gh_type.lower()
+            if gh_lower not in configured_bb_types:
+                # Map Bitbucket type to GitHub type if names match (case-insensitive)
+                type_mapping[gh_lower] = {
+                    'id': gh_id,
+                    'name': gh_type,
+                    'configured_name': None
+                }
+                self.logger.info(f"  Auto-mapped '{gh_lower}' -> '{gh_type}' (ID: {gh_id})")
 
         # Setup services
         self.user_mapper = UserMapper(self.config.user_mapping, self.bb_client)
@@ -177,17 +214,43 @@ class MigrationOrchestrator:
             # Step 5: Test connections
             self._test_connections()
 
-            # Step 6: Perform migration
+            # Step 6: Perform migration (two-pass for link rewriting)
             if not self.config.skip_issues:
-                issue_records = self.issue_migrator.migrate_issues(bb_issues, milestone_lookup)
-                self.issue_mapping = self.issue_migrator.issue_mapping
+                # First pass: create issues without link rewriting
+                issue_records = self.issue_migrator.migrate_issues(bb_issues, milestone_lookup, skip_link_rewriting=True)
+                self.issue_mapping.update(self.issue_migrator.issue_mapping)
 
             if not self.config.skip_prs:
+                # First pass: create PRs without link rewriting
                 pr_records = self.pr_migrator.migrate_pull_requests(
-                    bb_prs, milestone_lookup, self.config.skip_pr_as_issue
+                    bb_prs, milestone_lookup, self.config.skip_pr_as_issue, skip_link_rewriting=True
                 )
-                self.pr_mapping = self.pr_migrator.pr_mapping
+                self.pr_mapping.update(self.pr_migrator.pr_mapping)
                 self.stats.update(self.pr_migrator.stats)
+
+            # Update LinkRewriter with mappings after both migrations
+            self.link_rewriter.issue_mapping.update(self.issue_mapping)
+            self.link_rewriter.pr_mapping.update(self.pr_mapping)
+
+            # Second pass: update issue content with rewritten links (after PR mappings are available)
+            if not self.config.skip_issues:
+                for bb_issue in bb_issues:
+                    gh_number = self.issue_mapping.get(bb_issue['id'])
+                    if gh_number:
+                        self.issue_migrator.update_issue_content(bb_issue, gh_number)
+                        self.issue_migrator.update_issue_comments(bb_issue, gh_number)
+
+            # Second pass: update PR content with rewritten links
+            if not self.config.skip_prs:
+                for bb_pr in bb_prs:
+                    gh_number = self.pr_mapping.get(bb_pr['id'])
+                    if gh_number:
+                        # Find the corresponding pr_record to determine if it's a PR or issue
+                        pr_record = next((r for r in pr_records if r['bb_number'] == bb_pr['id']), None)
+                        if pr_record:
+                            as_pr = pr_record['gh_type'] == 'PR'
+                            self.pr_migrator.update_pr_content(bb_pr, gh_number, as_pr)
+                            self.pr_migrator.update_pr_comments(bb_pr, gh_number, as_pr)
 
             # Step 7: Generate reports
             self._generate_reports()
@@ -426,16 +489,11 @@ class MigrationOrchestrator:
 
     def _collect_link_data(self) -> Dict[str, Any]:
         """Collect link rewriting data for the report."""
-        # Placeholder: Need to collect from link_rewriter
-        total_processed = 0  # Placeholder
-        successful = 0  # Placeholder
-        failed = 0  # Placeholder
-        details = []  # Placeholder
         return {
-            'total_processed': total_processed,
-            'successful': successful,
-            'failed': failed,
-            'details': details
+            'total_processed': self.link_rewriter.total_processed,
+            'successful': self.link_rewriter.successful,
+            'failed': self.link_rewriter.failed,
+            'details': self.link_rewriter.link_details
         }
 
     def _generate_reports(self) -> None:

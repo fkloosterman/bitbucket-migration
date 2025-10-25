@@ -65,8 +65,9 @@ class PullRequestMigrator:
         }
 
     def migrate_pull_requests(self, bb_prs: List[Dict[str, Any]],
-                              milestone_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
-                              skip_pr_as_issue: bool = False) -> List[Dict[str, Any]]:
+                               milestone_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
+                               skip_pr_as_issue: bool = False,
+                               skip_link_rewriting: bool = False) -> List[Dict[str, Any]]:
         """
         Migrate Bitbucket PRs to GitHub with intelligent branch checking.
 
@@ -78,6 +79,7 @@ class PullRequestMigrator:
             bb_prs: List of Bitbucket pull requests to migrate
             milestone_lookup: Optional mapping of milestone names to GitHub milestone data
             skip_pr_as_issue: Whether to skip migrating closed PRs as issues
+            skip_link_rewriting: If True, skip link rewriting (for two-pass migration)
 
         Returns:
             List of migration records
@@ -114,8 +116,8 @@ class PullRequestMigrator:
                         # Try to create as actual GitHub PR
                         self.logger.info(f"  ✓ Both branches exist, creating as GitHub PR")
 
-                        formatter = self.formatter_factory.get_pull_request_formatter()
-                        body, links_in_body, inline_images_body = formatter.format(bb_pr, as_issue=False, use_gh_cli=self.attachment_handler.use_gh_cli)
+                        # Use minimal body in first pass to avoid duplication
+                        body = f"Migrating PR #{pr_num} from Bitbucket. Content will be updated in second pass."
 
                         # Map milestone for PRs
                         milestone_number = None
@@ -124,15 +126,7 @@ class PullRequestMigrator:
                             if milestone_name and milestone_name in milestone_lookup:
                                 milestone_number = milestone_lookup[milestone_name].get('number')
 
-                        # Track inline images
-                        for img in inline_images_body:
-                            self.attachment_handler.attachments.append({
-                                'pr_number': pr_num,
-                                'github_pr': self._get_next_gh_number(),
-                                'filename': img['filename'],
-                                'filepath': img['filepath'],
-                                'type': 'inline_image'
-                            })
+                        # Note: Inline images will be handled in second pass
 
                         try:
                             gh_pr = self._create_gh_pr(
@@ -176,91 +170,7 @@ class PullRequestMigrator:
                             author = bb_pr.get('author', {}).get('display_name', 'Unknown') if bb_pr.get('author') else 'Unknown (deleted user)'
                             gh_author = self.user_mapper.map_user(author) if author != 'Unknown (deleted user)' else None
 
-                            # Add comments
-                            comments = self._fetch_bb_pr_comments(pr_num)
-                            # Sort comments topologically (parents before children)
-                            sorted_comments = self._sort_comments_topologically(comments)
-                            links_in_comments = 0
-                            migrated_comments_count = 0
-                            for comment in sorted_comments:
-                                # Check for deleted field
-                                if comment.get('deleted', False):
-                                    self.logger.info(f"  Skipping deleted comment on PR #{pr_num}")
-                                    continue
-                                
-                                # Check for pending field and annotate if true
-                                is_pending = comment.get('pending', False)
-                                if is_pending:
-                                    self.logger.info(f"  Annotating pending comment on PR #{pr_num}")
-                                
-                                # Format comment
-                                formatter = self.formatter_factory.get_comment_formatter()
-                                comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='pr', item_number=pr_num, commit_id=commit_id, use_gh_cli=self.attachment_handler.use_gh_cli)
-                                links_in_comments += comment_links
-                                
-                                # Add annotation for pending
-                                if is_pending:
-                                    comment_body = f"**[PENDING APPROVAL]**\n\n{comment_body}"
-                                
-                                # Track inline images from PR comments
-                                for img in inline_images_comment:
-                                    self.attachment_handler.attachments.append({
-                                        'pr_number': pr_num,
-                                        'github_pr': gh_pr['number'],
-                                        'filename': img['filename'],
-                                        'filepath': img['filepath'],
-                                        'type': 'inline_image_comment'
-                                    })
-
-                                # Check if this is an inline comment
-                                inline_data = comment.get('inline')
-                                parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
-                                in_reply_to = self.comment_mapping.get(parent_id) if parent_id else None
-
-                                if inline_data and commit_id:
-                                    # Attempt to create as inline review comment
-                                    try:
-                                        path = inline_data.get('path')
-                                        line = inline_data.get('to')
-                                        start_line = inline_data.get('from')
-                                        if path and line:
-                                            gh_comment = self.gh_client.create_pr_review_comment(
-                                                pull_number=gh_pr['number'],
-                                                body=comment_body,
-                                                path=path,
-                                                line=line,
-                                                side='RIGHT',  # Default to new file side
-                                                start_line=start_line if start_line and start_line != line else None,
-                                                start_side='LEFT' if start_line and start_line != line else None,  # Use 'LEFT' for start if multi-line
-                                                commit_id=commit_id,
-                                                in_reply_to=in_reply_to
-                                            )
-                                            self.comment_mapping[comment['id']] = gh_comment['id']
-                                            self.logger.info(f"  Created inline comment on {path} (line {line}) for PR #{gh_pr['number']}")
-                                        else:
-                                            # Fallback if required fields missing
-                                            gh_comment = self._create_gh_comment(gh_pr['number'], comment_body, is_pr=True)
-                                            self.comment_mapping[comment['id']] = gh_comment['id']
-                                            self.logger.warning(f"  Missing path or line for inline comment, using regular comment")
-                                    except (APIError, AuthenticationError, NetworkError, ValidationError) as e:
-                                        # Fallback to regular comment on failure
-                                        self.logger.warning(f"  Failed to create inline comment: {e}. Using regular comment.")
-                                        gh_comment = self._create_gh_comment(gh_pr['number'], comment_body, is_pr=True)
-                                        self.comment_mapping[comment['id']] = gh_comment['id']
-                                    except Exception as e:
-                                        # Unexpected error, fallback
-                                        self.logger.error(f"  Unexpected error creating inline comment: {e}. Using regular comment.")
-                                        gh_comment = self._create_gh_comment(gh_pr['number'], comment_body, is_pr=True)
-                                        self.comment_mapping[comment['id']] = gh_comment['id']
-                                else:
-                                    # Regular comment
-                                    if parent_id and not in_reply_to:
-                                        # Add note for reply since GitHub doesn't support threading for PR comments
-                                        comment_body = f"**[Reply to Bitbucket Comment {parent_id}]**\n\n{comment_body}"
-                                    gh_comment = self._create_gh_comment(gh_pr['number'], comment_body, is_pr=True)
-                                    self.comment_mapping[comment['id']] = gh_comment['id']
-
-                                migrated_comments_count += 1
+                            # Comments will be created in the second pass to avoid duplication
 
                             self.pr_records.append({
                                 'bb_number': pr_num,
@@ -272,11 +182,11 @@ class PullRequestMigrator:
                                 'state': pr_state,
                                 'source_branch': source_branch,
                                 'dest_branch': dest_branch,
-                                'comments': migrated_comments_count,
-                                'links_rewritten': links_in_body + links_in_comments,
+                                'comments': 0,  # Will be updated in second pass
+                                'links_rewritten': 0,  # Will be updated in second pass
                                 'bb_url': bb_pr.get('links', {}).get('html', {}).get('href', ''),
                                 'gh_url': f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/pull/{gh_pr['number']}",
-                                'remarks': ['Migrated as GitHub PR', 'Branches exist on GitHub']
+                                'remarks': ['Migrated as GitHub PR', 'Branches exist on GitHub', 'Content updated in second pass']
                             })
 
                             # Migrate PR attachments
@@ -293,7 +203,7 @@ class PullRequestMigrator:
                                         if filepath:
                                             self.attachment_handler.upload_to_github(filepath, gh_pr['number'], self.gh_client, self.gh_client.owner, self.gh_client.repo)
 
-                            self.logger.info(f"  ✓ Successfully migrated as PR #{gh_pr['number']} with {len(comments)} comments")
+                            self.logger.info(f"  ✓ Created PR #{gh_pr['number']} (content and comments will be added in second pass)")
                             continue
                         else:
                             self.logger.info(f"  ✗ Failed to create GitHub PR, falling back to issue migration")
@@ -354,8 +264,8 @@ class PullRequestMigrator:
             # Migrate as issue (for all non-open PRs or failed PR creation)
             self.logger.info(f"  Creating as GitHub issue...")
 
-            formatter = self.formatter_factory.get_pull_request_formatter()
-            body, links_in_body, inline_images_body = formatter.format(bb_pr, as_issue=True, use_gh_cli=self.attachment_handler.use_gh_cli)
+            # Use minimal body in first pass to avoid duplication
+            body = f"Migrating PR #{pr_num} as issue from Bitbucket. Content will be updated in second pass."
 
             # Map milestone for PRs migrated as issues
             milestone_number = None
@@ -364,15 +274,7 @@ class PullRequestMigrator:
                 if milestone_name and milestone_name in milestone_lookup:
                     milestone_number = milestone_lookup[milestone_name].get('number')
 
-            # Track inline images
-            for img in inline_images_body:
-                self.attachment_handler.attachments.append({
-                    'pr_number': pr_num,
-                    'github_issue': self._get_next_gh_number(),
-                    'filename': img['filename'],
-                    'filepath': img['filepath'],
-                    'type': 'inline_image'
-                })
+            # Note: Inline images will be handled in second pass
 
             # Determine labels based on original state
             labels = ['migrated-from-bitbucket', 'original-pr']
@@ -406,54 +308,7 @@ class PullRequestMigrator:
                     # Expected for PRs migrated as issues if branch doesn't exist
                     commit_id = None
 
-            # Add comments
-            comments = self._fetch_bb_pr_comments(pr_num)
-            # Sort comments topologically (parents before children)
-            sorted_comments = self._sort_comments_topologically(comments)
-            links_in_comments = 0
-            migrated_comments_count = 0
-            for comment in sorted_comments:
-                # Check for deleted field
-                if comment.get('deleted', False):
-                    self.logger.info(f"  Skipping deleted comment on PR #{pr_num} (migrated as issue)")
-                    continue
-                
-                # Check for pending field and annotate if true
-                is_pending = comment.get('pending', False)
-                if is_pending:
-                    self.logger.info(f"  Annotating pending comment on PR #{pr_num} (migrated as issue)")
-                
-                # Format comment
-                formatter = self.formatter_factory.get_comment_formatter()
-                comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='pr', item_number=pr_num, commit_id=commit_id, use_gh_cli=self.attachment_handler.use_gh_cli)
-                links_in_comments += comment_links
-                
-                # Add annotation for pending
-                if is_pending:
-                    comment_body = f"**[PENDING APPROVAL]**\n\n{comment_body}"
-
-                # Track inline images from PR comments
-                for img in inline_images_comment:
-                    self.attachment_handler.attachments.append({
-                        'pr_number': pr_num,
-                        'github_pr': gh_issue['number'],  # Note: using gh_issue['number'] here
-                        'filename': img['filename'],
-                        'filepath': img['filepath'],
-                        'type': 'inline_image_comment'
-                    })
-
-                parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
-                if parent_id:
-                    # Add note for reply using GitHub comment link if available
-                    gh_parent_id = self.comment_mapping.get(parent_id)
-                    if gh_parent_id:
-                        gh_url = f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/issues/{gh_issue['number']}#issuecomment-{gh_parent_id}"
-                        comment_body = f"**[Reply to GitHub Comment]({gh_url})**\n\n{comment_body}"
-                    else:
-                        comment_body = f"**[Reply to Bitbucket Comment {parent_id}]**\n\n{comment_body}"
-                gh_comment = self._create_gh_comment(gh_issue['number'], comment_body)
-                self.comment_mapping[comment['id']] = gh_comment['id']
-                migrated_comments_count += 1
+            # Comments will be created in the second pass to avoid duplication
 
             # Record PR-as-issue migration details
             author = bb_pr.get('author', {}).get('display_name', 'Unknown') if bb_pr.get('author') else 'Unknown (deleted user)'
@@ -480,14 +335,14 @@ class PullRequestMigrator:
                 'state': pr_state,
                 'source_branch': source_branch or 'unknown',
                 'dest_branch': dest_branch or 'unknown',
-                'comments': migrated_comments_count,
-                'links_rewritten': links_in_body + links_in_comments,
+                'comments': 0,  # Will be updated in second pass
+                'links_rewritten': 0,  # Will be updated in second pass
                 'bb_url': bb_pr.get('links', {}).get('html', {}).get('href', ''),
                 'gh_url': f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/issues/{gh_issue['number']}",
-                'remarks': remarks
+                'remarks': remarks + ['Content updated in second pass']
             })
 
-            self.logger.info(f"  ✓ Migrated as Issue #{gh_issue['number']} with {len(comments)} comments")
+            self.logger.info(f"  ✓ Created Issue #{gh_issue['number']} (content and comments will be added in second pass)")
 
             # Migrate PR attachments
             pr_attachments = self._fetch_bb_pr_attachments(pr_num)
@@ -678,3 +533,158 @@ class PullRequestMigrator:
         result.extend(remaining)
 
         return result
+
+    def update_pr_content(self, bb_pr: Dict[str, Any], gh_number: int, as_pr: bool = True) -> None:
+        """
+        Update the content of a GitHub PR or issue with rewritten links and create comments after mappings are established.
+
+        Args:
+            bb_pr: The original Bitbucket PR data
+            gh_number: The GitHub PR or issue number
+            as_pr: If True, update as PR; else as issue
+        """
+        pr_num = bb_pr['id']
+
+        # Format and update PR or issue body
+        formatter = self.formatter_factory.get_pull_request_formatter()
+        body, links_in_body, inline_images_body = formatter.format(bb_pr, as_issue=not as_pr, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli)
+
+        # Track inline images as attachments
+        for img in inline_images_body:
+            self.attachment_handler.attachments.append({
+                'pr_number': pr_num,
+                'github_pr': gh_number,
+                'filename': img['filename'],
+                'filepath': img['filepath'],
+                'type': 'inline_image'
+            })
+
+        # Update the PR or issue body
+        try:
+            self.gh_client.update_issue(gh_number, body=body)
+            if as_pr:
+                self.logger.info(f"  Updated PR #{gh_number} with rewritten links")
+            else:
+                self.logger.info(f"  Updated issue #{gh_number} with rewritten links")
+        except Exception as e:
+            self.logger.warning(f"  Warning: Could not update PR/issue #{gh_number}: {e}")
+
+        # Create comments
+        comments = self._fetch_bb_pr_comments(pr_num)
+        # Sort comments topologically (parents before children)
+        sorted_comments = self._sort_comments_topologically(comments)
+        links_in_comments = 0
+        migrated_comments_count = 0
+
+        # Get commit_id for inline comments
+        commit_id = None
+        if as_pr:
+            # For PRs, get commit_id from the PR
+            try:
+                pr_data = self.gh_client.get_pull_request(gh_number)
+                commit_id = pr_data.get('head', {}).get('sha')
+            except Exception:
+                commit_id = None
+
+        for comment in sorted_comments:
+            # Check for deleted field
+            if comment.get('deleted', False):
+                self.logger.info(f"  Skipping deleted comment on PR #{pr_num}")
+                continue
+
+            # Check for pending field and annotate if true
+            is_pending = comment.get('pending', False)
+            if is_pending:
+                self.logger.info(f"  Annotating pending comment on PR #{pr_num}")
+
+            # Format comment
+            formatter = self.formatter_factory.get_comment_formatter()
+            comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='pr', item_number=pr_num, commit_id=commit_id, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli)
+            links_in_comments += comment_links
+
+            # Add annotation for pending
+            if is_pending:
+                comment_body = f"**[PENDING APPROVAL]**\n\n{comment_body}"
+
+            # Track inline images from PR comments
+            for img in inline_images_comment:
+                self.attachment_handler.attachments.append({
+                    'pr_number': pr_num,
+                    'github_pr': gh_number,
+                    'filename': img['filename'],
+                    'filepath': img['filepath'],
+                    'type': 'inline_image_comment'
+                })
+
+            # Check if this is an inline comment
+            inline_data = comment.get('inline')
+            parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
+            in_reply_to = self.comment_mapping.get(parent_id) if parent_id else None
+
+            if inline_data and commit_id:
+                # Attempt to create as inline review comment
+                try:
+                    path = inline_data.get('path')
+                    line = inline_data.get('to')
+                    start_line = inline_data.get('from')
+                    if path and line:
+                        gh_comment = self.gh_client.create_pr_review_comment(
+                            pull_number=gh_number,
+                            body=comment_body,
+                            path=path,
+                            line=line,
+                            side='RIGHT',  # Default to new file side
+                            start_line=start_line if start_line and start_line != line else None,
+                            start_side='LEFT' if start_line and start_line != line else None,  # Use 'LEFT' for start if multi-line
+                            commit_id=commit_id,
+                            in_reply_to=in_reply_to
+                        )
+                        self.comment_mapping[comment['id']] = gh_comment['id']
+                        self.logger.info(f"  Created inline comment on {path} (line {line}) for PR #{gh_number}")
+                    else:
+                        # Fallback if required fields missing
+                        gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
+                        self.comment_mapping[comment['id']] = gh_comment['id']
+                        self.logger.warning(f"  Missing path or line for inline comment, using regular comment")
+                except (APIError, AuthenticationError, NetworkError, ValidationError) as e:
+                    # Fallback to regular comment on failure
+                    self.logger.warning(f"  Failed to create inline comment: {e}. Using regular comment.")
+                    gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
+                    self.comment_mapping[comment['id']] = gh_comment['id']
+                except Exception as e:
+                    # Unexpected error, fallback
+                    self.logger.error(f"  Unexpected error creating inline comment: {e}. Using regular comment.")
+                    gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
+                    self.comment_mapping[comment['id']] = gh_comment['id']
+            else:
+                # Regular comment
+                if parent_id and not in_reply_to:
+                    # Add note for reply since GitHub doesn't support threading for PR comments
+                    comment_body = f"**[Reply to Bitbucket Comment {parent_id}]**\n\n{comment_body}"
+                gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
+                self.comment_mapping[comment['id']] = gh_comment['id']
+
+            migrated_comments_count += 1
+
+        # Update the record with actual counts
+        for record in self.pr_records:
+            if record['gh_number'] == gh_number:
+                record['comments'] = migrated_comments_count
+                record['links_rewritten'] = links_in_body + links_in_comments
+                record['remarks'].append('Content and comments updated in second pass')
+                break
+
+        self.logger.info(f"  ✓ Updated PR/issue #{gh_number} with {migrated_comments_count} comments and {links_in_body + links_in_comments} links rewritten")
+
+    def update_pr_comments(self, bb_pr: Dict[str, Any], gh_number: int, as_pr: bool = True) -> None:
+        """
+        Comments are now created in update_pr_content to avoid duplication.
+        This method is kept for compatibility but does nothing.
+
+        Args:
+            bb_pr: The original Bitbucket PR data
+            gh_number: The GitHub PR or issue number
+            as_pr: If True, update as PR comments; else as issue comments
+        """
+        # Comments are handled in update_pr_content
+        pass

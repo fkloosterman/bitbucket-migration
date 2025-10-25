@@ -67,6 +67,7 @@ class AuditOrchestrator:
         self.users: set = set()
         self.milestones: set = set()
         self.attachments: List[Dict[str, Any]] = []
+        self.issue_types: set = set()
 
         # Analysis results
         self.gaps: Dict[str, Any] = {}
@@ -119,6 +120,13 @@ class AuditOrchestrator:
         print("   Fetching issues...")
         self.issues = self.bb_client.get_issues()
         print(f"   ✓ Found {len(self.issues)} issues")
+
+        # Collect unique issue types (kinds)
+        print("   Collecting issue types...")
+        for issue in self.issues:
+            if issue.get('kind'):
+                self.issue_types.add(issue['kind'])
+        print(f"   ✓ Found {len(self.issue_types)} unique issue types")
 
         # Fetch pull requests
         print("   Fetching pull requests...")
@@ -268,6 +276,10 @@ class AuditOrchestrator:
                 'date_range': structure_analysis['issue_date_range'],
                 'total_comments': sum(i.get('comment_count', 0) for i in self.issues),
                 'with_attachments': sum(1 for i in self.issues if i.get('attachment_count', 0) > 0),
+                'types': {
+                    'total': len(self.issue_types),
+                    'list': sorted(list(self.issue_types)),
+                },
             },
             'pull_requests': {
                 'total': len(self.pull_requests),
@@ -334,6 +346,7 @@ class AuditOrchestrator:
         md.append("## Table of Contents")
         md.append("")
         md.append("1. [Issues Analysis](#issues-analysis)")
+        md.append("   - [Issue Types](#issue-types)")
         md.append("2. [Pull Requests Analysis](#pull-requests-analysis)")
         md.append("3. [Attachments](#attachments)")
         md.append("4. [Users](#users)")
@@ -348,6 +361,18 @@ class AuditOrchestrator:
         md.append("")
         issues = report['issues']
         md.extend(self._format_dict_as_markdown(issues, ''))
+        md.append("")
+        md.append("### Issue Types")
+        md.append("")
+        if issues['types']['total'] > 0:
+            md.append(f"**Total Unique Issue Types:** {issues['types']['total']}")
+            md.append("")
+            md.append("**Issue Types Found:**")
+            md.append("")
+            for issue_type in issues['types']['list']:
+                md.append(f"- {issue_type}")
+        else:
+            md.append("**No issue types found (all issues have no 'kind' specified)**")
         md.append("")
 
         # Pull Requests Analysis

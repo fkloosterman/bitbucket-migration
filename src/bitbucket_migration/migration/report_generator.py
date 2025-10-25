@@ -98,6 +98,7 @@ class ReportGenerator:
         report.append("## Table of Contents")
         report.append("")
         report.append("1. [Issues Migration](#issues-migration)")
+        report.append("   - [Issue Types](#issue-types)")
         report.append("2. [Pull Requests Migration](#pull-requests-migration)")
         report.append("3. [User Mapping](#user-mapping)")
         report.append("4. [Attachment Handling](#attachment-handling)")
@@ -135,6 +136,28 @@ class ReportGenerator:
 
             report.append(f"| {bb_link} | {gh_link} | {title} | {reporter} | {state} | {kind} | {comments} | {attachments} | {links} | {remarks} |")
 
+        report.append("")
+        report.append("### Issue Types")
+        report.append("")
+
+        # Collect unique issue types from records
+        issue_types = set()
+        for record in issue_records:
+            if record.get('kind') and record['kind'] != 'N/A':
+                issue_types.add(record['kind'])
+
+        if issue_types:
+            report.append(f"**Unique Issue Types Found:** {len(issue_types)}")
+            report.append("")
+            report.append("**Issue Types:**")
+            report.append("")
+            for issue_type in sorted(issue_types):
+                count = len([r for r in issue_records if r.get('kind') == issue_type])
+                report.append(f"- **{issue_type}**: {count} issues")
+            report.append("")
+            report.append("**Note:** Use these types in your `issue_type_mapping` configuration to map to GitHub issue types.")
+        else:
+            report.append("**No issue types found** (all issues have no 'kind' specified)")
         report.append("")
 
         # Pull Requests Migration

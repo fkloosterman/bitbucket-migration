@@ -28,12 +28,13 @@ class ContentFormatter(ABC):
         self.attachment_handler = attachment_handler
 
     @abstractmethod
-    def format(self, item: Dict, **kwargs) -> Tuple[str, int, List[Dict]]:
+    def format(self, item: Dict, skip_link_rewriting: bool = False, **kwargs) -> Tuple[str, int, List[Dict]]:
         """
         Format content for GitHub.
 
         Args:
             item: The Bitbucket item to format (issue, PR, comment, etc.)
+            skip_link_rewriting: If True, skip link rewriting (for two-pass migration)
             **kwargs: Additional formatting options
 
         Returns:
@@ -47,12 +48,13 @@ class IssueContentFormatter(ContentFormatter):
     Formatter for Bitbucket issues.
     """
 
-    def format(self, issue: Dict, **kwargs) -> Tuple[str, int, List[Dict]]:
+    def format(self, issue: Dict, skip_link_rewriting: bool = False, **kwargs) -> Tuple[str, int, List[Dict]]:
         """
         Format Bitbucket issue for GitHub.
 
         Args:
             issue: Bitbucket issue data
+            skip_link_rewriting: If True, skip link rewriting (for two-pass migration)
 
         Returns:
             Tuple of (formatted_body, links_rewritten_count, inline_images)
@@ -75,7 +77,14 @@ class IssueContentFormatter(ContentFormatter):
 
         # Rewrite links in the issue content
         content = issue.get('content', {}).get('raw', '')
-        content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list = self.link_rewriter.rewrite_links(content, 'issue', issue['id'])
+        if skip_link_rewriting:
+            links_count = 0
+            unhandled_links = []
+            mentions_replaced = 0
+            mentions_unmapped = 0
+            unmapped_list = []
+        else:
+            content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list = self.link_rewriter.rewrite_links(content, 'issue', issue['id'])
 
         # Extract and download inline images
         content, inline_images = self.attachment_handler.extract_and_download_inline_images(content, kwargs.get('use_gh_cli', False))
@@ -99,23 +108,24 @@ class PullRequestContentFormatter(ContentFormatter):
     Formatter for Bitbucket pull requests.
     """
 
-    def format(self, pr: Dict, as_issue: bool = False, **kwargs) -> Tuple[str, int, List[Dict]]:
+    def format(self, pr: Dict, as_issue: bool = False, skip_link_rewriting: bool = False, **kwargs) -> Tuple[str, int, List[Dict]]:
         """
         Format Bitbucket pull request for GitHub.
 
         Args:
             pr: Bitbucket pull request data
             as_issue: If True, format as an issue (for closed PRs). If False, format as PR.
+            skip_link_rewriting: If True, skip link rewriting (for two-pass migration)
 
         Returns:
             Tuple of (formatted_body, links_rewritten_count, inline_images)
         """
         if as_issue:
-            return self._format_pr_as_issue(pr, **kwargs)
+            return self._format_pr_as_issue(pr, skip_link_rewriting=skip_link_rewriting, **kwargs)
         else:
-            return self._format_pr_as_pr(pr, **kwargs)
+            return self._format_pr_as_pr(pr, skip_link_rewriting=skip_link_rewriting, **kwargs)
 
-    def _format_pr_as_issue(self, pr: Dict, **kwargs) -> Tuple[str, int, List[Dict]]:
+    def _format_pr_as_issue(self, pr: Dict, skip_link_rewriting: bool = False, **kwargs) -> Tuple[str, int, List[Dict]]:
         """
         Format PR as an issue (for closed/merged PRs).
         """
@@ -139,7 +149,14 @@ class PullRequestContentFormatter(ContentFormatter):
 
         # Rewrite links in the PR description
         description = pr.get('description', '')
-        description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list = self.link_rewriter.rewrite_links(description, 'pr', pr['id'])
+        if skip_link_rewriting:
+            links_count = 0
+            unhandled_links = []
+            mentions_replaced = 0
+            mentions_unmapped = 0
+            unmapped_list = []
+        else:
+            description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list = self.link_rewriter.rewrite_links(description, 'pr', pr['id'])
 
         # Extract and download inline images
         description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, kwargs.get('use_gh_cli', False))
@@ -167,7 +184,7 @@ class PullRequestContentFormatter(ContentFormatter):
 """
         return body, links_count, inline_images
 
-    def _format_pr_as_pr(self, pr: Dict, **kwargs) -> Tuple[str, int, List[Dict]]:
+    def _format_pr_as_pr(self, pr: Dict, skip_link_rewriting: bool = False, **kwargs) -> Tuple[str, int, List[Dict]]:
         """
         Format PR as an actual GitHub PR (for open PRs).
         """
@@ -187,7 +204,14 @@ class PullRequestContentFormatter(ContentFormatter):
 
         # Rewrite links in the PR description
         description = pr.get('description', '')
-        description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list = self.link_rewriter.rewrite_links(description, 'pr', pr['id'])
+        if skip_link_rewriting:
+            links_count = 0
+            unhandled_links = []
+            mentions_replaced = 0
+            mentions_unmapped = 0
+            unmapped_list = []
+        else:
+            description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list = self.link_rewriter.rewrite_links(description, 'pr', pr['id'])
 
         # Extract and download inline images
         description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, kwargs.get('use_gh_cli', False))
@@ -209,7 +233,7 @@ class CommentContentFormatter(ContentFormatter):
     Formatter for Bitbucket comments.
     """
 
-    def format(self, comment: Dict, item_type: str = 'issue', item_number: Optional[int] = None, commit_id: Optional[str] = None, **kwargs) -> Tuple[str, int, List[Dict]]:
+    def format(self, comment: Dict, item_type: str = 'issue', item_number: Optional[int] = None, commit_id: Optional[str] = None, skip_link_rewriting: bool = False, changes: Optional[List[Dict]] = None, **kwargs) -> Tuple[str, int, List[Dict]]:
         """
         Format Bitbucket comment for GitHub.
 
@@ -218,6 +242,8 @@ class CommentContentFormatter(ContentFormatter):
             item_type: 'issue' or 'pr' for link rewriting context
             item_number: The issue/PR number for link rewriting context
             commit_id: Optional commit ID for inline comments
+            skip_link_rewriting: If True, skip link rewriting (for two-pass migration)
+            changes: Optional list of change dictionaries associated with this comment
 
         Returns:
             Tuple of (formatted_comment, links_rewritten_count, inline_images)
@@ -237,7 +263,14 @@ class CommentContentFormatter(ContentFormatter):
         content = comment.get('content', {}).get('raw', '')
 
         # Rewrite links in the comment
-        content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list = self.link_rewriter.rewrite_links(content, item_type, item_number)
+        if skip_link_rewriting:
+            links_count = 0
+            unhandled_links = []
+            mentions_replaced = 0
+            mentions_unmapped = 0
+            unmapped_list = []
+        else:
+            content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list = self.link_rewriter.rewrite_links(content, item_type, item_number)
 
         # Extract and download inline images
         content, inline_images = self.attachment_handler.extract_and_download_inline_images(content, kwargs.get('use_gh_cli', False))
@@ -268,8 +301,22 @@ class CommentContentFormatter(ContentFormatter):
                     code_context += f" (commit: `{commit_id[:7]}`)"
                 code_context += "**\n"
 
+        # Format associated changes to prepend to the comment body
+        changes_section = ""
+        if changes:
+            changes_list = []
+            for change in changes:
+                for key, val in change.get('changes', {}).items():
+                    if key == 'content':
+                        changes_list.append(f"- comment edited")
+                    else:
+                        changes_list.append(f"- **{key}**: {val['old']} → {val['new']}")    
+            if changes_list:
+                changes_section = "\n" + "\n".join(changes_list) + "\n"
+
         comment_body = f"""**Comment by {author_mention} on {created}:**
-{code_context}
-{content}
+{changes_section}{code_context}
+{content if content else ''}
 """
+
         return comment_body, links_count, inline_images

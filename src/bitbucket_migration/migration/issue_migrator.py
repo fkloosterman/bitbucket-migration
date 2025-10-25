@@ -29,9 +29,9 @@ class IssueMigrator:
     """
 
     def __init__(self, bb_client: BitbucketClient, gh_client: GitHubClient,
-                  user_mapper: UserMapper, link_rewriter: LinkRewriter,
-                  attachment_handler: AttachmentHandler, formatter_factory: FormatterFactory,
-                  logger: MigrationLogger, type_mapping: Optional[Dict[str, int]] = None):
+                   user_mapper: UserMapper, link_rewriter: LinkRewriter,
+                   attachment_handler: AttachmentHandler, formatter_factory: FormatterFactory,
+                   logger: MigrationLogger, type_mapping: Optional[Dict[str, Dict[str, Any]]] = None):
         """
         Initialize the IssueMigrator.
 
@@ -43,7 +43,7 @@ class IssueMigrator:
             attachment_handler: Attachment handling service
             formatter_factory: Formatter factory
             logger: Logger instance
-            type_mapping: Optional mapping of issue type names to GitHub type IDs
+            type_mapping: Optional mapping of Bitbucket issue types to GitHub type data (id and name)
         """
         self.bb_client = bb_client
         self.gh_client = gh_client
@@ -60,13 +60,15 @@ class IssueMigrator:
         self.comment_mapping = {}  # BB comment ID -> GH comment ID
 
     def migrate_issues(self, bb_issues: List[Dict[str, Any]],
-                       milestone_lookup: Optional[Dict[str, Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+                        milestone_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
+                        skip_link_rewriting: bool = False) -> List[Dict[str, Any]]:
         """
         Migrate all Bitbucket issues to GitHub.
 
         Args:
             bb_issues: List of Bitbucket issues to migrate
             milestone_lookup: Optional mapping of milestone names to GitHub milestone data
+            skip_link_rewriting: If True, skip link rewriting (for two-pass migration)
 
         Returns:
             List of migration records
@@ -135,18 +137,10 @@ class IssueMigrator:
             reporter = bb_issue.get('reporter', {}).get('display_name', 'Unknown') if bb_issue.get('reporter') else 'Unknown (deleted user)'
             gh_reporter = self.user_mapper.map_user(reporter) if reporter != 'Unknown (deleted user)' else None
 
-            formatter = self.formatter_factory.get_issue_formatter()
-            body, links_in_body, inline_images_body = formatter.format(bb_issue, use_gh_cli=self.attachment_handler.use_gh_cli)
+            # Use minimal body in first pass to avoid duplication
+            body = f"Migrating issue #{issue_num} from Bitbucket. Content will be updated in second pass."
 
-            # Track inline images as attachments
-            for img in inline_images_body:
-                self.attachment_handler.attachments.append({
-                    'issue_number': issue_num,
-                    'github_issue': self._get_next_gh_number(),
-                    'filename': img['filename'],
-                    'filepath': img['filepath'],
-                    'type': 'inline_image'
-                })
+            # Note: Inline images will be handled in second pass when formatting occurs
 
             # Map assignee
             assignees = []
@@ -175,11 +169,14 @@ class IssueMigrator:
                 # Check if we have a native GitHub issue type for this kind
                 kind_lower = kind.lower()
                 if kind_lower in self.type_mapping:
-                    issue_type_id = self.type_mapping[kind_lower]
-                    issue_type_name = kind_lower
+                    mapping = self.type_mapping[kind_lower]
+                    issue_type_id = mapping['id']
+                    issue_type_name = mapping['name']
+                    configured_name = mapping.get('configured_name')
+                    display_name = configured_name if configured_name else issue_type_name
                     type_stats['using_native'] += 1
-                    type_fallbacks.append((kind, issue_type_name))
-                    self.logger.info(f"  Using native issue type: {kind} (ID: {issue_type_id})")
+                    type_fallbacks.append((kind, display_name))
+                    self.logger.info(f"  Using native issue type: {kind} -> {display_name} (ID: {issue_type_id})")
                 else:
                     # Fall back to labels
                     labels.append(f'type: {kind}')
@@ -221,51 +218,9 @@ class IssueMigrator:
                             self.logger.info(f"    Creating attachment note on GitHub...")
                             self.attachment_handler.upload_to_github(filepath, gh_issue['number'], self.gh_client, self.gh_client.owner, self.gh_client.repo)
 
-            # Migrate comments
-            comments = self._fetch_bb_issue_comments(issue_num)
-            # Sort comments topologically (parents before children)
-            sorted_comments = self._sort_comments_topologically(comments)
-            links_in_comments = 0
-            migrated_comments_count = 0
-            for comment in sorted_comments:
-                # Check for deleted field
-                if comment.get('deleted', False):
-                    self.logger.info(f"  Skipping deleted comment on issue #{issue_num}")
-                    continue
-                
-                # Check for pending field and annotate if true
-                is_pending = comment.get('pending', False)
-                if is_pending:
-                    self.logger.info(f"  Annotating pending comment on issue #{issue_num}")
-                
-                # Format comment
-                formatter = self.formatter_factory.get_comment_formatter()
-                comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='issue', item_number=issue_num, use_gh_cli=self.attachment_handler.use_gh_cli)
-                links_in_comments += comment_links
+            # Comments will be created in the second pass to avoid duplication
 
-                # Add annotation for pending
-                if is_pending:
-                    comment_body = f"**[PENDING APPROVAL]**\n\n{comment_body}"
-
-                # Track inline images from comments
-                for img in inline_images_comment:
-                    self.attachment_handler.attachments.append({
-                        'issue_number': issue_num,
-                        'github_issue': gh_issue['number'],
-                        'filename': img['filename'],
-                        'filepath': img['filepath'],
-                        'type': 'inline_image_comment'
-                    })
-
-                parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
-                if parent_id:
-                    # Add note for reply since GitHub issue comments don't support threading
-                    comment_body = f"**[Reply to Bitbucket Comment {parent_id}]**\n\n{comment_body}"
-                gh_comment = self._create_gh_comment(gh_issue['number'], comment_body)
-                self.comment_mapping[comment['id']] = gh_comment['id']
-                migrated_comments_count += 1
-
-            # Record migration details
+            # Record migration details (comments and links will be updated in second pass)
             self.issue_records.append({
                 'bb_number': issue_num,
                 'gh_number': gh_issue['number'],
@@ -275,15 +230,15 @@ class IssueMigrator:
                 'state': bb_issue.get('state', 'unknown'),
                 'kind': bb_issue.get('kind', None),
                 'priority': bb_issue.get('priority', None),
-                'comments': migrated_comments_count,
+                'comments': 0,  # Will be updated in second pass
                 'attachments': len(attachments),
-                'links_rewritten': links_in_body + links_in_comments,
+                'links_rewritten': 0,  # Will be updated in second pass
                 'bb_url': bb_issue.get('links', {}).get('html', {}).get('href', ''),
                 'gh_url': f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/issues/{gh_issue['number']}",
-                'remarks': []
+                'remarks': ['Content updated in second pass']
             })
 
-            self.logger.info(f"  ✓ Migrated issue #{issue_num} -> #{gh_issue['number']} with {len(comments)} comments and {len(attachments)} attachments")
+            self.logger.info(f"  ✓ Created issue #{issue_num} -> #{gh_issue['number']} (content and comments will be added in second pass)")
             expected_num += 1
 
         # Report type usage statistics
@@ -301,9 +256,11 @@ class IssueMigrator:
                 self.logger.info(f"  ✓ Successfully mapped to native types:")
                 native_summary = {}
                 for bb_type, gh_type in native_types:
-                    native_summary[bb_type] = native_summary.get(bb_type, 0) + 1
-                for bb_type, count in native_summary.items():
-                    self.logger.info(f"    - '{bb_type}' ({count} issues) → GitHub type '{bb_type}'")
+                    if bb_type not in native_summary:
+                        native_summary[bb_type] = (gh_type, 0)
+                    native_summary[bb_type] = (gh_type, native_summary[bb_type][1] + 1)
+                for bb_type, (gh_type, count) in native_summary.items():
+                    self.logger.info(f"    - '{bb_type}' ({count} issues) → GitHub type '{gh_type}'")
 
             if label_fallbacks:
                 self.logger.info(f"\n  ℹ Types that fell back to labels:")
@@ -413,6 +370,29 @@ class IssueMigrator:
             self.logger.warning(f"    Warning: Unexpected error fetching issue comments: {e}")
             return []
 
+    def _fetch_bb_issue_changes(self, issue_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch changes for a Bitbucket issue.
+
+        Changes represent modifications to the issue (e.g., status, assignee)
+        that are associated with comments. This is used to enhance comment
+        bodies with the underlying change details.
+
+        Args:
+            issue_id: The Bitbucket issue ID
+
+        Returns:
+            List of change dictionaries
+        """
+        try:
+            return self.bb_client.get_changes(issue_id)
+        except (APIError, AuthenticationError, NetworkError) as e:
+            self.logger.warning(f"    Warning: Could not fetch issue changes: {e}")
+            return []
+        except Exception as e:
+            self.logger.warning(f"    Warning: Unexpected error fetching issue changes: {e}")
+            return []
+
     def _get_next_gh_number(self) -> int:
         """
         Get the next expected GitHub issue number.
@@ -468,3 +448,111 @@ class IssueMigrator:
         result.extend(remaining)
 
         return result
+
+    def update_issue_content(self, bb_issue: Dict[str, Any], gh_issue_number: int) -> None:
+        """
+        Update the content of a GitHub issue with rewritten links and create comments after mappings are established.
+
+        Args:
+            bb_issue: The original Bitbucket issue data
+            gh_issue_number: The GitHub issue number
+        """
+        issue_num = bb_issue['id']
+
+        # Format and update issue body
+        formatter = self.formatter_factory.get_issue_formatter()
+        body, links_in_body, inline_images_body = formatter.format(bb_issue, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli)
+
+        # Track inline images as attachments
+        for img in inline_images_body:
+            self.attachment_handler.attachments.append({
+                'issue_number': issue_num,
+                'github_issue': gh_issue_number,
+                'filename': img['filename'],
+                'filepath': img['filepath'],
+                'type': 'inline_image'
+            })
+
+        # Update the issue body
+        try:
+            self.gh_client.update_issue(gh_issue_number, body=body)
+            self.logger.info(f"  Updated issue #{gh_issue_number} with rewritten links")
+        except Exception as e:
+            self.logger.warning(f"  Warning: Could not update issue #{gh_issue_number}: {e}")
+
+        # Create comments
+        comments = self._fetch_bb_issue_comments(issue_num)
+        # Fetch changes for the issue to enhance comments with change details
+        changes = self._fetch_bb_issue_changes(issue_num)
+
+        # Create mapping from comment ID to associated changes
+        from collections import defaultdict
+        comment_changes = defaultdict(list)
+        for change in changes:
+            comment_id = change.get('id')
+            if comment_id:
+                comment_changes[comment_id].append(change)
+
+        # Sort comments topologically (parents before children)
+        sorted_comments = self._sort_comments_topologically(comments)
+        links_in_comments = 0
+        migrated_comments_count = 0
+        for comment in sorted_comments:
+            # Check for deleted field
+            if comment.get('deleted', False):
+                self.logger.info(f"  Skipping deleted comment on issue #{issue_num}")
+                continue
+
+            # Check for pending field and annotate if true
+            is_pending = comment.get('pending', False)
+            if is_pending:
+                self.logger.info(f"  Annotating pending comment on issue #{issue_num}")
+
+            # Format comment
+            formatter = self.formatter_factory.get_comment_formatter()
+            comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='issue', item_number=issue_num, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli, changes=comment_changes[comment['id']])
+            links_in_comments += comment_links
+
+            # Add annotation for pending
+            if is_pending:
+                comment_body = f"**[PENDING APPROVAL]**\n\n{comment_body}"
+
+            # Track inline images from comments
+            for img in inline_images_comment:
+                self.attachment_handler.attachments.append({
+                    'issue_number': issue_num,
+                    'github_issue': gh_issue_number,
+                    'filename': img['filename'],
+                    'filepath': img['filepath'],
+                    'type': 'inline_image_comment'
+                })
+
+            parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
+            if parent_id:
+                # Add note for reply since GitHub issue comments don't support threading
+                comment_body = f"**[Reply to Bitbucket Comment {parent_id}]**\n\n{comment_body}"
+            gh_comment = self._create_gh_comment(gh_issue_number, comment_body)
+            self.comment_mapping[comment['id']] = gh_comment['id']
+            migrated_comments_count += 1
+
+        # Update the record with actual counts
+        for record in self.issue_records:
+            if record['gh_number'] == gh_issue_number:
+                record['comments'] = migrated_comments_count
+                record['links_rewritten'] = links_in_body + links_in_comments
+                record['remarks'].append('Content and comments updated in second pass')
+                break
+
+        self.logger.info(f"  ✓ Updated issue #{gh_issue_number} with {migrated_comments_count} comments and {links_in_body + links_in_comments} links rewritten")
+
+    def update_issue_comments(self, bb_issue: Dict[str, Any], gh_issue_number: int) -> None:
+        """
+        Comments are now created in update_issue_content to avoid duplication.
+        This method is kept for compatibility but does nothing.
+
+        Args:
+            bb_issue: The original Bitbucket issue data
+            gh_issue_number: The GitHub issue number
+        """
+        # Comments are handled in update_issue_content
+        pass

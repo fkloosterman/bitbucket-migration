@@ -253,6 +253,46 @@ class BitbucketClient:
         except Exception as e:
             raise APIError(f"Unexpected error fetching Bitbucket attachments: {e}")
 
+    def get_changes(self, issue_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch changes for a Bitbucket issue.
+
+        This method retrieves the change history for an issue, which includes
+        modifications like status changes, assignee updates, etc., that are
+        associated with comments.
+
+        Args:
+            issue_id: The Bitbucket issue ID
+
+        Returns:
+            List of change dictionaries
+
+        Raises:
+            APIError: If the API request fails
+            AuthenticationError: If authentication fails
+            NetworkError: If there's a network connectivity issue
+        """
+        url = f"{self.base_url}/issues/{issue_id}/changes"
+
+        try:
+            return self._paginate(url)
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                # No changes found - this is normal for issues without changes
+                return []
+            elif e.response.status_code == 401:
+                raise AuthenticationError("Bitbucket API authentication failed. Please check your credentials.")
+            elif e.response.status_code == 403:
+                raise AuthenticationError("Bitbucket API access forbidden. Please check your token permissions.")
+            else:
+                raise APIError(f"Bitbucket API error: {e}", status_code=e.response.status_code)
+        except requests.exceptions.RequestException as e:
+            raise NetworkError(f"Network error communicating with Bitbucket API: {e}")
+        except (APIError, AuthenticationError, NetworkError):
+            raise  # Re-raise API-related errors
+        except Exception as e:
+            raise APIError(f"Unexpected error fetching Bitbucket issue changes: {e}")
+
     def get_user_info(self, account_id: str) -> Optional[Dict[str, str]]:
         """
         Look up user information by account ID.

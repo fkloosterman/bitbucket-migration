@@ -75,6 +75,7 @@ class MigrationConfig:
         github: GitHub API configuration
         user_mapping: Mapping of Bitbucket users to GitHub users
         repository_mapping: Cross-repository link mappings
+        issue_type_mapping: Mapping of Bitbucket issue types to GitHub issue types
         dry_run: Whether to simulate migration without making changes
         skip_issues: Whether to skip issue migration
         skip_prs: Whether to skip PR migration
@@ -85,6 +86,7 @@ class MigrationConfig:
     github: GitHubConfig
     user_mapping: Dict[str, Any]
     repository_mapping: Optional[Dict[str, str]] = field(default_factory=dict)
+    issue_type_mapping: Dict[str, str] = field(default_factory=dict)
     dry_run: bool = field(default=False)
     skip_issues: bool = field(default=False)
     skip_prs: bool = field(default=False)
@@ -101,6 +103,14 @@ class MigrationConfig:
             for key, value in self.repository_mapping.items():
                 if not key or not value:
                     raise ValidationError(f"Invalid repository mapping: '{key}' -> '{value}'")
+
+        # Validate issue type mapping format if provided
+        if self.issue_type_mapping:
+            for bb_type, gh_type in self.issue_type_mapping.items():
+                if not bb_type or not bb_type.strip():
+                    raise ValidationError(f"Invalid Bitbucket issue type in mapping: '{bb_type}'")
+                if not gh_type or not gh_type.strip():
+                    raise ValidationError(f"Invalid GitHub issue type in mapping: '{bb_type}' -> '{gh_type}'")
 
 
 class ConfigValidator:
@@ -221,6 +231,7 @@ class ConfigLoader:
                 github=github_config,
                 user_mapping=data['user_mapping'],
                 repository_mapping=data.get('repository_mapping', {}),
+                issue_type_mapping=data.get('issue_type_mapping', {}),
                 dry_run=bool(data.get('dry_run', False)),
                 skip_issues=bool(data.get('skip_issues', False)),
                 skip_prs=bool(data.get('skip_prs', False)),
@@ -267,6 +278,7 @@ class ConfigLoader:
                 github=github_config,
                 user_mapping=data['user_mapping'],
                 repository_mapping=data.get('repository_mapping', {}),
+                issue_type_mapping=data.get('issue_type_mapping', {}),
                 dry_run=bool(data.get('dry_run', False)),
                 skip_issues=bool(data.get('skip_issues', False)),
                 skip_prs=bool(data.get('skip_prs', False)),
@@ -303,6 +315,7 @@ class ConfigLoader:
             },
             'user_mapping': config.user_mapping,
             'repository_mapping': config.repository_mapping,
+            'issue_type_mapping': config.issue_type_mapping,
             'dry_run': bool(config.dry_run),
             'skip_issues': bool(config.skip_issues),
             'skip_prs': bool(config.skip_prs),

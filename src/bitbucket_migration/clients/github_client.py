@@ -259,6 +259,60 @@ class GitHubClient:
         except Exception as e:
             raise APIError(f"Unexpected error creating GitHub comment: {e}")
 
+    def update_comment(self, comment_id: int, body: str) -> Dict[str, Any]:
+        """
+        Update a GitHub comment.
+
+        Args:
+            comment_id: The comment ID to update
+            body: New comment text
+
+        Returns:
+            Updated comment data (or simulated data in dry-run mode)
+
+        Raises:
+            ValidationError: If comment_id is invalid or body is empty
+            APIError: If the API request fails
+            AuthenticationError: If authentication fails
+            NetworkError: If there's a network connectivity issue
+        """
+        if not isinstance(comment_id, int) or comment_id <= 0:
+            raise ValidationError("Comment ID must be a positive integer")
+        if not body or not body.strip():
+            raise ValidationError("Comment body cannot be empty")
+
+        # In dry-run mode, return simulated data
+        if self.dry_run:
+            return {
+                'id': comment_id,
+                'body': body.strip(),
+                'html_url': f"https://github.com/{self.owner}/{self.repo}/issues/1#issuecomment-{comment_id}"
+            }
+
+        try:
+            response = self.session.patch(
+                f"https://api.github.com/repos/{self.owner}/{self.repo}/issues/comments/{comment_id}",
+                json={'body': body.strip()}
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                raise AuthenticationError("GitHub authentication failed. Please check your token.")
+            elif e.response.status_code == 404:
+                raise APIError(f"Comment not found: {comment_id}", status_code=404)
+            elif e.response.status_code == 422:
+                raise ValidationError(f"Invalid comment update data: {e}")
+            elif e.response.status_code == 403:
+                raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
+            else:
+                raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
+        except requests.exceptions.RequestException as e:
+            raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except Exception as e:
+            raise APIError(f"Unexpected error updating GitHub comment: {e}")
+
     def create_pr_review_comment(self, pull_number: int, body: str, path: str, line: int,
                                   side: str = 'RIGHT', start_line: Optional[int] = None,
                                   start_side: Optional[str] = None, commit_id: Optional[str] = None,
@@ -425,10 +479,12 @@ class GitHubClient:
 
             type_mapping = {}
             for issue_type in issue_types:
-                name = issue_type.get('name', '').lower()
+                name = issue_type.get('name', '')
                 type_id = issue_type.get('id')
                 if name and type_id:
-                    type_mapping[name] = type_id
+                    # Capitalize the first letter for consistent display
+                    capitalized_name = name.capitalize()
+                    type_mapping[capitalized_name] = type_id
 
             return type_mapping
 

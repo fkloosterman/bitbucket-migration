@@ -234,6 +234,7 @@ class SecureConfigLoader(ConfigLoader):
             },
             'user_mapping': config.user_mapping,
             'repository_mapping': config.repository_mapping,
+            'issue_type_mapping': config.issue_type_mapping,
             'dry_run': bool(config.dry_run),
             'skip_issues': bool(config.skip_issues),
             'skip_prs': bool(config.skip_prs),
