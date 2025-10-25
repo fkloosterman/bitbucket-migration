@@ -29,6 +29,11 @@ This file defines how the migration tool connects to Bitbucket and GitHub, and h
   "repository_mapping": {
     "workspace/other-repo": "github-owner/other-repo",
     "workspace/shared-lib": "shared-lib"
+  },
+  "issue_type_mapping": {
+    "bug": "Bug",
+    "task": "Task",
+    "enhancement": "Feature Request"
   }
 }
 ```
@@ -48,6 +53,7 @@ This file defines how the migration tool connects to Bitbucket and GitHub, and h
 | `github.token`        | GitHub PAT           | Must include `repo` scope                              |
 | `user_mapping`        | Mapping table        | Links Bitbucket display names to GitHub usernames      |
 | `repository_mapping`  | Repository mapping   | Maps Bitbucket repositories to GitHub repositories for cross-repo link rewriting |
+| `issue_type_mapping`  | Issue type mapping   | Maps Bitbucket issue types to GitHub issue types       |
 
 ---
 
@@ -97,6 +103,36 @@ This optional section allows automatic rewriting of cross-repository links when 
 If you don't specify a GitHub owner (e.g., "shared-lib"), it uses the same owner as the current repository.
 
 All unmapped/unsafe cross-repo links appear in the "Unhandled Links" report.
+
+---
+
+## Issue Type Mapping
+
+This optional section allows mapping Bitbucket issue types (kinds) to GitHub issue types. GitHub issue types are organization-specific and must be configured in your GitHub organization settings.
+
+```json
+"issue_type_mapping": {
+  "bug": "Bug",
+  "task": "Task",
+  "enhancement": "Feature Request"
+}
+```
+
+### How It Works
+- The tool fetches available GitHub issue types for your organization.
+- It applies your custom mappings first, then attempts automatic matching based on case-insensitive name similarity (e.g., "bug" → "Bug").
+- If a Bitbucket issue type is not mapped, it falls back to using labels or no type.
+- Mappings are case-insensitive for both Bitbucket and GitHub types.
+
+### Requirements
+- Only available for GitHub organizations (not personal repositories).
+- GitHub issue types must be enabled and configured in your organization.
+- If the specified GitHub type does not exist, the mapping is skipped with a warning.
+
+### Tips
+- Use the audit report (`audit_report.md`) to see all unique Bitbucket issue types.
+- Map only the types you need; unmapped types will use fallback methods.
+- Common mappings: "bug" → "Bug", "task" → "Task", "enhancement" → "Feature Request".
 
 ---
 
