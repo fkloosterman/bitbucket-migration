@@ -183,6 +183,7 @@ class PullRequestMigrator:
                                 'source_branch': source_branch,
                                 'dest_branch': dest_branch,
                                 'comments': 0,  # Will be updated in second pass
+                                'attachments': 0,  # Will be updated after fetching
                                 'links_rewritten': 0,  # Will be updated in second pass
                                 'bb_url': bb_pr.get('links', {}).get('html', {}).get('href', ''),
                                 'gh_url': f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/pull/{gh_pr['number']}",
@@ -202,6 +203,12 @@ class PullRequestMigrator:
                                         filepath = self.attachment_handler.download_attachment(att_url, att_name)
                                         if filepath:
                                             self.attachment_handler.upload_to_github(filepath, gh_pr['number'], self.gh_client, self.gh_client.owner, self.gh_client.repo)
+
+                            # Update the record with attachments count
+                            for record in self.pr_records:
+                                if record['gh_number'] == gh_pr['number']:
+                                    record['attachments'] = len(pr_attachments)
+                                    break
 
                             self.logger.info(f"  ✓ Created PR #{gh_pr['number']} (content and comments will be added in second pass)")
                             continue
@@ -253,6 +260,7 @@ class PullRequestMigrator:
                     'source_branch': source_branch or 'unknown',
                     'dest_branch': dest_branch or 'unknown',
                     'comments': 0,  # Not migrated, so no comments counted
+                    'attachments': 0,  # Not migrated, so no attachments counted
                     'links_rewritten': 0,
                     'bb_url': bb_pr.get('links', {}).get('html', {}).get('href', ''),
                     'gh_url': '',  # No GitHub URL since not migrated
@@ -336,6 +344,7 @@ class PullRequestMigrator:
                 'source_branch': source_branch or 'unknown',
                 'dest_branch': dest_branch or 'unknown',
                 'comments': 0,  # Will be updated in second pass
+                'attachments': 0,  # Will be updated after fetching
                 'links_rewritten': 0,  # Will be updated in second pass
                 'bb_url': bb_pr.get('links', {}).get('html', {}).get('href', ''),
                 'gh_url': f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/issues/{gh_issue['number']}",
@@ -358,6 +367,12 @@ class PullRequestMigrator:
                         if filepath:
                             self.logger.info(f"    Creating attachment note...")
                             self.attachment_handler.upload_to_github(filepath, gh_issue['number'], self.gh_client, self.gh_client.owner, self.gh_client.repo)
+
+            # Update the record with attachments count
+            for record in self.pr_records:
+                if record['gh_number'] == gh_issue['number']:
+                    record['attachments'] = len(pr_attachments)
+                    break
 
         return self.pr_records
 

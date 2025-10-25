@@ -31,15 +31,16 @@ class ReportGenerator:
         self.logger = logger
 
     def generate_migration_report(self, issue_records: List[Dict[str, Any]],
-                                   pr_records: List[Dict[str, Any]],
-                                   stats: Dict[str, Any],
-                                   bb_workspace: str, bb_repo: str,
-                                   gh_owner: str, gh_repo: str,
-                                   dry_run: bool = False,
-                                   report_filename: str = 'migration_report.md',
-                                   user_mapping_data: Optional[List[Dict[str, Any]]] = None,
-                                   attachment_data: Optional[List[Dict[str, Any]]] = None,
-                                   link_data: Optional[Dict[str, Any]] = None) -> str:
+                                    pr_records: List[Dict[str, Any]],
+                                    stats: Dict[str, Any],
+                                    bb_workspace: str, bb_repo: str,
+                                    gh_owner: str, gh_repo: str,
+                                    dry_run: bool = False,
+                                    report_filename: str = 'migration_report.md',
+                                    user_mapping_data: Optional[List[Dict[str, Any]]] = None,
+                                    attachment_data: Optional[List[Dict[str, Any]]] = None,
+                                    link_data: Optional[Dict[str, Any]] = None,
+                                    type_mapping_data: Optional[Dict[str, Any]] = None) -> str:
         """
         Generate a comprehensive markdown migration report.
 
@@ -56,6 +57,7 @@ class ReportGenerator:
             user_mapping_data: Optional list of user mapping records with keys: bb_user, gh_user, success, timestamp, reason
             attachment_data: Optional list of attachment records with keys: file_path, size, type, uploaded, url, error, instructions
             link_data: Optional dict with link rewriting data including total_processed, successful, failed, and details list
+            type_mapping_data: Optional dict with issue type mapping data including type_stats and type_fallbacks
 
         Returns:
             The filename where the report was saved
@@ -91,7 +93,7 @@ class ReportGenerator:
         if skipped_prs > 0:
             report.append(f"  - Skipped (not migrated): {skipped_prs}")
 
-        report.append(f"- **Total Attachments:** {len([r for r in issue_records if r.get('attachments', 0) > 0]) + len([r for r in pr_records if r.get('comments', 0) > 0])}")
+        report.append(f"- **Total Attachments:** {len([r for r in issue_records if r.get('attachments', 0) > 0]) + len([r for r in pr_records if r.get('attachments', 0) > 0])}")
         report.append("")
 
         # Table of Contents
@@ -155,6 +157,45 @@ class ReportGenerator:
                 count = len([r for r in issue_records if r.get('kind') == issue_type])
                 report.append(f"- **{issue_type}**: {count} issues")
             report.append("")
+
+            # Add type mapping details if available
+            if type_mapping_data:
+                type_stats = type_mapping_data.get('type_stats', {})
+                type_fallbacks = type_mapping_data.get('type_fallbacks', [])
+
+                report.append("**Issue Type Mapping Summary:**")
+                report.append("")
+                report.append(f"- **Using native GitHub issue types:** {type_stats.get('using_native', 0)} issues")
+                report.append(f"- **Using labels (fallback):** {type_stats.get('using_labels', 0)} issues")
+                report.append(f"- **No type specified:** {type_stats.get('no_type', 0)} issues")
+                report.append("")
+
+                # Separate native types from label fallbacks
+                native_types = [(bb_type, gh_type) for bb_type, gh_type in type_fallbacks if gh_type is not None]
+                label_fallbacks = [(bb_type, gh_type) for bb_type, gh_type in type_fallbacks if gh_type is None]
+
+                if native_types:
+                    report.append("**Successfully mapped to native GitHub types:**")
+                    report.append("")
+                    native_summary = {}
+                    for bb_type, gh_type in native_types:
+                        if bb_type not in native_summary:
+                            native_summary[bb_type] = (gh_type, 0)
+                        native_summary[bb_type] = (gh_type, native_summary[bb_type][1] + 1)
+                    for bb_type, (gh_type, count) in native_summary.items():
+                        report.append(f"- **{bb_type}** ({count} issues) → GitHub type **{gh_type}**")
+                    report.append("")
+
+                if label_fallbacks:
+                    report.append("**Types that fell back to labels:**")
+                    report.append("")
+                    fallback_summary = {}
+                    for bb_type, gh_type in label_fallbacks:
+                        fallback_summary[bb_type] = fallback_summary.get(bb_type, 0) + 1
+                    for bb_type, count in fallback_summary.items():
+                        report.append(f"- **{bb_type}** ({count} issues) → Label **type: {bb_type}**")
+                    report.append("")
+
             report.append("**Note:** Use these types in your `issue_type_mapping` configuration to map to GitHub issue types.")
         else:
             report.append("**No issue types found** (all issues have no 'kind' specified)")

@@ -215,10 +215,14 @@ class MigrationOrchestrator:
             self._test_connections()
 
             # Step 6: Perform migration (two-pass for link rewriting)
+            self.type_stats = {}
+            self.type_fallbacks = []
             if not self.config.skip_issues:
                 # First pass: create issues without link rewriting
-                issue_records = self.issue_migrator.migrate_issues(bb_issues, milestone_lookup, skip_link_rewriting=True)
+                issue_records, self.type_stats, self.type_fallbacks = self.issue_migrator.migrate_issues(bb_issues, milestone_lookup, skip_link_rewriting=True)
                 self.issue_mapping.update(self.issue_migrator.issue_mapping)
+            else:
+                issue_records = []
 
             if not self.config.skip_prs:
                 # First pass: create PRs without link rewriting
@@ -508,6 +512,10 @@ class MigrationOrchestrator:
         user_mapping_data = self._collect_user_mapping_data()
         attachment_data = self._collect_attachment_data()
         link_data = self._collect_link_data()
+        type_mapping_data = {
+            'type_stats': self.type_stats,
+            'type_fallbacks': self.type_fallbacks
+        }
 
         # Save mapping
         self.report_generator.save_mapping(
@@ -526,7 +534,8 @@ class MigrationOrchestrator:
                 dry_run=True, report_filename="migration_report_dry_run.md",
                 user_mapping_data=user_mapping_data,
                 attachment_data=attachment_data,
-                link_data=link_data
+                link_data=link_data,
+                type_mapping_data=type_mapping_data
             )
         else:
             self.report_generator.generate_migration_report(
@@ -536,7 +545,8 @@ class MigrationOrchestrator:
                 dry_run=False,
                 user_mapping_data=user_mapping_data,
                 attachment_data=attachment_data,
-                link_data=link_data
+                link_data=link_data,
+                type_mapping_data=type_mapping_data
             )
 
     def _print_summary(self) -> None:

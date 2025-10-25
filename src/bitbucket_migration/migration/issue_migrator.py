@@ -270,7 +270,7 @@ class IssueMigrator:
                 for bb_type, count in fallback_summary.items():
                     self.logger.info(f"    - '{bb_type}' ({count} issues) → Label 'type: {bb_type}'")
 
-        return self.issue_records
+        return self.issue_records, type_stats, type_fallbacks
 
     def _create_gh_issue(self, title: str, body: str, labels: Optional[List[str]] = None,
                           state: str = 'open', assignees: Optional[List[str]] = None,
