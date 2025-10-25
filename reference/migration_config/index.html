@@ -774,6 +774,48 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      🌍 Environment Variables
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🌍 Environment Variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Supported Variables
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      Usage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#security-benefits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security Benefits
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#user-mapping-rules" class="md-nav__link">
     <span class="md-ellipsis">
       👥 User Mapping Rules
@@ -1018,6 +1060,48 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      🌍 Environment Variables
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🌍 Environment Variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Supported Variables
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      Usage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#security-benefits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security Benefits
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#user-mapping-rules" class="md-nav__link">
     <span class="md-ellipsis">
       👥 User Mapping Rules
@@ -1139,12 +1223,12 @@
 <span class="w">    </span><span class="nt">&quot;workspace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;myworkspace&quot;</span><span class="p">,</span>
 <span class="w">    </span><span class="nt">&quot;repo&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;myrepo&quot;</span><span class="p">,</span>
 <span class="w">    </span><span class="nt">&quot;email&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;you@example.com&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ATAT...&quot;</span>
+<span class="w">    </span><span class="nt">&quot;token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;SET_BITBUCKET_TOKEN_ENV_VAR&quot;</span>
 <span class="w">  </span><span class="p">},</span>
 <span class="w">  </span><span class="nt">&quot;github&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">&quot;owner&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your-github-username&quot;</span><span class="p">,</span>
 <span class="w">    </span><span class="nt">&quot;repo&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;myrepo&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ghp_...&quot;</span>
+<span class="w">    </span><span class="nt">&quot;token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;YOUR_GITHUB_TOKEN_HERE&quot;</span>
 <span class="w">  </span><span class="p">},</span>
 <span class="w">  </span><span class="nt">&quot;user_mapping&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">&quot;Alice Smith&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alice-smith-gh&quot;</span><span class="p">,</span>
@@ -1191,7 +1275,7 @@
 <tr>
 <td><code>bitbucket.token</code></td>
 <td>API token</td>
-<td>Use full-access token; see <a href="../api_tokens/">API Tokens</a></td>
+<td>Set via BITBUCKET_TOKEN env var or .env file; see <a href="../api_tokens/">API Tokens</a></td>
 </tr>
 <tr>
 <td><code>github.owner</code></td>
@@ -1206,7 +1290,7 @@
 <tr>
 <td><code>github.token</code></td>
 <td>GitHub PAT</td>
-<td>Must include <code>repo</code> scope</td>
+<td>Set in config or via GITHUB_TOKEN env var; must include <code>repo</code> scope</td>
 </tr>
 <tr>
 <td><code>user_mapping</code></td>
@@ -1225,6 +1309,65 @@
 </tr>
 </tbody>
 </table>
+<hr />
+<h2 id="environment-variables">🌍 Environment Variables</h2>
+<p>For security, tokens can be set via environment variables instead of in the config file. This prevents sensitive data from being stored in plain text.</p>
+<h3 id="supported-variables">Supported Variables</h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+<th>Required</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BITBUCKET_TOKEN</code></td>
+<td>Bitbucket API token</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>BITBUCKET_API_TOKEN</code></td>
+<td>Alternative Bitbucket API token</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>GITHUB_TOKEN</code></td>
+<td>GitHub Personal Access Token</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>GITHUB_API_TOKEN</code></td>
+<td>Alternative GitHub API token</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="usage">Usage</h3>
+<ol>
+<li>
+<p>Set the variables in your shell:
+   <div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">BITBUCKET_TOKEN</span><span class="o">=</span><span class="s2">&quot;your_bitbucket_token&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">GITHUB_TOKEN</span><span class="o">=</span><span class="s2">&quot;your_github_token&quot;</span>
+</code></pre></div></p>
+</li>
+<li>
+<p>Or create a <code>.env</code> file in the project root:
+   <div class="highlight"><pre><span></span><code>BITBUCKET_TOKEN=your_bitbucket_token
+GITHUB_TOKEN=your_github_token
+</code></pre></div></p>
+</li>
+<li>
+<p>The system will automatically load tokens from env vars if not present in the config file.</p>
+</li>
+</ol>
+<h3 id="security-benefits">Security Benefits</h3>
+<ul>
+<li>Tokens are not stored in version control</li>
+<li>Easier to manage in CI/CD environments</li>
+<li>Reduces risk of accidental exposure</li>
+</ul>
 <hr />
 <h2 id="user-mapping-rules">👥 User Mapping Rules</h2>
 <ul>

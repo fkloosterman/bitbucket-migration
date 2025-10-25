@@ -1693,9 +1693,10 @@
 <h3 id="usage-in-configuration">Usage in Configuration</h3>
 <div class="highlight"><pre><span></span><code><span class="nt">&quot;bitbucket&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;email&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;you@example.com&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ATAT1234...&quot;</span>
+<span class="w">  </span><span class="nt">&quot;token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;SET_BITBUCKET_TOKEN_ENV_VAR&quot;</span>
 <span class="p">}</span>
 </code></pre></div>
+<p><strong>Note:</strong> Tokens are no longer stored in config files. Set them via environment variables instead.</p>
 <hr />
 <h2 id="github-authentication">🔑 GitHub Authentication</h2>
 <p><strong>Required for:</strong> <code>migrate_bitbucket_to_github dry-run</code> and <code>migrate_bitbucket_to_github migrate</code></p>
@@ -1738,9 +1739,10 @@
 <div class="highlight"><pre><span></span><code><span class="nt">&quot;github&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;owner&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my-org&quot;</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">&quot;repo&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my-repo&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ghp_abcd123...&quot;</span>
+<span class="w">  </span><span class="nt">&quot;token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;YOUR_GITHUB_TOKEN_HERE&quot;</span>
 <span class="p">}</span>
 </code></pre></div>
+<p><strong>Note:</strong> Tokens are no longer stored in config files. Set them via environment variables instead.</p>
 <h3 id="github-cli-authentication-optional">GitHub CLI Authentication (Optional)</h3>
 <p><strong>Required only for:</strong> <code>--use-gh-cli</code> flag (automatic attachment uploads)</p>
 <h4 id="setup-instructions">Setup Instructions</h4>
@@ -1781,21 +1783,26 @@ winget<span class="w"> </span>install<span class="w"> </span>--id<span class="w"
 <h2 id="token-security-best-practices">🔧 Token Security Best Practices</h2>
 <h3 id="environment-variables-recommended">Environment Variables (Recommended)</h3>
 <div class="highlight"><pre><span></span><code><span class="c1"># Create .env file</span>
-<span class="nv">BITBUCKET_EMAIL</span><span class="o">=</span>you@example.com
 <span class="nv">BITBUCKET_TOKEN</span><span class="o">=</span>ATAT1234...
 <span class="nv">GITHUB_TOKEN</span><span class="o">=</span>ghp_abcd123...
 
-<span class="c1"># Load in your scripts</span>
-migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span><span class="nv">$BITBUCKET_WORKSPACE</span><span class="w"> </span>--repo<span class="w"> </span><span class="nv">$BITBUCKET_REPO</span><span class="w"> </span>--email<span class="w"> </span><span class="nv">$BITBUCKET_EMAIL</span><span class="w"> </span>--token<span class="w"> </span><span class="nv">$BITBUCKET_TOKEN</span>
+<span class="c1"># Or set in shell</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">BITBUCKET_TOKEN</span><span class="o">=</span><span class="s2">&quot;ATAT1234...&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">GITHUB_TOKEN</span><span class="o">=</span><span class="s2">&quot;ghp_abcd123...&quot;</span>
+
+<span class="c1"># Run scripts (tokens loaded automatically from env vars or .env)</span>
+migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com
 </code></pre></div>
 <h3 id="security-guidelines">Security Guidelines</h3>
 <ul>
 <li><strong>Never commit tokens</strong> to Git repositories</li>
+<li><strong>Use environment variables</strong> or .env files for token storage (recommended)</li>
 <li><strong>Use read-only tokens</strong> where possible (audit script only needs read access)</li>
 <li><strong>Rotate tokens regularly</strong> (especially after migration completion)</li>
 <li><strong>Use separate tokens</strong> for different purposes (audit vs migration)</li>
 <li><strong>Delete unused tokens</strong> once migration is verified</li>
 <li><strong>Store securely</strong> in password managers or secure credential storage</li>
+<li><strong>Secure or remove</strong> any token files like bitbucket_api_token.txt</li>
 </ul>
 <h3 id="token-permissions-matrix">Token Permissions Matrix</h3>
 <table>
@@ -1940,31 +1947,41 @@ gh<span class="w"> </span>issue<span class="w"> </span>create<span class="w"> </
 <h3 id="before-running-audit-script">Before Running Audit Script</h3>
 <ol>
 <li>
+<p><strong>Set environment variables:</strong>
+    <div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">BITBUCKET_TOKEN</span><span class="o">=</span><span class="s2">&quot;ATAT1234...&quot;</span>
+</code></pre></div></p>
+</li>
+<li>
 <p><strong>Test Bitbucket authentication:</strong>
-    <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>test-auth<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com<span class="w"> </span>--token<span class="w"> </span>ATAT1234...
+    <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>test-auth<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com
 </code></pre></div></p>
 </li>
 <li>
 <p><strong>Verify repository access:</strong>
-    <div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span>you@example.com:ATAT1234...<span class="w"> </span>https://api.bitbucket.org/2.0/repositories/YOUR_WORKSPACE/YOUR_REPO
+    <div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span>you@example.com:<span class="nv">$BITBUCKET_TOKEN</span><span class="w"> </span>https://api.bitbucket.org/2.0/repositories/YOUR_WORKSPACE/YOUR_REPO
 </code></pre></div></p>
 </li>
 <li>
 <p><strong>Run audit script:</strong>
-    <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com<span class="w"> </span>--token<span class="w"> </span>ATAT1234...
+    <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com
 </code></pre></div></p>
 </li>
 </ol>
 <h3 id="before-running-migration-script">Before Running Migration Script</h3>
 <ol>
 <li>
+<p><strong>Set environment variables:</strong>
+    <div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">GITHUB_TOKEN</span><span class="o">=</span><span class="s2">&quot;ghp_123...&quot;</span>
+</code></pre></div></p>
+</li>
+<li>
 <p><strong>Test GitHub PAT:</strong>
-    <div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token ghp_123...&quot;</span><span class="w"> </span>https://api.github.com/user
+    <div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$GITHUB_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span>https://api.github.com/user
 </code></pre></div></p>
 </li>
 <li>
 <p><strong>Test repository access:</strong>
-    <div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token ghp_123...&quot;</span><span class="w"> </span>https://api.github.com/repos/YOUR_ORG/YOUR_REPO
+    <div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$GITHUB_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span>https://api.github.com/repos/YOUR_ORG/YOUR_REPO
 </code></pre></div></p>
 </li>
 <li>
@@ -1990,16 +2007,20 @@ gh<span class="w"> </span>repo<span class="w"> </span>view<span class="w"> </spa
 <hr />
 <h2 id="quick-start-commands">🚀 Quick Start Commands</h2>
 <h3 id="basic-setup-no-attachments">Basic Setup (No Attachments)</h3>
-<div class="highlight"><pre><span></span><code><span class="c1"># 1. Test Bitbucket token</span>
-migrate_bitbucket_to_github<span class="w"> </span>test-auth<span class="w"> </span>--workspace<span class="w"> </span>myteam<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>me@company.com<span class="w"> </span>--token<span class="w"> </span>ATAT123...
+<div class="highlight"><pre><span></span><code><span class="c1"># 1. Set environment variables</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">BITBUCKET_TOKEN</span><span class="o">=</span><span class="s2">&quot;ATAT123...&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">GITHUB_TOKEN</span><span class="o">=</span><span class="s2">&quot;ghp_456...&quot;</span>
 
-<span class="c1"># 2. Run audit</span>
-migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>myteam<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>me@company.com<span class="w"> </span>--token<span class="w"> </span>ATAT123...
+<span class="c1"># 2. Test Bitbucket token</span>
+migrate_bitbucket_to_github<span class="w"> </span>test-auth<span class="w"> </span>--workspace<span class="w"> </span>myteam<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>me@company.com
 
-<span class="c1"># 3. Test GitHub PAT</span>
-curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token ghp_456...&quot;</span><span class="w"> </span>https://api.github.com/user
+<span class="c1"># 3. Run audit</span>
+migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>myteam<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>me@company.com
 
-<span class="c1"># 4. Run migration dry-run</span>
+<span class="c1"># 4. Test GitHub PAT</span>
+curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$GITHUB_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span>https://api.github.com/user
+
+<span class="c1"># 5. Run migration dry-run</span>
 migrate_bitbucket_to_github<span class="w"> </span>dry-run<span class="w"> </span>--config<span class="w"> </span>config.json
 </code></pre></div>
 <h3 id="advanced-setup-with-auto-upload">Advanced Setup (With Auto-Upload)</h3>
