@@ -7,6 +7,7 @@ authentication, and error handling.
 """
 
 import requests
+import time
 from typing import List, Dict, Any, Optional
 
 from ..exceptions import (
@@ -61,6 +62,13 @@ class GitHubClient:
         # Simulated counter for dry-run mode
         self.simulated_number_counter = 1
 
+        # Rate limiting state - track per resource type
+        self.rate_limits = {
+            'core': {'limit': 5000, 'remaining': 5000, 'reset': 0, 'used': 0},
+            'search': {'limit': 30, 'remaining': 30, 'reset': 0, 'used': 0},
+            'graphql': {'limit': 5000, 'remaining': 5000, 'reset': 0, 'used': 0}
+        }
+
         # Setup authenticated session
         self.session = requests.Session()
         self.session.headers.update({
@@ -71,6 +79,153 @@ class GitHubClient:
 
         # Base URL for repository API endpoints
         self.base_url = f"https://api.github.com/repos/{owner}/{repo}"
+
+    def _update_rate_limits_from_headers(self, headers: dict) -> None:
+        """
+        Update rate limit tracking from response headers (free, no extra API call).
+
+        Args:
+            headers: Response headers from any GitHub API call
+        """
+        resource = headers.get('X-RateLimit-Resource', 'core')
+
+        # Only track known resources
+        if resource not in self.rate_limits:
+            return
+
+        try:
+            self.rate_limits[resource].update({
+                'limit': int(headers.get('X-RateLimit-Limit', self.rate_limits[resource]['limit'])),
+                'remaining': int(headers.get('X-RateLimit-Remaining', self.rate_limits[resource]['remaining'])),
+                'reset': int(headers.get('X-RateLimit-Reset', self.rate_limits[resource]['reset'])),
+                'used': int(headers.get('X-RateLimit-Used', self.rate_limits[resource]['used']))
+            })
+        except (ValueError, TypeError):
+            # If header parsing fails, keep existing values
+            pass
+
+    def _calculate_wait_time(self, headers: dict, status_code: int) -> float:
+        """
+        Calculate optimal wait time based on GitHub's rate limit signals.
+
+        Args:
+            headers: Response headers
+            status_code: HTTP status code
+
+        Returns:
+            Seconds to wait before retry (0 = no wait needed)
+        """
+        # Priority 1: Retry-After header (most accurate)
+        if 'Retry-After' in headers:
+            try:
+                wait_time = float(headers['Retry-After'])
+                return wait_time
+            except (ValueError, TypeError):
+                pass
+
+        # Priority 2: Rate limit reset for 403 errors
+        if status_code == 403:
+            reset_time = int(headers.get('X-RateLimit-Reset', 0))
+            remaining = int(headers.get('X-RateLimit-Remaining', 1))
+
+            if remaining == 0 and reset_time > 0:
+                wait_time = max(0, reset_time - time.time() + 1)
+                # Cap at 5 minutes for safety (in case of edge cases)
+                wait_time = min(wait_time, 300)
+                return wait_time
+            else:
+                # This 403 might not be a rate limit - could be permissions or other policy
+                # For PR review comments, GitHub sometimes returns 403 for rate limits without proper headers
+                # Let's assume it's a rate limit and wait a short time
+                return 30  # Wait 30 seconds as fallback for ambiguous 403 errors
+
+        # Priority 3: Progressive backoff for 429 (secondary limits)
+        if status_code == 429:
+            wait_time = 60  # Start with 1 minute for secondary limits
+            return wait_time
+
+        # Priority 4: Calculated wait based on remaining quota
+        remaining = int(headers.get('X-RateLimit-Remaining', 100))
+        if remaining < 10:
+            # We're running low, slow down
+            wait_time = 30
+            return wait_time
+        elif remaining < 50:
+            wait_time = 10
+            return wait_time
+
+        return 0  # No wait needed
+
+    def _make_request_with_retry(self, method: str, url: str, max_retries: int = 5, **kwargs) -> requests.Response:
+        """
+        Make an HTTP request with intelligent retry on rate limiting and transient errors.
+
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            url: Request URL
+            max_retries: Maximum number of retries (increased from 3)
+            **kwargs: Additional arguments for requests
+
+        Returns:
+            Response object
+
+        Raises:
+            The original exception after all retries are exhausted
+        """
+        last_exception = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                # Make the request
+                response = self.session.request(method, url, **kwargs)
+
+                # Update rate limit tracking from headers (free!)
+                self._update_rate_limits_from_headers(response.headers)
+
+                # Success case
+                if response.status_code < 400:
+                    return response
+
+                # Rate limit error cases
+                if response.status_code in [403, 429]:
+                    wait_time = self._calculate_wait_time(response.headers, response.status_code)
+
+                    if attempt < max_retries:
+                        if wait_time > 0:
+                            print(f"Rate limit hit (status {response.status_code}). Waiting {wait_time:.0f}s before retry {attempt+1}/{max_retries}")
+                            time.sleep(wait_time)
+                        else:
+                            print(f"Rate limit hit (status {response.status_code}) but no wait time calculated. Continuing immediately.")
+                        continue
+                    else:
+                        if response.status_code == 403:
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                        else:  # 429
+                            raise APIError("GitHub API secondary rate limit exceeded. Please wait before retrying.")
+
+                # For other errors, retry on server errors (5xx) and some client errors
+                if response.status_code >= 500 or response.status_code in [408]:
+                    if attempt < max_retries:
+                        wait_time = min(2 ** attempt, 30)  # Exponential backoff, max 30 seconds
+                        time.sleep(wait_time)
+                        continue
+
+                # If we get here, it's a non-retryable error
+                return response
+
+            except requests.exceptions.RequestException as e:
+                last_exception = e
+                if attempt < max_retries:
+                    wait_time = min(2 ** attempt, 30)
+                    time.sleep(wait_time)
+                    continue
+                break
+
+        # All retries exhausted
+        if last_exception:
+            raise NetworkError(f"Network error after {max_retries} retries: {last_exception}")
+        else:
+            raise APIError(f"Request failed after {max_retries} retries")
 
     def create_issue(self, title: str, body: str, **kwargs) -> Dict[str, Any]:
         """
@@ -118,7 +273,7 @@ class GitHubClient:
                 payload[key] = value
 
         try:
-            response = self.session.post(f"{self.base_url}/issues", json=payload)
+            response = self._make_request_with_retry('POST', f"{self.base_url}/issues", json=payload)
             response.raise_for_status()
             return response.json()
 
@@ -191,7 +346,7 @@ class GitHubClient:
         }
 
         try:
-            response = self.session.post(f"{self.base_url}/pulls", json=payload)
+            response = self._make_request_with_retry('POST', f"{self.base_url}/pulls", json=payload)
             response.raise_for_status()
             return response.json()
 
@@ -210,6 +365,56 @@ class GitHubClient:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
         except Exception as e:
             raise APIError(f"Unexpected error creating GitHub PR: {e}")
+
+    def get_pull_request(self, pull_number: int) -> Dict[str, Any]:
+        """
+        Get details of a GitHub pull request.
+
+        Args:
+            pull_number: The pull request number
+
+        Returns:
+            Pull request data
+
+        Raises:
+            ValidationError: If pull_number is invalid
+            APIError: If the API request fails
+            AuthenticationError: If authentication fails
+            NetworkError: If there's a network connectivity issue
+        """
+        if not isinstance(pull_number, int) or pull_number <= 0:
+            raise ValidationError("Pull request number must be a positive integer")
+
+        # Read operations are allowed in dry-run mode
+        try:
+            response = self._make_request_with_retry('GET', f"{self.base_url}/pulls/{pull_number}")
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                raise AuthenticationError("GitHub authentication failed. Please check your token.")
+            elif e.response.status_code == 404:
+                raise APIError(f"Pull request not found: {pull_number}", status_code=404)
+            elif e.response.status_code == 403:
+                # For PR review comments, 403 might be rate limiting even without proper headers
+                # Check if this looks like a rate limit error by examining the response
+                try:
+                    error_data = e.response.json()
+                    error_message = error_data.get('message', '').lower()
+                    if any(keyword in error_message for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                        raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                    else:
+                        raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
+                except (ValueError, AttributeError):
+                    # If we can't parse the error message, assume it's rate limiting for PR comments
+                    raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+            else:
+                raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
+        except requests.exceptions.RequestException as e:
+            raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except Exception as e:
+            raise APIError(f"Unexpected error fetching GitHub pull request: {e}")
 
     def create_comment(self, issue_number: int, body: str) -> Dict[str, Any]:
         """
@@ -243,7 +448,8 @@ class GitHubClient:
             }
 
         try:
-            response = self.session.post(
+            response = self._make_request_with_retry(
+                'POST',
                 f"{self.base_url}/issues/{issue_number}/comments",
                 json={'body': body.strip()}
             )
@@ -258,6 +464,13 @@ class GitHubClient:
             elif e.response.status_code == 422:
                 raise ValidationError(f"Invalid comment data: {e}")
             elif e.response.status_code == 403:
+                # Check if this is a locked issue/PR
+                try:
+                    error_msg = e.response.json().get('message', '')
+                    if 'locked' in error_msg.lower():
+                        raise ValidationError(f"Issue/PR #{issue_number} is locked and cannot accept new comments")
+                except:
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
@@ -297,7 +510,8 @@ class GitHubClient:
             }
 
         try:
-            response = self.session.patch(
+            response = self._make_request_with_retry(
+                'PATCH',
                 f"https://api.github.com/repos/{self.owner}/{self.repo}/issues/comments/{comment_id}",
                 json={'body': body.strip()}
             )
@@ -321,9 +535,9 @@ class GitHubClient:
             raise APIError(f"Unexpected error updating GitHub comment: {e}")
 
     def create_pr_review_comment(self, pull_number: int, body: str, path: str, line: int,
-                                  side: str = 'RIGHT', start_line: Optional[int] = None,
-                                  start_side: Optional[str] = None, commit_id: Optional[str] = None,
-                                  in_reply_to: Optional[int] = None) -> Dict[str, Any]:
+                                   side: str = 'RIGHT', start_line: Optional[int] = None,
+                                   start_side: Optional[str] = None, commit_id: Optional[str] = None,
+                                   in_reply_to: Optional[int] = None) -> Dict[str, Any]:
         """
         Create an inline comment on a GitHub pull request review.
 
@@ -358,6 +572,20 @@ class GitHubClient:
         if side not in ['LEFT', 'RIGHT']:
             raise ValidationError("Side must be 'LEFT' or 'RIGHT'")
 
+        # Validate commit_id format if provided
+        if commit_id is not None:
+            if not isinstance(commit_id, str) or len(commit_id.strip()) == 0:
+                raise ValidationError("Commit ID must be a non-empty string")
+            commit_id = commit_id.strip()
+            # Basic SHA validation (40 hex chars or short SHA)
+            if not (len(commit_id) >= 4 and len(commit_id) <= 40 and all(c in '0123456789abcdefABCDEF' for c in commit_id)):
+                raise ValidationError("Commit ID must be a valid SHA hash")
+
+        # Validate in_reply_to if provided
+        if in_reply_to is not None:
+            if not isinstance(in_reply_to, int) or in_reply_to <= 0:
+                raise ValidationError("in_reply_to must be a positive integer")
+
         # In dry-run mode, return simulated data
         if self.dry_run:
             return {
@@ -386,7 +614,8 @@ class GitHubClient:
             payload['in_reply_to'] = in_reply_to
 
         try:
-            response = self.session.post(
+            response = self._make_request_with_retry(
+                'POST',
                 f"{self.base_url}/pulls/{pull_number}/comments",
                 json=payload
             )
@@ -394,12 +623,27 @@ class GitHubClient:
             return response.json()
 
         except requests.exceptions.HTTPError as e:
+
             if e.response.status_code == 401:
                 raise AuthenticationError("GitHub authentication failed. Please check your token.")
             elif e.response.status_code == 404:
                 raise APIError(f"Pull request or file not found: {pull_number}", status_code=404)
             elif e.response.status_code == 422:
-                raise ValidationError(f"Invalid review comment data: {e}")
+                # Enhanced error handling for 422 errors
+                try:
+                    error_data = e.response.json()
+                    error_message = error_data.get('message', str(e))
+                    # Check for specific validation errors
+                    if 'commit_id' in error_message.lower():
+                        raise ValidationError(f"Invalid commit_id parameter: {error_message}")
+                    elif 'line' in error_message.lower() or 'position' in error_message.lower():
+                        raise ValidationError(f"Invalid line number or position: {error_message}")
+                    elif 'path' in error_message.lower():
+                        raise ValidationError(f"Invalid file path: {error_message}")
+                    else:
+                        raise ValidationError(f"Invalid review comment data: {error_message}")
+                except (ValueError, AttributeError):
+                    raise ValidationError(f"Invalid review comment data: {e}")
             elif e.response.status_code == 403:
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
@@ -441,7 +685,7 @@ class GitHubClient:
             }
 
         try:
-            response = self.session.patch(f"{self.base_url}/issues/{issue_number}", json=kwargs)
+            response = self._make_request_with_retry('PATCH', f"{self.base_url}/issues/{issue_number}", json=kwargs)
             response.raise_for_status()
             return response.json()
 
@@ -480,7 +724,7 @@ class GitHubClient:
         url = f"https://api.github.com/orgs/{org}/issue-types"
 
         try:
-            response = self.session.get(url)
+            response = self._make_request_with_retry('GET', url)
             response.raise_for_status()
             issue_types = response.json()
 
@@ -531,7 +775,7 @@ class GitHubClient:
 
         # Read operations are allowed in dry-run mode
         try:
-            response = self.session.get(f"{self.base_url}/branches/{branch_name.strip()}")
+            response = self._make_request_with_retry('GET', f"{self.base_url}/branches/{branch_name.strip()}")
             if response.status_code == 200:
                 return True
             elif response.status_code == 404:
@@ -567,7 +811,7 @@ class GitHubClient:
         """
         # Read operations are allowed in dry-run mode
         try:
-            response = self.session.get(self.base_url)
+            response = self._make_request_with_retry('GET', self.base_url)
             response.raise_for_status()
             return response.json()
 
@@ -606,11 +850,11 @@ class GitHubClient:
 
             if detailed:
                 # Test issues endpoint
-                issues_response = self.session.get(f"{self.base_url}/issues")
+                issues_response = self._make_request_with_retry('GET', f"{self.base_url}/issues")
                 issues_response.raise_for_status()
 
                 # Test pull requests endpoint
-                prs_response = self.session.get(f"{self.base_url}/pulls")
+                prs_response = self._make_request_with_retry('GET', f"{self.base_url}/pulls")
                 prs_response.raise_for_status()
 
             return True

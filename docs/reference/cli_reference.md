@@ -131,6 +131,8 @@ migrate_bitbucket_to_github audit --workspace WORKSPACE --repo REPO --email EMAI
 | `--no-config` | Do not generate migration configuration template (default is to generate) | |
 | `--gh-owner` | GitHub username/org for config template | `myusername` |
 | `--gh-repo` | GitHub repository name for config template | `myproject` |
+| `--output-dir` | Output directory for audit files (reports, data files). Defaults to <workspace>_<repo> folder in current directory. | `myworkspace_myrepo` |
+| `--debug` | Enable debug logging | |
 
 **Note:** Missing required arguments will be prompted for interactively.
 
@@ -398,6 +400,14 @@ migrate_bitbucket_to_github migrate --config CONFIG_FILE [OPTIONS]
 | `--skip-prs` | Skip pull request migration phase |
 | `--skip-pr-as-issue` | Skip migrating closed PRs as issues |
 | `--use-gh-cli` | Auto-upload attachments using GitHub CLI |
+| `--output-dir` | Directory for migration output files (logs, reports, attachments). Defaults to <workspace>_<repo> folder in current directory | `myworkspace_myrepo` |
+| `--cross-repo-mappings` | Path to shared cross-repository mappings file (JSON). Used for rewriting cross-repo links. | `cross_repo_mappings.json` |
+| `--update-links-only` | Phase 2 mode: Update cross-repository links only (assumes migration already complete) | |
+| `--debug` | Enable debug logging | |
+| `--output-dir` | Directory for migration output files (logs, reports, attachments). Defaults to <workspace>_<repo> folder in current directory | `myworkspace_myrepo` |
+| `--cross-repo-mappings` | Path to shared cross-repository mappings file (JSON). Used for rewriting cross-repo links. | `cross_repo_mappings.json` |
+| `--update-links-only` | Phase 2 mode: Update cross-repository links only (assumes migration already complete) | |
+| `--debug` | Enable debug logging | |
 
 ### Examples
 
@@ -526,6 +536,9 @@ migrate_bitbucket_to_github clean [OPTIONS]
 | Argument | Description | Example |
 |----------|-------------|---------|
 | `--all` | Remove all outputs including the configuration file | |
+| `--output-dir` | Clean specific output directory (default: current directory). Use this to clean outputs from a specific repository migration. | `myworkspace_myrepo` |
+| `--workspace` | Bitbucket workspace name - used to find default output directory | `myworkspace` |
+| `--repo` | Repository name - used to find default output directory | `myrepo` |
 
 ### Examples
 

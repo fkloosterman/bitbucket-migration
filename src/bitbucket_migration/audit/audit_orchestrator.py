@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ..clients.bitbucket_client import BitbucketClient
 from ..services.user_mapper import UserMapper
+from ..utils.logging_config import MigrationLogger
 from ..exceptions import (
     APIError,
     AuthenticationError,
@@ -29,7 +30,7 @@ class AuditOrchestrator:
     the migration system while providing audit-specific functionality.
     """
 
-    def __init__(self, workspace: str, repo: str, email: str, token: str):
+    def __init__(self, workspace: str, repo: str, email: str, token: str, log_level: str = "INFO"):
         """
         Initialize the AuditOrchestrator.
 
@@ -38,6 +39,7 @@ class AuditOrchestrator:
             repo: Repository name
             email: User email for API authentication
             token: Bitbucket API token
+            log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
 
         Raises:
             ValidationError: If any required parameter is empty
@@ -55,6 +57,9 @@ class AuditOrchestrator:
         self.repo = repo
         self.email = email
         self.token = token
+
+        # Initialize logger
+        self.logger = MigrationLogger(log_level=log_level)
 
         # Initialize shared components
         self.bb_client = BitbucketClient(workspace, repo, email, token)
@@ -86,8 +91,8 @@ class AuditOrchestrator:
             AuthenticationError: If authentication fails
             NetworkError: If network issues occur
         """
-        print("🔍 Starting Bitbucket repository audit...")
-        print(f"   Repository: {self.workspace}/{self.repo}")
+        self.logger.info("🔍 Starting Bitbucket repository audit...")
+        self.logger.info(f"   Repository: {self.workspace}/{self.repo}")
 
         try:
             # Step 1: Fetch data
@@ -102,45 +107,45 @@ class AuditOrchestrator:
             # Step 4: Generate comprehensive report
             report = self._generate_report()
 
-            print("✅ Audit completed successfully")
+            self.logger.info("✅ Audit completed successfully")
             return report
 
         except (APIError, AuthenticationError, NetworkError) as e:
-            print(f"❌ Audit failed: {e}")
+            self.logger.error(f"❌ Audit failed: {e}")
             raise
         except Exception as e:
-            print(f"❌ Unexpected error during audit: {e}")
+            self.logger.error(f"❌ Unexpected error during audit: {e}")
             raise
 
     def _fetch_data(self) -> None:
         """Fetch all repository data using BitbucketClient."""
-        print("📥 Fetching repository data...")
+        self.logger.info("📥 Fetching repository data...")
 
         # Fetch issues
-        print("   Fetching issues...")
+        self.logger.info("   Fetching issues...")
         self.issues = self.bb_client.get_issues()
-        print(f"   ✓ Found {len(self.issues)} issues")
+        self.logger.info(f"   ✓ Found {len(self.issues)} issues")
 
         # Collect unique issue types (kinds)
-        print("   Collecting issue types...")
+        self.logger.info("   Collecting issue types...")
         for issue in self.issues:
             if issue.get('kind'):
                 self.issue_types.add(issue['kind'])
-        print(f"   ✓ Found {len(self.issue_types)} unique issue types")
+        self.logger.info(f"   ✓ Found {len(self.issue_types)} unique issue types")
 
         # Fetch pull requests
-        print("   Fetching pull requests...")
+        self.logger.info("   Fetching pull requests...")
         self.pull_requests = self.bb_client.get_pull_requests()
-        print(f"   ✓ Found {len(self.pull_requests)} pull requests")
+        self.logger.info(f"   ✓ Found {len(self.pull_requests)} pull requests")
 
         # Fetch milestones
-        print("   Fetching milestones...")
+        self.logger.info("   Fetching milestones...")
         try:
             milestones = self.bb_client.get_milestones()
             self.milestones = {m.get('name') for m in milestones if m.get('name')}
-            print(f"   ✓ Found {len(self.milestones)} milestones")
+            self.logger.info(f"   ✓ Found {len(self.milestones)} milestones")
         except Exception as e:
-            print(f"   ⚠️  Could not fetch milestones: {e}")
+            self.logger.warning(f"   ⚠️  Could not fetch milestones: {e}")
             self.milestones = set()
 
         # Collect users from issues and PRs
@@ -151,7 +156,7 @@ class AuditOrchestrator:
 
     def _collect_users(self) -> None:
         """Collect all users from issues and PRs."""
-        print("   Collecting users...")
+        self.logger.info("   Collecting users...")
 
         for issue in self.issues:
             # Reporter
@@ -179,11 +184,11 @@ class AuditOrchestrator:
                 if reviewer.get('display_name'):
                     self.users.add(reviewer['display_name'])
 
-        print(f"   ✓ Found {len(self.users)} unique users")
+        self.logger.info(f"   ✓ Found {len(self.users)} unique users")
 
     def _fetch_attachments(self) -> None:
         """Fetch all attachments from issues."""
-        print("   Fetching attachments...")
+        self.logger.info("   Fetching attachments...")
 
         for issue in self.issues:
             try:
@@ -199,11 +204,11 @@ class AuditOrchestrator:
                 # Attachments might not be available for some issues
                 continue
 
-        print(f"   ✓ Found {len(self.attachments)} attachments")
+        self.logger.info(f"   ✓ Found {len(self.attachments)} attachments")
 
     def _build_user_mappings(self) -> None:
         """Build user mappings using UserMapper."""
-        print("   Building user mappings...")
+        self.logger.info("   Building user mappings...")
 
         # Build account ID mappings from fetched data
         self.user_mapper.build_account_id_mappings(self.issues, self.pull_requests)
@@ -211,11 +216,11 @@ class AuditOrchestrator:
         # Scan comments for additional account IDs
         self.user_mapper.scan_comments_for_account_ids(self.issues, self.pull_requests)
 
-        print(f"   ✓ Built mappings for {len(self.user_mapper.account_id_to_username)} account IDs")
+        self.logger.info(f"   ✓ Built mappings for {len(self.user_mapper.account_id_to_username)} account IDs")
 
     def _analyze_structure(self) -> None:
         """Analyze repository structure and perform audit calculations."""
-        print("   Analyzing repository structure...")
+        self.logger.info("   Analyzing repository structure...")
 
         # Analyze gaps
         issue_gaps, issue_gap_count = self.audit_utils.analyze_gaps(self.issues)
@@ -234,11 +239,11 @@ class AuditOrchestrator:
             self.issues, self.pull_requests, self.attachments, issue_gap_count
         )
 
-        print("   ✓ Analysis complete")
+        self.logger.info("   ✓ Analysis complete")
 
     def _generate_report(self) -> Dict[str, Any]:
         """Generate comprehensive audit report."""
-        print("   Generating audit report...")
+        self.logger.info("   Generating audit report...")
 
         # Get structural analysis
         structure_analysis = self.audit_utils.analyze_repository_structure(
@@ -488,31 +493,36 @@ class AuditOrchestrator:
         from datetime import datetime
         return datetime.now().isoformat()
 
-    def save_reports(self, report: Dict[str, Any], output_dir: str = '.') -> None:
+    def save_reports(self, report: Dict[str, Any], output_dir: str = None) -> None:
         """
         Save audit reports to files.
 
         Args:
             report: Complete audit report dictionary
-            output_dir: Directory to save reports in
+            output_dir: Directory to save reports in (defaults to <workspace>_<repo>)
         """
         import json
         from pathlib import Path
 
+        # Default to workspace_repo format if not specified
+        if output_dir is None:
+            output_dir = f"{self.workspace}_{self.repo}"
+
         output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
 
         # Save JSON report
         json_file = output_path / 'bitbucket_audit_report.json'
         with open(json_file, 'w') as f:
             json.dump(report, f, indent=2, default=str)
-        print(f"📄 JSON report saved: {json_file}")
+        self.logger.info(f"📄 JSON report saved: {json_file}")
 
         # Save Markdown report
         markdown_content = self._generate_markdown_report(report)
         markdown_file = output_path / 'bitbucket_audit_report.md'
         with open(markdown_file, 'w', encoding='utf-8') as f:
             f.write(markdown_content)
-        print(f"📄 Markdown report saved: {markdown_file}")
+        self.logger.info(f"📄 Markdown report saved: {markdown_file}")
 
         # Save detailed data
         issues_file = output_path / 'bitbucket_issues_detail.json'
@@ -523,7 +533,7 @@ class AuditOrchestrator:
         with open(prs_file, 'w') as f:
             json.dump(self.pull_requests, f, indent=2, default=str)
 
-        print(f"📄 Detailed data saved: {issues_file}, {prs_file}")
+        self.logger.info(f"📄 Detailed data saved: {issues_file}, {prs_file}")
 
     def generate_migration_config(self, gh_owner: str = "", gh_repo: str = "") -> Dict[str, Any]:
         """
@@ -553,7 +563,7 @@ class AuditOrchestrator:
             "_comment": "Bitbucket to GitHub Migration Configuration",
             "_instructions": {
                 "step_1": "Set BITBUCKET_TOKEN or BITBUCKET_API_TOKEN environment variable (or in .env file) with your Bitbucket API token",
-                "step_2": "Fill in your GitHub personal access token (needs 'repo' scope) in github.token or set GITHUB_TOKEN environment variable",
+                "step_2": "Set GITHUB_TOKEN or GITHUB_API_TOKEN environment variable (or in .env file) with your GitHub personal access token (needs 'repo' scope)",
                 "step_3": "Set github.owner to your GitHub username or organization",
                 "step_4": "Set github.repo to your target repository name",
                 "step_5": "For each user in user_mapping - set to their GitHub username if they have an account, or set to null/empty if they don't",
@@ -565,45 +575,55 @@ class AuditOrchestrator:
             "bitbucket": {
                 "workspace": self.workspace,
                 "repo": self.repo,
-                "email": self.email,
-                "token": "SET_BITBUCKET_TOKEN_ENV_VAR"
+                "email": self.email
             },
             "github": {
                 "owner": gh_owner,
-                "repo": gh_repo,
-                "token": "YOUR_GITHUB_TOKEN_HERE"
+                "repo": gh_repo
             },
             "user_mapping": user_mapping
         }
 
         return config
 
-    def save_migration_config(self, config: Dict[str, Any], filename: str = 'migration_config.json') -> None:
+    def save_migration_config(self, config: Dict[str, Any], filename: str = None, output_dir: str = '.') -> None:
         """
         Save migration configuration to file.
 
         Args:
             config: Configuration dictionary
-            filename: Output filename
+            filename: Output filename (auto-generated if None)
+            output_dir: Directory to save config in
         """
         import json
+        from pathlib import Path
 
-        with open(filename, 'w') as f:
+        # Auto-generate filename if not provided
+        if filename is None:
+            workspace = config.get('bitbucket', {}).get('workspace', 'unknown')
+            repo = config.get('bitbucket', {}).get('repo', 'unknown')
+            filename = f"config-{workspace}-{repo}.json"
+
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        config_file = output_path / filename
+        with open(config_file, 'w') as f:
             json.dump(config, f, indent=2)
 
-        print(f"\n{'='*80}")
-        print(f"📋 Migration configuration template saved: {filename}")
-        print(f"{'='*80}")
-        print("\nNext steps:")
-        print("1. Set environment variables or edit migration_config.json:")
-        print("   - Set BITBUCKET_TOKEN or BITBUCKET_API_TOKEN (env var or .env file)")
-        print("   - Add your GitHub token (in config or set GITHUB_TOKEN env var)")
-        print("   - Set github.owner to your GitHub username")
-        print("   - Map Bitbucket users to GitHub usernames")
-        print("     (use null for users without GitHub accounts)")
-        print("   - Secure or remove bitbucket_api_token.txt file")
-        print("\n2. Test with dry run:")
-        print(f"   migrate_bitbucket_to_github dry-run --config {filename}")
-        print("\n3. Run actual migration:")
-        print(f"   migrate_bitbucket_to_github migrate --config {filename}")
-        print(f"{'='*80}")
+        self.logger.info(f"\n{'='*80}")
+        self.logger.info(f"📋 Migration configuration template saved: {config_file}")
+        self.logger.info(f"{'='*80}")
+        self.logger.info("\nNext steps:")
+        self.logger.info("1. Set environment variables (recommended) or edit the config file:")
+        self.logger.info("   - Set BITBUCKET_TOKEN or BITBUCKET_API_TOKEN (env var or .env file)")
+        self.logger.info("   - Set GITHUB_TOKEN or GITHUB_API_TOKEN (env var or .env file)")
+        self.logger.info("   - Set github.owner to your GitHub username")
+        self.logger.info("   - Map Bitbucket users to GitHub usernames")
+        self.logger.info("     (use null for users without GitHub accounts)")
+        self.logger.info("   - Secure or remove bitbucket_api_token.txt file")
+        self.logger.info("\n2. Test with dry run:")
+        self.logger.info(f"   migrate_bitbucket_to_github dry-run --config {config_file}")
+        self.logger.info("\n3. Run actual migration:")
+        self.logger.info(f"   migrate_bitbucket_to_github migrate --config {config_file}")
+        self.logger.info(f"{'='*80}")

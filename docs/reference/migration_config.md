@@ -13,28 +13,54 @@ This file defines how the migration tool connects to Bitbucket and GitHub, and h
   "bitbucket": {
     "workspace": "myworkspace",
     "repo": "myrepo",
-    "email": "you@example.com",
-    "token": "SET_BITBUCKET_TOKEN_ENV_VAR"
+    "email": "you@example.com"
   },
   "github": {
     "owner": "your-github-username",
-    "repo": "myrepo",
-    "token": "YOUR_GITHUB_TOKEN_HERE"
+    "repo": "myrepo"
   },
   "user_mapping": {
-    "Alice Smith": "alice-smith-gh",
-    "Bob Jones": "bjones",
+    "Alice Smith": {
+      "github": "alice-smith-gh",
+      "bitbucket_username": "asmith",
+      "display_name": "Alice Smith"
+    },
+    "Bob Jones": {
+      "github": "bjones",
+      "bitbucket_username": "bjones",
+      "display_name": "Bob Jones"
+    },
     "Unknown (deleted user)": null
-  },
-  "repository_mapping": {
-    "workspace/other-repo": "github-owner/other-repo",
-    "workspace/shared-lib": "shared-lib"
   },
   "issue_type_mapping": {
     "bug": "Bug",
     "task": "Task",
     "enhancement": "Feature Request"
-  }
+  },
+  "skip_issues": false,
+  "skip_prs": false,
+  "skip_pr_as_issue": false,
+  "use_gh_cli": false,
+  "link_rewriting_config": {
+    "enabled": true,
+    "enable_notes": true,
+    "enable_markdown_context_awareness": true,
+    "note_templates": {
+      "issue_link": " *(was [BB #{bb_num}]({bb_url}))*",
+      "pr_link": " *(was [BB PR #{bb_num}]({bb_url}))*",
+      "commit_link": " *(was [Bitbucket]({bb_url}))*",
+      "branch_link": " *(was [Bitbucket]({bb_url}))*",
+      "compare_link": " *(was [Bitbucket]({bb_url}))*",
+      "repo_home_link": "",
+      "cross_repo_link": " *(was [Bitbucket]({bb_url}))*",
+      "short_issue_ref": " *(was BB `#{bb_num}`)*",
+      "pr_ref": " *(was BB PR `#{bb_num}`)*",
+      "mention": "",
+      "default": " *(migrated link)*"
+    }
+  },
+  "output_dir": ".",
+  "cross_repo_mappings_file": "cross_repo_mappings.json"
 }
 ```
 
@@ -51,9 +77,15 @@ This file defines how the migration tool connects to Bitbucket and GitHub, and h
 | `github.owner`        | GitHub user/org name | Destination owner for repository                       |
 | `github.repo`         | Repository name      | Destination repo name (must exist and be empty)        |
 | `github.token`        | GitHub PAT           | Set in config or via GITHUB_TOKEN env var; must include `repo` scope |
-| `user_mapping`        | Mapping table        | Links Bitbucket display names to GitHub usernames      |
-| `repository_mapping`  | Repository mapping   | Maps Bitbucket repositories to GitHub repositories for cross-repo link rewriting |
+| `user_mapping`        | Mapping table        | Links Bitbucket display names/usernames to GitHub usernames (enhanced format) |
 | `issue_type_mapping`  | Issue type mapping   | Maps Bitbucket issue types to GitHub issue types       |
+| `skip_issues`         | Skip issues          | Skip migrating issues if true                          |
+| `skip_prs`            | Skip PRs             | Skip migrating pull requests if true                   |
+| `skip_pr_as_issue`    | Skip PR→issue        | Skip migrating closed PRs as issues if true            |
+| `use_gh_cli`          | Use GitHub CLI       | Use GitHub CLI for attachment uploads if true          |
+| `link_rewriting_config` | Link rewriting       | Configuration for link rewriting behavior and templates |
+| `output_dir`          | Output directory     | Directory for migration logs, reports, and attachments |
+| `cross_repo_mappings_file` | Cross-repo mappings | Path to shared mappings file for multi-repo migrations |
 
 ---
 
@@ -97,50 +129,100 @@ For security, tokens can be set via environment variables instead of in the conf
 
 ## 👥 User Mapping Rules
 
+The user mapping now supports an enhanced format that includes display names and Bitbucket usernames for better mapping accuracy.
+
+### Simple Format (Legacy)
+```json
+"user_mapping": {
+  "Alice Smith": "alice-github",
+  "Bob Jones": "bjones",
+  "External Consultant": null
+}
+```
+
+### Enhanced Format (Recommended)
+```json
+"user_mapping": {
+  "Alice Smith": {
+    "github": "alice-github",
+    "bitbucket_username": "asmith",
+    "display_name": "Alice Smith"
+  },
+  "Bob Jones": {
+    "github": "bjones",
+    "bitbucket_username": "bjones",
+    "display_name": "Bob Jones"
+  },
+  "External Contractor": null
+}
+```
+
+### Mapping Rules
 * If a Bitbucket user **does not** have a GitHub account, map to `null`.
 * Deleted users can be represented as `"Unknown (deleted user)": null`.
 * Use GitHub usernames, not emails.
+* The enhanced format provides better accuracy for @mentions and display name resolution.
+* Display names are used when users are mentioned by name in comments (not just @username).
 * You can edit `user_mapping` manually or import from `user_mapping_template.txt`.
-
-Example:
-
-```json
-"user_mapping": {
-  "External Consultant": null,
-  "Former Employee": null,
-  "Alice": "alice-gh",
-  "Bob": "bob-dev"
-}
-```
 
 ---
 
-## Repository Mapping
+## Link Rewriting Configuration
 
-This optional section allows automatic rewriting of cross-repository links when migrating multiple related repositories.
+This section controls how links are rewritten during migration, including templates for different link types and behavior settings.
 
 ```json
-"repository_mapping": {
-  "workspace/other-repo": "github-owner/other-repo",
-  "workspace/shared-lib": "shared-lib"
+"link_rewriting_config": {
+  "enabled": true,
+  "enable_notes": true,
+  "enable_markdown_context_awareness": true,
+  "note_templates": {
+    "issue_link": " *(was [BB #{bb_num}]({bb_url}))*",
+    "pr_link": " *(was [BB PR #{bb_num}]({bb_url}))*",
+    "commit_link": " *(was [Bitbucket]({bb_url}))*",
+    "branch_link": " *(was [Bitbucket]({bb_url}))*",
+    "compare_link": " *(was [Bitbucket]({bb_url}))*",
+    "repo_home_link": "",
+    "cross_repo_link": " *(was [Bitbucket]({bb_url}))*",
+    "short_issue_ref": " *(was BB `#{bb_num}`)*",
+    "pr_ref": " *(was BB PR `#{bb_num}`)*",
+    "mention": "",
+    "default": " *(migrated link)*"
+  }
 }
 ```
 
+### Configuration Options
+- `enabled`: Enable/disable link rewriting entirely
+- `enable_notes`: Add explanatory notes to rewritten links
+- `enable_markdown_context_awareness`: Handle links differently in markdown vs plain text
+- `note_templates`: Custom templates for different link types using `{bb_num}`, `{bb_url}`, `{gh_url}` placeholders
+
 ### Supported Link Types
-- Repository home: `https://bitbucket.org/workspace/other-repo` → `[other-repo](github_url)`
-- Issues: `https://bitbucket.org/workspace/other-repo/issues/42` → `[other-repo #42](github_url)` (numbers preserved)
-- Source files: `https://bitbucket.org/workspace/other-repo/src/hash/file.cpp` → `[other-repo/file.cpp](github_url)`
-- Commits: `https://bitbucket.org/workspace/other-repo/commits/abc123` → `[other-repo@abc123](github_url)`
+- **Issue/PR Links**: Full URLs to issues and pull requests
+- **Commit Links**: Links to specific commits
+- **Branch Links**: Links to branch commit history
+- **Compare Links**: Links to commit comparisons
+- **Repository Home**: Links to repository root pages
+- **Cross-repo Links**: Links between different repositories
+- **Short References**: `#123` (issues) and `PR #456` (pull requests)
+- **@Mentions**: User mentions that get rewritten to GitHub usernames
 
-### Not Supported
-- Pull Requests (may become issues or be skipped, numbers not predictable)
-- Downloads (use GitHub Releases instead)
-- Wiki pages (migrate wiki separately)
-- Images in repo storage (need manual download/upload)
+## Cross-Repository Mappings
 
-If you don't specify a GitHub owner (e.g., "shared-lib"), it uses the same owner as the current repository.
+For multi-repository migrations, use a shared mappings file to handle cross-repository links.
 
-All unmapped/unsafe cross-repo links appear in the "Unhandled Links" report.
+```json
+"cross_repo_mappings_file": "cross_repo_mappings.json"
+```
+
+This file contains mappings from Bitbucket repositories to their migrated GitHub locations, enabling proper link rewriting between repositories that haven't been migrated yet (deferred links).
+
+### Phase 1 vs Phase 2 Migration
+- **Phase 1**: Migrate repositories and save mappings to the shared file
+- **Phase 2**: Update cross-repository links using the complete mappings
+
+Use the `--update-links-only` flag for Phase 2 operations.
 
 ---
 
@@ -174,11 +256,43 @@ This optional section allows mapping Bitbucket issue types (kinds) to GitHub iss
 
 ---
 
+## Migration Control Options
+
+These boolean flags control various aspects of the migration process:
+
+```json
+{
+  "skip_issues": false,
+  "skip_prs": false,
+  "skip_pr_as_issue": false,
+  "use_gh_cli": false
+}
+```
+
+- `skip_issues`: Skip migrating issues entirely
+- `skip_prs`: Skip migrating pull requests as PRs (but may still migrate as issues if `skip_pr_as_issue` is false)
+- `skip_pr_as_issue`: Skip migrating closed/merged PRs as issues
+- `use_gh_cli`: Use GitHub CLI for attachment uploads instead of API
+
+## Output Directory
+
+Specify where migration outputs (logs, reports, attachments) are stored:
+
+```json
+"output_dir": "myworkspace_myrepo"
+```
+
+- Defaults to `{workspace}_{repo}` format
+- Created automatically if it doesn't exist
+- Can be overridden with `--output-dir` CLI flag
+
 ## 💡 Tips
 
 * Use the audit report (`audit_report.md`) to find active users.
 * Focus mapping on high-activity users.
 * If unsure, set to `null` — the tool will still credit them by name in issue text.
+* For multi-repo migrations, use the same `cross_repo_mappings_file` across all repositories.
+* Customize `note_templates` to match your organization's style preferences.
 
 ---
 

@@ -8,6 +8,7 @@ and metadata preservation.
 
 from typing import List, Dict, Any, Optional
 from pathlib import Path
+import time
 
 from ..clients.bitbucket_client import BitbucketClient
 from ..clients.github_client import GitHubClient
@@ -213,7 +214,7 @@ class IssueMigrator:
 
                     if att_url:
                         self.logger.info(f"    Downloading {att_name}...")
-                        filepath = self.attachment_handler.download_attachment(att_url, att_name)
+                        filepath = self.attachment_handler.download_attachment(att_url, att_name, item_type='issue', item_number=issue_num)
                         if filepath:
                             self.logger.info(f"    Creating attachment note on GitHub...")
                             self.attachment_handler.upload_to_github(filepath, gh_issue['number'], self.gh_client, self.gh_client.owner, self.gh_client.repo)
@@ -393,6 +394,28 @@ class IssueMigrator:
             self.logger.warning(f"    Warning: Unexpected error fetching issue changes: {e}")
             return []
 
+    def _format_date(self, date_str: str) -> str:
+        """
+        Format a date string to a more readable format with UTC timezone.
+
+        Args:
+            date_str: ISO 8601 date string
+
+        Returns:
+            Formatted date string like "March 5, 2020 at 12:44 PM UTC"
+        """
+        if not date_str:
+            return ''
+        try:
+            from datetime import datetime
+            # Parse the ISO format
+            dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            # Format to readable string with UTC
+            return dt.strftime('%B %d, %Y at %I:%M %p UTC')
+        except ValueError:
+            # If parsing fails, return as is
+            return date_str
+
     def _get_next_gh_number(self) -> int:
         """
         Get the next expected GitHub issue number.
@@ -463,15 +486,7 @@ class IssueMigrator:
         formatter = self.formatter_factory.get_issue_formatter()
         body, links_in_body, inline_images_body = formatter.format(bb_issue, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli)
 
-        # Track inline images as attachments
-        for img in inline_images_body:
-            self.attachment_handler.attachments.append({
-                'issue_number': issue_num,
-                'github_issue': gh_issue_number,
-                'filename': img['filename'],
-                'filepath': img['filepath'],
-                'type': 'inline_image'
-            })
+        # Inline images are already tracked by the formatter, no need to duplicate
 
         # Update the issue body
         try:
@@ -488,15 +503,42 @@ class IssueMigrator:
         # Create mapping from comment ID to associated changes
         from collections import defaultdict
         comment_changes = defaultdict(list)
+        description_changes = []  # Track changes to issue description
+        other_changes = []  # Track other issue-level changes (status, assignee, etc.)
+
+        self.logger.info(f"Processing {len(changes)} changes for issue #{issue_num}")
         for change in changes:
             comment_id = change.get('id')
-            if comment_id:
+            change_data = change.get('changes', {})
+            self.logger.info(f"  Change: comment_id={comment_id}, changes={change_data}")
+
+            # Classify the change based on the logic provided
+            if 'content' in change_data:
+                # This is a content change - could be issue description or comment edit
+                if comment_id:
+                    # Has comment_id - check if corresponding comment has content
+                    # We'll handle this during comment processing
+                    comment_changes[comment_id].append(change)
+                    self.logger.info(f"  Content change with comment_id {comment_id} - will check comment content")
+                else:
+                    # No comment_id - this is definitely an issue description change
+                    self.logger.info(f"  Issue description change detected: {change}")
+                    description_changes.append(change)
+            elif comment_id:
+                # Has comment_id but no content change - regular comment change
                 comment_changes[comment_id].append(change)
+                self.logger.info(f"  Regular comment change for comment_id {comment_id}")
+            else:
+                # No comment_id and no content change - other issue-level change
+                self.logger.info(f"  Other issue change detected: {change}")
+                other_changes.append(change)
 
         # Sort comments topologically (parents before children)
         sorted_comments = self._sort_comments_topologically(comments)
+        self.logger.info(f"Processing {len(sorted_comments)} comments for issue #{issue_num}")
         links_in_comments = 0
         migrated_comments_count = 0
+        comment_seq = 0
         for comment in sorted_comments:
             # Check for deleted field
             if comment.get('deleted', False):
@@ -508,32 +550,184 @@ class IssueMigrator:
             if is_pending:
                 self.logger.info(f"  Annotating pending comment on issue #{issue_num}")
 
+            # Debug logging for comment content
+            comment_id = comment.get('id')
+            content = comment.get('content', {}).get('raw', '')
+            content_length = len(content) if content else 0
+            self.logger.info(f"  Processing comment ID {comment_id}: content length = {content_length}")
+
+            # Check if this comment corresponds to a description change
+            associated_changes = comment_changes.get(comment_id, [])
+            has_content_change = any('content' in change.get('changes', {}) for change in associated_changes)
+
+            if not content and has_content_change:
+                # This is a description change comment (empty content + content change = description edit)
+                self.logger.info(f"  Empty comment {comment_id} corresponds to a description change - moving to description_changes")
+                
+                # Move the associated changes from comment_changes to description_changes
+                for change in associated_changes:
+                    if 'content' in change.get('changes', {}):
+                        description_changes.append(change)
+                
+                # Skip creating a comment for this empty comment entry
+                continue
+            elif not content:
+                # Empty comment with no associated changes - skip it
+                self.logger.info(f"  Skipping empty comment {comment_id} with no changes")
+                continue
+            elif content and has_content_change:
+                # This is a comment edit - the formatter will handle showing the change history
+                self.logger.info(f"  Processing comment edit for comment_id {comment_id}")
+            else:
+                # Regular comment with no changes
+                self.logger.info(f"  Processing regular comment {comment_id}")
+
+            # Increment comment sequence
+            comment_seq += 1
+
             # Format comment
             formatter = self.formatter_factory.get_comment_formatter()
-            comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='issue', item_number=issue_num, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli, changes=comment_changes[comment['id']])
+            comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='issue', item_number=issue_num, comment_seq=comment_seq, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli, changes=comment_changes[comment['id']])
             links_in_comments += comment_links
 
             # Add annotation for pending
             if is_pending:
                 comment_body = f"**[PENDING APPROVAL]**\n\n{comment_body}"
 
-            # Track inline images from comments
-            for img in inline_images_comment:
-                self.attachment_handler.attachments.append({
-                    'issue_number': issue_num,
-                    'github_issue': gh_issue_number,
-                    'filename': img['filename'],
-                    'filepath': img['filepath'],
-                    'type': 'inline_image_comment'
-                })
+            # Inline images from comments are already tracked by the formatter, no need to duplicate
 
             parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
             if parent_id:
-                # Add note for reply since GitHub issue comments don't support threading
-                comment_body = f"**[Reply to Bitbucket Comment {parent_id}]**\n\n{comment_body}"
-            gh_comment = self._create_gh_comment(gh_issue_number, comment_body)
-            self.comment_mapping[comment['id']] = gh_comment['id']
+                # Check if parent was successfully migrated
+                parent_gh_id = self.comment_mapping.get(parent_id)
+                if parent_gh_id:
+                    # Create link to parent comment on GitHub
+                    # Format: https://github.com/owner/repo/issues/123#issuecomment-456
+                    parent_url = f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/issues/{gh_issue_number}#issuecomment-{parent_gh_id}"
+                    
+                    # Optionally get parent comment body for quoting
+                    parent_comment_data = self.comment_mapping.get(f"{parent_id}_data")
+                    if parent_comment_data and 'body' in parent_comment_data:
+                        # Extract first line or first 100 chars of parent for quote
+                        parent_body = parent_comment_data['body']
+                        parent_preview = parent_body.split('\n')[0][:100]
+                        if len(parent_body.split('\n')[0]) > 100:
+                            parent_preview += "..."
+                        
+                        reply_note = f"**[In reply to [this comment]({parent_url})]**\n> {parent_preview}\n\n"
+                    else:
+                        reply_note = f"**[In reply to [this comment]({parent_url})]**\n\n"
+                    
+                    comment_body = reply_note + comment_body
+                else:
+                    # Parent not migrated yet or not found
+                    self.logger.warning(f"  Parent comment {parent_id} not found in mapping for reply")
+                    comment_body = f"**[In reply to Bitbucket comment {parent_id}]**\n\n{comment_body}"
+            
+            try:
+                gh_comment = self._create_gh_comment(gh_issue_number, comment_body)
+                self.comment_mapping[comment['id']] = gh_comment['id']
+                # Store comment data for potential child replies
+                self.comment_mapping[f"{comment['id']}_data"] = {'body': comment_body}
+            except ValidationError as e:
+                if 'locked' in str(e).lower():
+                    self.logger.warning(f"  Skipping comment on locked issue #{gh_issue_number}: {e}")
+                else:
+                    raise
             migrated_comments_count += 1
+
+            # Add rate limiting delay between comments to avoid secondary rate limits
+            time.sleep(0.5)
+
+        # Create comments for issue description changes
+        self.logger.info(f"Creating {len(description_changes)} description change comments for issue #{issue_num}")
+        for change in description_changes:
+            # Check if this is a content change (description edit)
+            if 'content' in change.get('changes', {}):
+                self.logger.info(f"  Processing description change: {change}")
+                change_date = change.get('created_on', '')
+                formatted_date = self._format_date(change_date) if hasattr(self, '_format_date') else change_date
+
+                # Get author if available
+                author = change.get('user', {})
+                if author:
+                    author_name = author.get('display_name', 'Unknown')
+                    gh_author = self.user_mapper.map_user(author_name)
+                    author_mention = f"@{gh_author}" if gh_author else f"**{author_name}**"
+                else:
+                    author_mention = "**Unknown**"
+
+                change_comment = f"**Description edited by {author_mention} on {formatted_date}**"
+                self.logger.info(f"  Creating description change comment: {change_comment}")
+                try:
+                    self._create_gh_comment(gh_issue_number, change_comment)
+                    migrated_comments_count += 1
+                except ValidationError as e:
+                    if 'locked' in str(e).lower():
+                        self.logger.warning(f"  Skipping description change comment on locked issue #{gh_issue_number}: {e}")
+                    else:
+                        raise
+
+                # Add rate limiting delay between comments to avoid secondary rate limits
+                time.sleep(0.5)
+
+        # Create comments for other issue-level changes (status, assignee, etc.)
+        self.logger.info(f"Creating {len(other_changes)} other issue change comments for issue #{issue_num}")
+        for change in other_changes:
+            change_data = change.get('changes', {})
+            self.logger.info(f"  Processing other change: {change}")
+
+            change_date = change.get('created_on', '')
+            formatted_date = self._format_date(change_date) if hasattr(self, '_format_date') else change_date
+
+            # Get author if available
+            author = change.get('user', {})
+            if author:
+                author_name = author.get('display_name', 'Unknown')
+                gh_author = self.user_mapper.map_user(author_name)
+                author_mention = f"@{gh_author}" if gh_author else f"**{author_name}**"
+            else:
+                author_mention = "**Unknown**"
+
+            # Build change description
+            change_parts = []
+            for field, field_change in change_data.items():
+                old_val = field_change.get('old')
+                new_val = field_change.get('new')
+                if old_val != new_val:
+                    if field == 'assignee':
+                        old_name = old_val.get('display_name', 'None') if old_val else 'None'
+                        new_name = new_val.get('display_name', 'None') if new_val else 'None'
+                        change_parts.append(f"Assignee changed from '{old_name}' to '{new_name}'")
+                    elif field == 'state':
+                        change_parts.append(f"Status changed from '{old_val}' to '{new_val}'")
+                    elif field == 'kind':
+                        change_parts.append(f"Type changed from '{old_val}' to '{new_val}'")
+                    elif field == 'priority':
+                        change_parts.append(f"Priority changed from '{old_val}' to '{new_val}'")
+                    elif field == 'title':
+                        change_parts.append(f"Title changed from '{old_val}' to '{new_val}'")
+                    elif field == 'milestone':
+                        old_name = old_val.get('name', 'None') if old_val else 'None'
+                        new_name = new_val.get('name', 'None') if new_val else 'None'
+                        change_parts.append(f"Milestone changed from '{old_name}' to '{new_name}'")
+                    else:
+                        change_parts.append(f"{field.capitalize()} changed from '{old_val}' to '{new_val}'")
+
+            if change_parts:
+                change_comment = f"**Issue updated by {author_mention} on {formatted_date}:**\n- " + "\n- ".join(change_parts)
+                self.logger.info(f"  Creating issue change comment: {change_comment}")
+                try:
+                    self._create_gh_comment(gh_issue_number, change_comment)
+                    migrated_comments_count += 1
+                except ValidationError as e:
+                    if 'locked' in str(e).lower():
+                        self.logger.warning(f"  Skipping issue change comment on locked issue #{gh_issue_number}: {e}")
+                    else:
+                        raise
+
+                # Add rate limiting delay between comments to avoid secondary rate limits
+                time.sleep(0.5)
 
         # Update the record with actual counts
         for record in self.issue_records:

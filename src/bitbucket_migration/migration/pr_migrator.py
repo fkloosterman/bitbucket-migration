@@ -8,6 +8,7 @@ strategy for handling different PR states.
 
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+import time
 
 from ..clients.bitbucket_client import BitbucketClient
 from ..clients.github_client import GitHubClient
@@ -222,7 +223,7 @@ class PullRequestMigrator:
 
                                     if att_url:
                                         self.logger.info(f"    Processing {att_name}...")
-                                        filepath = self.attachment_handler.download_attachment(att_url, att_name)
+                                        filepath = self.attachment_handler.download_attachment(att_url, att_name, item_type='pr', item_number=pr_num)
                                         if filepath:
                                             self.attachment_handler.upload_to_github(filepath, gh_pr['number'], self.gh_client, self.gh_client.owner, self.gh_client.repo)
 
@@ -385,7 +386,7 @@ class PullRequestMigrator:
 
                     if att_url:
                         self.logger.info(f"    Downloading {att_name}...")
-                        filepath = self.attachment_handler.download_attachment(att_url, att_name)
+                        filepath = self.attachment_handler.download_attachment(att_url, att_name, item_type='pr', item_number=pr_num)
                         if filepath:
                             self.logger.info(f"    Creating attachment note...")
                             self.attachment_handler.upload_to_github(filepath, gh_issue['number'], self.gh_client, self.gh_client.owner, self.gh_client.repo)
@@ -576,6 +577,8 @@ class PullRequestMigrator:
                             change_parts.append(f"Status updated from '{old}' to '{new}' by {author} on {formatted_date}")
                     else:
                         change_parts.append(f"{field.capitalize()} updated")
+                else:
+                    self.logger.info(f"  No change: old and new {field} values are the same")
             if change_parts:
                 formatted_date = self._format_date(date)
                 return f"PR updated by {author} on {formatted_date}:\n- " + "\n- ".join(change_parts)
@@ -668,15 +671,7 @@ class PullRequestMigrator:
         formatter = self.formatter_factory.get_pull_request_formatter()
         body, links_in_body, inline_images_body = formatter.format(bb_pr, as_issue=not as_pr, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli)
 
-        # Track inline images as attachments
-        for img in inline_images_body:
-            self.attachment_handler.attachments.append({
-                'pr_number': pr_num,
-                'github_pr': gh_number,
-                'filename': img['filename'],
-                'filepath': img['filepath'],
-                'type': 'inline_image'
-            })
+        # Inline images are already tracked by the formatter, no need to duplicate
 
         # Update the PR or issue body
         try:
@@ -714,13 +709,14 @@ class PullRequestMigrator:
             except Exception:
                 commit_id = None
 
+        # Fetch all PR comments once to avoid repeated API calls
+        all_comments = self._fetch_bb_pr_comments(pr_num)
+        comment_seq = 0
         for activity in sorted_activities:
             if 'comment' in activity:
                 # Process as comment - fetch full comment data from API
                 comment_id = activity['comment']['id']
-                # Fetch all comments to get complete data
-                all_comments = self._fetch_bb_pr_comments(pr_num)
-                # Find the full comment data by ID
+                # Find the full comment data by ID from pre-fetched comments
                 full_comment = next((c for c in all_comments if c['id'] == comment_id), None)
                 if full_comment:
                     comment = full_comment
@@ -728,6 +724,17 @@ class PullRequestMigrator:
                     # Fallback to activity data if not found
                     comment = activity['comment']
                 activity_id = comment.get('id', 'unknown')
+
+                # Add logging to verify comment ID mapping
+                parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
+                if parent_id:
+                    self.logger.info(f"  Comment {activity_id} is a reply to comment {parent_id}")
+                    parent_gh_id = self.comment_mapping.get(parent_id)
+                    if parent_gh_id:
+                        self.logger.info(f"    Parent {parent_id} maps to GitHub comment {parent_gh_id}")
+                    else:
+                        self.logger.warning(f"    Parent {parent_id} not found in comment_mapping yet")
+
                 # Check for deleted field
                 if comment.get('deleted', False):
                     self.logger.info(f"  Skipping deleted comment on PR #{pr_num}")
@@ -738,24 +745,19 @@ class PullRequestMigrator:
                 if is_pending:
                     self.logger.info(f"  Annotating pending comment on PR #{pr_num}")
 
+                # Increment comment sequence
+                comment_seq += 1
+
                 # Format comment
                 formatter = self.formatter_factory.get_comment_formatter()
-                comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='pr', item_number=pr_num, commit_id=commit_id, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli)
+                comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='pr', item_number=pr_num, commit_id=commit_id, comment_seq=comment_seq, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli)
                 links_in_comments += comment_links
 
                 # Add annotation for pending
                 if is_pending:
                     comment_body = f"**[PENDING APPROVAL]**\n\n{comment_body}"
 
-                # Track inline images from PR comments
-                for img in inline_images_comment:
-                    self.attachment_handler.attachments.append({
-                        'pr_number': pr_num,
-                        'github_pr': gh_number,
-                        'filename': img['filename'],
-                        'filepath': img['filepath'],
-                        'type': 'inline_image_comment'
-                    })
+                # Inline images from comments are already tracked by the formatter, no need to duplicate
 
                 # Check if this is an inline comment
                 inline_data = comment.get('inline')
@@ -768,6 +770,10 @@ class PullRequestMigrator:
                         path = inline_data.get('path')
                         line = inline_data.get('to')
                         start_line = inline_data.get('from')
+
+                        # Log attempt details
+                        self.logger.info(f"  Attempting inline comment: path={path}, line={line}, start_line={start_line}, commit={commit_id[:7] if commit_id else 'None'}, in_reply_to={in_reply_to}")
+
                         if path and line:
                             gh_comment = self.gh_client.create_pr_review_comment(
                                 pull_number=gh_number,
@@ -781,29 +787,85 @@ class PullRequestMigrator:
                                 in_reply_to=in_reply_to
                             )
                             self.comment_mapping[activity_id] = gh_comment['id']
-                            self.logger.info(f"  Created inline comment on {path} (line {line}) for PR #{gh_number}")
+                            # Store comment data for potential child replies
+                            self.comment_mapping[f"{activity_id}_data"] = {'body': comment_body}
+                            self.logger.info(f"  ✓ Created inline comment on {path}:{line} for PR #{gh_number}")
                         else:
                             # Fallback if required fields missing
+                            self.logger.warning(f"  Missing path ({path}) or line ({line}) for inline comment, using regular comment")
                             gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
                             self.comment_mapping[activity_id] = gh_comment['id']
-                            self.logger.warning(f"  Missing path or line for inline comment, using regular comment")
+                            self.comment_mapping[f"{activity_id}_data"] = {'body': comment_body}
                     except (APIError, AuthenticationError, NetworkError, ValidationError) as e:
                         # Fallback to regular comment on failure
-                        self.logger.warning(f"  Failed to create inline comment: {e}. Using regular comment.")
+                        self.logger.warning(f"  Failed to create inline comment: {e}")
+                        self.logger.warning(f"    Details - Path: {path}, Line: {line}, Commit: {commit_id[:7] if commit_id else 'None'}")
+                        self.logger.warning(f"    Start line: {start_line}, Side: RIGHT, Start side: LEFT")
+
+                        # Add detailed context to the fallback comment
+                        context_note = f"> 💬 **Code comment on `{path}` (line {line})**"
+                        if commit_id:
+                            context_note += f" (commit: `{commit_id[:7]}`)"
+                        context_note += f"\n> ⚠️ *Could not attach to code diff: {str(e)}*\n\n"
+                        comment_body = context_note + comment_body
+
                         gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
                         self.comment_mapping[activity_id] = gh_comment['id']
+                        self.comment_mapping[f"{activity_id}_data"] = {'body': comment_body}
                     except Exception as e:
                         # Unexpected error, fallback
-                        self.logger.error(f"  Unexpected error creating inline comment: {e}. Using regular comment.")
+                        self.logger.error(f"  Unexpected error creating inline comment: {e}")
+                        self.logger.error(f"    Details - Path: {path}, Line: {line}, Commit: {commit_id[:7] if commit_id else 'None'}")
+
+                        # Add detailed context to the fallback comment
+                        context_note = f"> 💬 **Code comment on `{path}` (line {line})**"
+                        if commit_id:
+                            context_note += f" (commit: `{commit_id[:7]}`)"
+                        context_note += f"\n> ⚠️ *Unexpected error attaching to code diff: {str(e)}*\n\n"
+                        comment_body = context_note + comment_body
+
                         gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
                         self.comment_mapping[activity_id] = gh_comment['id']
+                        self.comment_mapping[f"{activity_id}_data"] = {'body': comment_body}
                 else:
                     # Regular comment
-                    if parent_id and not in_reply_to:
-                        # Add note for reply since GitHub doesn't support threading for PR comments
-                        comment_body = f"**[Reply to Bitbucket Comment {parent_id}]**\n\n{comment_body}"
-                    gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
-                    self.comment_mapping[activity_id] = gh_comment['id']
+                    if parent_id:
+                        # Check if parent was successfully migrated
+                        parent_gh_id = self.comment_mapping.get(parent_id)
+                        if parent_gh_id:
+                            # Create link to parent comment on GitHub
+                            # Format: https://github.com/owner/repo/pull/123#issuecomment-456
+                            parent_url = f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/pull/{gh_number}#issuecomment-{parent_gh_id}"
+
+                            # Optionally get parent comment body for quoting
+                            parent_comment_data = self.comment_mapping.get(f"{parent_id}_data")
+                            if parent_comment_data and 'body' in parent_comment_data:
+                                # Extract first line or first 100 chars of parent for quote
+                                parent_body = parent_comment_data['body']
+                                parent_preview = parent_body.split('\n')[0][:100]
+                                if len(parent_body.split('\n')[0]) > 100:
+                                    parent_preview += "..."
+
+                                reply_note = f"**[In reply to [this comment]({parent_url})]**\n> {parent_preview}\n\n"
+                            else:
+                                reply_note = f"**[In reply to [this comment]({parent_url})]**\n\n"
+
+                            comment_body = reply_note + comment_body
+                        else:
+                            # Parent not migrated yet or not found
+                            self.logger.warning(f"  Parent comment {parent_id} not found in mapping for reply")
+                            comment_body = f"**[In reply to Bitbucket comment {parent_id}]**\n\n{comment_body}"
+
+                    try:
+                        gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
+                        self.comment_mapping[activity_id] = gh_comment['id']
+                        # Store comment data for potential child replies
+                        self.comment_mapping[f"{activity_id}_data"] = {'body': comment_body}
+                    except ValidationError as e:
+                        if 'locked' in str(e).lower():
+                            self.logger.warning(f"  Skipping comment on locked PR #{gh_number}: {e}")
+                        else:
+                            raise
 
                 migrated_comments_count += 1
 
@@ -818,10 +880,16 @@ class PullRequestMigrator:
                 is_first = (activity is sorted_activities[0])
                 update_body = self._generate_update_comment(update, author, date, is_first)
                 if update_body:
-                    gh_comment = self._create_gh_comment(gh_number, update_body, is_pr=True)
-                    self.comment_mapping[activity_id] = gh_comment['id']
-                    migrated_comments_count += 1
-                    self.logger.info(f"  Created update comment for PR #{gh_number}")
+                    try:
+                        gh_comment = self._create_gh_comment(gh_number, update_body, is_pr=True)
+                        self.comment_mapping[activity_id] = gh_comment['id']
+                        migrated_comments_count += 1
+                        self.logger.info(f"  Created update comment for PR #{gh_number}")
+                    except ValidationError as e:
+                        if 'locked' in str(e).lower():
+                            self.logger.warning(f"  Skipping comment on locked PR #{gh_number}: {e}")
+                        else:
+                            raise
                 else:
                     self.logger.info(f"  Skipping update without meaningful content on PR #{pr_num}")
 
@@ -835,13 +903,22 @@ class PullRequestMigrator:
                 # Generate comment body for approval
                 formatted_date = self._format_date(date)
                 approval_body = f"{user} approved the pull request on {formatted_date}"
-                gh_comment = self._create_gh_comment(gh_number, approval_body, is_pr=True)
-                self.comment_mapping[activity_id] = gh_comment['id']
-                migrated_comments_count += 1
-                self.logger.info(f"  Created approval comment for PR #{gh_number}")
+                try:
+                    gh_comment = self._create_gh_comment(gh_number, approval_body, is_pr=True)
+                    self.comment_mapping[activity_id] = gh_comment['id']
+                    migrated_comments_count += 1
+                    self.logger.info(f"  Created approval comment for PR #{gh_number}")
+                except ValidationError as e:
+                    if 'locked' in str(e).lower():
+                        self.logger.warning(f"  Skipping comment on locked PR #{gh_number}: {e}")
+                    else:
+                        raise
 
             else:
                 self.logger.info(f"  Skipping unknown activity type on PR #{pr_num}")
+
+            # Add rate limiting delay between comments to avoid secondary rate limits
+            time.sleep(0.5)
 
         # Update the record with actual counts
         for record in self.pr_records:

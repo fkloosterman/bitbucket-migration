@@ -11,18 +11,36 @@ class UserMapper:
         self.account_id_to_display_name: Dict[str, str] = {}
     
     def map_user(self, bb_username: str) -> Optional[str]:
-        """Map Bitbucket username to GitHub username"""
+        """Map Bitbucket username or display name to GitHub username"""
         if not bb_username:
             return None
-        
-        # Try direct mapping first
+
+        # Try direct mapping first (username as key)
         gh_user = self.user_mapping.get(bb_username)
-        
+
         # Handle enhanced format
         if isinstance(gh_user, dict):
             return gh_user.get('github')
-        
-        return gh_user if gh_user and gh_user != "" else None
+
+        if gh_user and gh_user != "":
+            return gh_user
+
+        # If no direct mapping found, check if this is a display name
+        # and try to find the associated username mapping
+        for key, value in self.user_mapping.items():
+            if isinstance(value, dict):
+                # Check if this display name matches any configured display_name
+                configured_display_name = value.get('display_name')
+                if configured_display_name and configured_display_name == bb_username:
+                    github_user = value.get('github')
+                    return github_user if github_user != "" else None
+            else:
+                # For simple string mappings, we can't distinguish username from display name
+                # so we skip this case to avoid false positives
+                continue
+
+        # No mapping found
+        return None
     
     def map_mention(self, bb_username: str) -> Optional[str]:
         """

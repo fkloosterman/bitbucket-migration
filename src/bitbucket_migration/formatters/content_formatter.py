@@ -106,10 +106,10 @@ class IssueContentFormatter(ContentFormatter):
             mentions_unmapped = 0
             unmapped_list = []
         else:
-            content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list = self.link_rewriter.rewrite_links(content, 'issue', issue['id'])
+            content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(content, 'issue', issue['id'], comment_id=None)
 
         # Extract and download inline images
-        content, inline_images = self.attachment_handler.extract_and_download_inline_images(content, kwargs.get('use_gh_cli', False))
+        content, inline_images = self.attachment_handler.extract_and_download_inline_images(content, kwargs.get('use_gh_cli', False), item_type='issue', item_number=issue['id'])
 
         formatted_created = self._format_date(created)
         body = f"""**Migrated from Bitbucket**
@@ -179,10 +179,10 @@ class PullRequestContentFormatter(ContentFormatter):
             mentions_unmapped = 0
             unmapped_list = []
         else:
-            description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list = self.link_rewriter.rewrite_links(description, 'pr', pr['id'])
+            description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(description, 'pr', pr['id'], comment_id=None)
 
         # Extract and download inline images
-        description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, kwargs.get('use_gh_cli', False))
+        description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, kwargs.get('use_gh_cli', False), item_type='pr', item_number=pr['id'])
 
         formatted_created = self._format_date(created)
         formatted_updated = self._format_date(updated)
@@ -236,10 +236,10 @@ class PullRequestContentFormatter(ContentFormatter):
             mentions_unmapped = 0
             unmapped_list = []
         else:
-            description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list = self.link_rewriter.rewrite_links(description, 'pr', pr['id'])
+            description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(description, 'pr', pr['id'], comment_id=None)
 
         # Extract and download inline images
-        description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, kwargs.get('use_gh_cli', False))
+        description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, kwargs.get('use_gh_cli', False), item_type='pr', item_number=pr['id'])
 
         formatted_created = self._format_date(created)
         body = f"""**Migrated from Bitbucket**
@@ -259,7 +259,7 @@ class CommentContentFormatter(ContentFormatter):
     Formatter for Bitbucket comments.
     """
 
-    def format(self, comment: Dict, item_type: str = 'issue', item_number: Optional[int] = None, commit_id: Optional[str] = None, skip_link_rewriting: bool = False, changes: Optional[List[Dict]] = None, **kwargs) -> Tuple[str, int, List[Dict]]:
+    def format(self, comment: Dict, item_type: str = 'issue', item_number: Optional[int] = None, commit_id: Optional[str] = None, comment_seq: Optional[int] = None, skip_link_rewriting: bool = False, changes: Optional[List[Dict]] = None, **kwargs) -> Tuple[str, int, List[Dict]]:
         """
         Format Bitbucket comment for GitHub.
 
@@ -296,10 +296,11 @@ class CommentContentFormatter(ContentFormatter):
             mentions_unmapped = 0
             unmapped_list = []
         else:
-            content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list = self.link_rewriter.rewrite_links(content, item_type, item_number)
+            comment_id = comment.get('id')
+            content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(content, item_type, item_number, comment_id=comment_seq)
 
         # Extract and download inline images
-        content, inline_images = self.attachment_handler.extract_and_download_inline_images(content, kwargs.get('use_gh_cli', False))
+        content, inline_images = self.attachment_handler.extract_and_download_inline_images(content, kwargs.get('use_gh_cli', False), item_type=item_type, item_number=item_number, comment_seq=comment_seq)
 
         # Check if this is an inline code comment (for PR comments)
         inline_data = comment.get('inline')
@@ -334,9 +335,11 @@ class CommentContentFormatter(ContentFormatter):
             for change in changes:
                 for key, val in change.get('changes', {}).items():
                     if key == 'content':
-                        changes_list.append(f"- comment edited")
+                        # Skip comment content edits - they're already reflected in the comment body
+                        # GitHub doesn't support edit history, so we don't create noise
+                        continue
                     else:
-                        changes_list.append(f"- **{key}**: {val['old']} → {val['new']}")    
+                        changes_list.append(f"- **{key}**: {val['old']} → {val['new']}")
             if changes_list:
                 changes_section = "\n" + "\n".join(changes_list) + "\n"
 

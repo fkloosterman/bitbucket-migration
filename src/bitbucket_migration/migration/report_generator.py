@@ -11,6 +11,7 @@ from datetime import datetime
 import json
 
 from ..utils.logging_config import MigrationLogger
+from ..services.cross_repo_mapping_store import CrossRepoMappingStore
 
 
 class ReportGenerator:
@@ -21,14 +22,17 @@ class ReportGenerator:
     migration summaries, detailed tables, and troubleshooting information.
     """
 
-    def __init__(self, logger: MigrationLogger):
+    def __init__(self, logger: MigrationLogger, output_dir: str = '.'):
         """
         Initialize the ReportGenerator.
 
         Args:
             logger: Logger instance
+            output_dir: Output directory for reports and mappings
         """
+        from pathlib import Path
         self.logger = logger
+        self.output_dir = Path(output_dir)
 
     def generate_migration_report(self, issue_records: List[Dict[str, Any]],
                                     pr_records: List[Dict[str, Any]],
@@ -302,8 +306,8 @@ class ReportGenerator:
             report.append("")
 
             # Attachment table
-            report.append("| File Path | Size | Type | Uploaded | Target URL | Error/Instructions |")
-            report.append("|-----------|------|------|----------|------------|---------------------|")
+            report.append("| File Path | Size | Type | Uploaded | Target URL | Found In | Error/Instructions |")
+            report.append("|-----------|------|------|----------|------------|----------|---------------------|")
 
             for attachment in attachment_data:
                 file_path = attachment.get('file_path', 'N/A')
@@ -311,9 +315,10 @@ class ReportGenerator:
                 file_type = attachment.get('type', 'N/A')
                 uploaded = '✅' if attachment.get('uploaded', False) else '❌'
                 url = attachment.get('url', '-')
+                found_in = attachment.get('found_in', 'N/A')
                 error_or_instructions = attachment.get('error', attachment.get('instructions', '-'))
 
-                report.append(f"| {file_path} | {size} | {file_type} | {uploaded} | {url} | {error_or_instructions} |")
+                report.append(f"| {file_path} | {size} | {file_type} | {uploaded} | {url} | {found_in} | {error_or_instructions} |")
 
             report.append("")
 
@@ -358,8 +363,8 @@ class ReportGenerator:
             report.append("")
 
             # Link rewriting table
-            report.append("| Original | Rewritten | Type | Reason |")
-            report.append("|----------|-----------|------|--------|")
+            report.append("| Original | Rewritten | Type | Reason | Found In |")
+            report.append("|----------|-----------|------|--------|----------|")
 
             details = link_data.get('details', [])
             for detail in details:
@@ -375,7 +380,23 @@ class ReportGenerator:
                     if not rewritten.startswith('`'):
                         rewritten = f"`{rewritten}`"
 
-                report.append(f"| {original} | {rewritten} | {link_type} | {reason} |")
+                # Determine location
+                item_type = detail.get('item_type', 'N/A')
+                item_number = detail.get('item_number', 'N/A')
+                comment_seq = detail.get('comment_seq', None)
+
+                if item_type == 'issue' and item_number != 'N/A':
+                    location = f"Issue #{item_number}"
+                    if comment_seq:
+                        location += f" Comment #{comment_seq}"
+                elif item_type == 'pr' and item_number != 'N/A':
+                    location = f"PR #{item_number}"
+                    if comment_seq:
+                        location += f" Comment #{comment_seq}"
+                else:
+                    location = item_type or 'N/A'
+
+                report.append(f"| {original} | {rewritten} | {link_type} | {reason} | {location} |")
 
             report.append("")
 
@@ -450,7 +471,8 @@ class ReportGenerator:
 
         # Write report to file
         report_content = '\n'.join(report)
-        with open(report_filename, 'w', encoding='utf-8') as f:
+        report_path = self.output_dir / report_filename
+        with open(report_path, 'w', encoding='utf-8') as f:
             f.write(report_content)
 
         self.logger.info(f"Migration report saved to {report_filename}")
@@ -459,7 +481,21 @@ class ReportGenerator:
 
     def save_mapping(self, issue_mapping: Dict[int, int], pr_mapping: Dict[int, int],
                      bb_workspace: str, bb_repo: str, gh_owner: str, gh_repo: str,
-                     stats: Dict[str, Any], filename: str = 'migration_mapping.json') -> None:
+                     stats: Dict[str, Any], cross_repo_store: CrossRepoMappingStore = None, filename: str = 'migration_mapping.json') -> None:
+        """
+        Save issue/PR mapping to file.
+
+        Args:
+            issue_mapping: BB issue # -> GH issue # mapping
+            pr_mapping: BB PR # -> GH issue/PR # mapping
+            bb_workspace: Bitbucket workspace name
+            bb_repo: Bitbucket repository name
+            gh_owner: GitHub owner name
+            gh_repo: GitHub repository name
+            stats: Migration statistics
+            cross_repo_store: Optional CrossRepoMappingStore to save consolidated mappings
+            filename: Output filename for the mapping JSON
+        """
         """
         Save issue/PR mapping to file.
 
@@ -488,10 +524,111 @@ class ReportGenerator:
             'migration_date': datetime.now().isoformat()
         }
 
-        with open(filename, 'w') as f:
+        mapping_path = self.output_dir / filename
+        # Also save to cross-repo store if provided
+        if cross_repo_store:
+            try:
+                cross_repo_store.save(
+                    bb_workspace, bb_repo, gh_owner, gh_repo,
+                    issue_mapping, pr_mapping
+                )
+                self.logger.info(f"Saved consolidated cross-repository mappings")
+            except Exception as e:
+                self.logger.warning(f"Could not save to cross-repo store: {e}")
+
+        with open(mapping_path, 'w') as f:
             json.dump(mapping, f, indent=2)
 
         self.logger.info(f"Mapping saved to {filename}")
+
+    def _extract_deferred_links(self, issue_reports: List[Dict], pr_reports: List[Dict]) -> Dict[str, List[Dict]]:
+        """
+        Extract deferred cross-repository links from reports.
+
+        Returns dict mapping repo_key to list of deferred link info.
+        Example: {'workspace/repo-b': [{'url': '...', 'found_in': 'issue #5'}, ...]}
+        """
+        deferred_by_repo = {}
+
+        # Process issues
+        for report in issue_reports:
+            issue_num = report.get('gh_number', 'unknown')
+            link_details = report.get('link_details', [])
+
+            for link in link_details:
+                if link.get('type') == 'cross_repo_deferred':
+                    repo_key = link.get('repo_key', 'unknown')
+                    if repo_key not in deferred_by_repo:
+                        deferred_by_repo[repo_key] = []
+
+                    deferred_by_repo[repo_key].append({
+                        'url': link.get('original', ''),
+                        'found_in': f'issue #{issue_num}',
+                        'resource_type': link.get('resource_type', 'unknown')
+                    })
+
+        # Process PRs (same logic)
+        for report in pr_reports:
+            pr_num = report.get('gh_number', 'unknown')
+            link_details = report.get('link_details', [])
+
+            for link in link_details:
+                if link.get('type') == 'cross_repo_deferred':
+                    repo_key = link.get('repo_key', 'unknown')
+                    if repo_key not in deferred_by_repo:
+                        deferred_by_repo[repo_key] = []
+
+                    deferred_by_repo[repo_key].append({
+                        'url': link.get('original', ''),
+                        'found_in': f'PR #{pr_num}',
+                        'resource_type': link.get('resource_type', 'unknown')
+                    })
+
+        return deferred_by_repo
+
+    def _generate_deferred_links_section(self, deferred_by_repo: Dict[str, List[Dict]]) -> str:
+        """Generate markdown section for deferred cross-repository links."""
+        if not deferred_by_repo:
+            return ""
+
+        section = "\n## ⏳ Deferred Cross-Repository Links\n\n"
+        section += "The following cross-repository links could not be rewritten because the target repositories have not been migrated yet. "
+        section += "After migrating all repositories, run Phase 2 with `--update-links-only` to rewrite these links.\n\n"
+
+        total_deferred = sum(len(links) for links in deferred_by_repo.values())
+        section += f"**Total deferred links**: {total_deferred}\n\n"
+
+        for repo_key, links in sorted(deferred_by_repo.items()):
+            section += f"### Repository: `{repo_key}` ({len(links)} links)\n\n"
+
+            # Group by resource type
+            by_type = {}
+            for link in links:
+                res_type = link['resource_type']
+                if res_type not in by_type:
+                    by_type[res_type] = []
+                by_type[res_type].append(link)
+
+            for res_type, type_links in sorted(by_type.items()):
+                section += f"**{res_type.capitalize()}s** ({len(type_links)}):\n"
+                for link in type_links[:10]:  # Limit to first 10
+                    section += f"- `{link['url']}` in {link['found_in']}\n"
+
+                if len(type_links) > 10:
+                    section += f"- ... and {len(type_links) - 10} more\n"
+                section += "\n"
+
+        section += "**Next steps**:\n"
+        section += "1. Complete Phase 1 migration for all referenced repositories\n"
+        section += "2. Run Phase 2 for this repository:\n"
+        section += "   ```bash\n"
+        section += "   python -m bitbucket_migration --config <config> \\\n"
+        section += "     --output-dir <output-dir> \\\n"
+        section += "     --cross-repo-mappings cross_repo_mappings.json \\\n"
+        section += "     --update-links-only\n"
+        section += "   ```\n\n"
+
+        return section
 
     def print_summary(self, issue_mapping: Dict[int, int], pr_mapping: Dict[int, int],
                       stats: Dict[str, Any], attachments: List[Dict[str, Any]],

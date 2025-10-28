@@ -198,14 +198,21 @@ class BitbucketClient:
             AuthenticationError: If authentication fails
             NetworkError: If there's a network connectivity issue
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if item_type not in ['issue', 'pr']:
             raise ValidationError(f"Invalid item type: {item_type}. Must be 'issue' or 'pr'")
 
         endpoint = "issues" if item_type == "issue" else "pullrequests"
         url = f"{self.base_url}/{endpoint}/{item_id}/comments"
+        
+        logger.info(f"[COMMENTS DEBUG] Fetching comments for {item_type} #{item_id}")
 
         try:
-            return self._paginate(url)
+            comments = self._paginate(url)
+            logger.info(f"[COMMENTS DEBUG] Total comments fetched for {item_type} #{item_id}: {len(comments)}")
+            return comments
         except (APIError, AuthenticationError, NetworkError):
             raise  # Re-raise API-related errors
         except Exception as e:
@@ -400,7 +407,8 @@ class BitbucketClient:
                 data = response.json()
 
                 if 'values' in data:
-                    results.extend(data['values'])
+                    values = data['values']
+                    results.extend(values)
                 else:
                     results.append(data)
 
@@ -415,6 +423,13 @@ class BitbucketClient:
                     # API endpoint not found - this can happen for PR attachments or other optional endpoints
                     # Return empty results instead of raising an error
                     return []
+                elif response.status_code == 502:
+                    # Bad Gateway - API instability, but we already have results from previous pages
+                    if len(results) > 0:
+                        # Return what we have so far instead of failing completely
+                        return results
+                    else:
+                        raise APIError(f"Bitbucket API error: {e}", status_code=response.status_code)
                 else:
                     raise APIError(f"Bitbucket API error: {e}", status_code=response.status_code)
             except requests.exceptions.RequestException as e:

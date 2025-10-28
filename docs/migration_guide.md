@@ -26,6 +26,31 @@ This guide explains how to migrate a **Bitbucket** Cloud repository to **GitHub*
 
 ---
 
+## Migration Workflow Overview
+
+### Single Repository Migration
+
+For migrating a single repository, follow the standard workflow shown in the migration steps diagram below. This creates all issues/PRs with proper same-repository links and completes the migration in one pass.
+
+### Multi-Repository Migration (Two-Phase Workflow)
+
+When migrating multiple repositories that reference each other, use the **two-phase workflow**:
+
+**Phase 1: Repository Migration**
+- Migrate each repository individually
+- Creates all issues/PRs with correct same-repository links
+- Cross-repository links remain as Bitbucket URLs (tracked for Phase 2)
+- Generates `cross_repo_mappings.json` with issue/PR number mappings
+
+**Phase 2: Cross-Repository Link Updates**
+- Re-run migration with `--update-links-only` flag
+- Updates ONLY cross-repository links using mappings from all repositories
+- No new issues/PRs created - only existing content modified
+
+This approach ensures cross-repository references work correctly while maintaining migration efficiency.
+
+---
+
 ## Installation and Setup
 
 1. **Install from PyPI** (Recommended):
@@ -163,16 +188,20 @@ git ls-remote github
 Edit `migration_config.json` to set your tokens and user mappings. See [Migration Config Reference](reference/migration_config.md) for full details.
 
 1. **Update Tokens**
-   - Set `bitbucket.token` to your Bitbucket API token.
-   - Set `github.token` to your GitHub PAT with `repo` scope.
+    - Set `bitbucket.token` to your Bitbucket API token.
+    - Set `github.token` to your GitHub PAT with `repo` scope.
 
 2. **Configure User Mapping**
-   - Map Bitbucket display names to GitHub usernames in `user_mapping`.
-   - Set unmapped or deleted users to `null`.
+    - Map Bitbucket display names to GitHub usernames in `user_mapping`.
+    - Set unmapped or deleted users to `null`.
 
-3. **Run Dry Run**
-   - After editing, run a dry run (Step 4) to validate.
-   - Refine mappings if needed.
+3. **Configure Repository Mapping (Multi-Repo Only)**
+    - For multi-repository migrations, add `repository_mapping` to map Bitbucket workspace/repo to GitHub owner/repo.
+    - This enables cross-repository link rewriting in Phase 2.
+
+4. **Run Dry Run**
+    - After editing, run a dry run (Step 4) to validate.
+    - Refine mappings if needed.
 
 ??? "Advanced Options"
     - Add `repository_mapping` for cross-repository link rewriting.
@@ -221,10 +250,12 @@ migrate_bitbucket_to_github migrate \
 - Downloads attachments to `attachments_temp/`.
 - Generates `migration_mapping.json` for ID cross-references.
 - Creates `migration_report.md` with details and any issues.
+- **For multi-repo Phase 1**: Saves mappings to `cross_repo_mappings.json` and reports deferred cross-repo links.
 
 ??? "Advanced Options"
     - Use `--use-gh-cli` for automatic attachment upload.
     - Use `--skip-issues` or `--skip-prs` to migrate selectively.
+    - For **Phase 2 cross-repo link updates**: Use `--update-links-only` (see Multi-Repository Migration section).
     - See [CLI Reference](reference/cli_reference.md) for all options.
 
 ---
@@ -305,8 +336,114 @@ Confirm migration success and finalize the process.
 
 - Update README with new GitHub links and branch protections.
 - Set Bitbucket repo to read-only or archive it.
-- Clean up temporary files: `rm -rf attachments_temp/`.
+- **Clean up migration files**: Use `migrate_bitbucket_to_github clean` to remove generated files.
 - Archive migration reports and mappings for reference.
+
+### Enhanced Clean Command
+
+The `clean` subcommand removes output files generated during migration:
+
+```bash
+# Remove all generated files except configuration
+migrate_bitbucket_to_github clean
+
+# Remove everything including configuration files
+migrate_bitbucket_to_github clean --all
+
+# Clean specific repository outputs
+migrate_bitbucket_to_github clean --workspace myworkspace --repo myrepo
+```
+
+**What gets cleaned:**
+- Audit reports (`audit_report.md`, `bitbucket_audit_report.json`)
+- Migration logs and reports (`migration_*.md`, `migration_*.json`)
+- Temporary directories (`attachments_temp/`)
+- **Keeps**: Configuration files (unless `--all` is used)
+
+---
+
+## Multi-Repository Migration
+
+For organizations migrating multiple interconnected repositories, follow this two-phase workflow to ensure cross-repository links work correctly.
+
+### Phase 1: Migrate All Repositories
+
+Migrate each repository individually, building the shared mapping file:
+
+```bash
+# Migrate first repository
+migrate_bitbucket_to_github migrate --config config-repo-a.json
+
+# Migrate second repository (appends to cross_repo_mappings.json)
+migrate_bitbucket_to_github migrate --config config-repo-b.json
+
+# Migrate additional repositories...
+migrate_bitbucket_to_github migrate --config config-repo-c.json
+```
+
+**What happens in Phase 1:**
+- ✅ All issues/PRs created with correct same-repository links
+- ⚠️ Cross-repository links remain as Bitbucket URLs
+- 📄 `cross_repo_mappings.json` created/updated with issue/PR mappings
+- 📊 Migration reports show deferred cross-repo links
+
+### Phase 2: Update Cross-Repository Links
+
+After all repositories are migrated, update cross-repository links:
+
+```bash
+# Update cross-repo links for each repository
+migrate_bitbucket_to_github migrate --config config-repo-a.json --update-links-only
+migrate_bitbucket_to_github migrate --config config-repo-b.json --update-links-only
+migrate_bitbucket_to_github migrate --config config-repo-c.json --update-links-only
+```
+
+**What happens in Phase 2:**
+- 🔍 Finds issues/PRs with cross-repo Bitbucket links
+- ✏️ Updates ONLY those links using `cross_repo_mappings.json`
+- ✅ No new issues/PRs created
+- 📊 Reports show successfully updated cross-repo links
+
+### Cross-Repository Mappings File
+
+The `cross_repo_mappings.json` file coordinates link rewriting across repositories:
+
+```json
+{
+  "workspace/repo-a": {
+    "issues": { "1": 5, "2": 6, "10": 15 },
+    "prs": { "1": 7, "3": 8 }
+  },
+  "workspace/repo-b": {
+    "issues": { "5": 12, "8": 14 },
+    "prs": { "2": 9 }
+  }
+}
+```
+
+This file is automatically managed - you don't need to edit it manually.
+
+### Configuration for Multi-Repository Migration
+
+Each repository's `migration_config.json` needs `repository_mapping`:
+
+```json
+{
+  "bitbucket": {
+    "workspace": "workspace",
+    "repo": "repo-a"
+  },
+  "github": {
+    "owner": "myorg",
+    "repo": "repo-a-github"
+  },
+  "repository_mapping": {
+    "workspace/repo-b": "myorg/repo-b-github",
+    "workspace/repo-c": "myorg/repo-c-github"
+  },
+  "user_mapping": { ... }
+}
+```
 
 ---
 

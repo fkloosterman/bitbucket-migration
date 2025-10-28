@@ -45,11 +45,13 @@ Provides complete mapping information including both display names and Bitbucket
 "user_mapping": {
   "Alice Smith": {
     "github": "alice-github",
-    "bitbucket_username": "asmith"
+    "bitbucket_username": "asmith",
+    "display_name": "Alice Smith"
   },
   "Bob Jones": {
     "github": "bobjones",
-    "bitbucket_username": "bjones"
+    "bitbucket_username": "bjones",
+    "display_name": "Bob Jones"
   },
   "Charlie Brown": null,
   "External Contractor": null
@@ -60,6 +62,7 @@ Provides complete mapping information including both display names and Bitbucket
 - Team uses @mentions frequently
 - Maximum compatibility required
 - Account ID mentions need proper resolution
+- Display names appear in comments and need mapping to GitHub users
 
 ### Format 3: Direct Username Mapping
 
@@ -149,6 +152,10 @@ Bitbucket uses internal account IDs that appear in content and API responses. Th
 // 2. "asmith" maps to display name "Alice Smith"
 // 3. "Alice Smith" maps to GitHub username "alice-github"
 // 4. Final result: "@alice-github"
+
+// Display names in comments are also mapped:
+// Original comment: "Alice Smith mentioned this issue"
+// Becomes: "@alice-github mentioned this issue"
 ```
 
 ---
@@ -173,6 +180,11 @@ The migration tool processes @mentions in all content and rewrites them to GitHu
     - Extract the Bitbucket identifier
     - Apply user mapping configuration
     - Generate appropriate GitHub mention or fallback
+
+4. **Display Name Mapping**: When display names appear in comments (not as @mentions):
+    - Extract display names from comment text
+    - Map them to GitHub usernames using configured display_name mappings
+    - Convert to @mentions for proper GitHub attribution
 
 ### @Mention Patterns
 
@@ -352,11 +364,13 @@ Examine `audit_report.md` and `user_mapping_template.txt`:
 "user_mapping": {
   "Alice Smith": {
     "github": "alice-github",
-    "bitbucket_username": "asmith"
+    "bitbucket_username": "asmith",
+    "display_name": "Alice Smith"
   },
   "Bob Jones": {
     "github": "bobjones",
-    "bitbucket_username": "bjones"
+    "bitbucket_username": "bjones",
+    "display_name": "Bob Jones"
   },
   "External User": null
 }

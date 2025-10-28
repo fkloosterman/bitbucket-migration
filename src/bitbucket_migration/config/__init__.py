@@ -10,6 +10,7 @@ from .migration_config import (
     BitbucketConfig,
     GitHubConfig,
     MigrationConfig,
+    LinkRewritingConfig,
     ConfigLoader,
     ConfigValidator
 )
@@ -18,6 +19,7 @@ __all__ = [
     'BitbucketConfig',
     'GitHubConfig',
     'MigrationConfig',
+    'LinkRewritingConfig',
     'ConfigLoader',
     'ConfigValidator'
 ]

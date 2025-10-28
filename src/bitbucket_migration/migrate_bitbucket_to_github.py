@@ -187,6 +187,12 @@ EXAMPLES:
   # Clean all files including config
   python migrate_bitbucket_to_github.py clean --all
 
+  # Clean specific repository output directory
+  python migrate_bitbucket_to_github.py clean --output-dir myworkspace_myrepo
+
+  # Clean repository directory using workspace/repo names
+  python migrate_bitbucket_to_github.py clean --workspace myworkspace --repo myrepo
+
 CONFIGURATION:
 For migration and dry-run commands, provide a configuration file with:
 {
@@ -222,30 +228,74 @@ to avoid storing sensitive data in configuration files.
     audit_parser.add_argument('--no-config', action='store_true', help='Do not generate migration configuration file')
     audit_parser.add_argument('--gh-owner', help='GitHub owner for config template')
     audit_parser.add_argument('--gh-repo', help='GitHub repository name for config template')
+    audit_parser.add_argument(
+        '--output-dir',
+        type=str,
+        default=None,
+        help='Output directory for audit files (reports, data files). '
+             'Defaults to <workspace>_<repo> folder in current directory.'
+    )
+    audit_parser.add_argument('--debug', action='store_true', help='Enable debug logging')
 
     # Migration subcommand
     migrate_parser = subparsers.add_parser('migrate', help='Run full migration')
     migrate_parser.add_argument('--config', required=True, help='Path to configuration JSON file')
     migrate_parser.add_argument('--skip-issues', type=str, nargs='?', const='true', default=argparse.SUPPRESS,
-                               help='Skip issue migration (true/false, default from config)')
+                                help='Skip issue migration (true/false, default from config)')
     migrate_parser.add_argument('--skip-prs', type=str, nargs='?', const='true', default=argparse.SUPPRESS,
-                               help='Skip PR migration (true/false, default from config)')
+                                help='Skip PR migration (true/false, default from config)')
     migrate_parser.add_argument('--skip-pr-as-issue', type=str, nargs='?', const='true', default=argparse.SUPPRESS,
-                               help='Skip migrating closed/merged PRs as issues (true/false, default from config)')
+                                help='Skip migrating closed/merged PRs as issues (true/false, default from config)')
     migrate_parser.add_argument('--use-gh-cli', type=str, nargs='?', const='true', default=argparse.SUPPRESS,
-                               help='Use GitHub CLI to automatically upload attachments (true/false, default from config)')
+                                help='Use GitHub CLI to automatically upload attachments (true/false, default from config)')
+    migrate_parser.add_argument(
+        '--output-dir',
+        type=str,
+        default=None,
+        help='Directory for migration output files (logs, reports, attachments). '
+             'Defaults to <workspace>_<repo> folder in current directory'
+    )
+    migrate_parser.add_argument(
+        '--cross-repo-mappings',
+        type=str,
+        help='Path to shared cross-repository mappings file (JSON). Used for rewriting cross-repo links.'
+    )
+    migrate_parser.add_argument(
+        '--update-links-only',
+        action='store_true',
+        help='Phase 2 mode: Update cross-repository links only (assumes migration already complete)'
+    )
+    migrate_parser.add_argument('--debug', action='store_true', help='Enable debug logging')
 
     # Dry-run subcommand
     dry_run_parser = subparsers.add_parser('dry-run', help='Simulate migration without making changes')
     dry_run_parser.add_argument('--config', required=True, help='Path to configuration JSON file')
     dry_run_parser.add_argument('--skip-issues', type=str, nargs='?', const='true', default=argparse.SUPPRESS,
-                                help='Skip issue migration (true/false, default from config)')
+                                 help='Skip issue migration (true/false, default from config)')
     dry_run_parser.add_argument('--skip-prs', type=str, nargs='?', const='true', default=argparse.SUPPRESS,
-                                help='Skip PR migration (true/false, default from config)')
+                                 help='Skip PR migration (true/false, default from config)')
     dry_run_parser.add_argument('--skip-pr-as-issue', type=str, nargs='?', const='true', default=argparse.SUPPRESS,
-                                help='Skip migrating closed/merged PRs as issues (true/false, default from config)')
+                                 help='Skip migrating closed/merged PRs as issues (true/false, default from config)')
     dry_run_parser.add_argument('--use-gh-cli', type=str, nargs='?', const='true', default=argparse.SUPPRESS,
-                                help='Use GitHub CLI to automatically upload attachments (true/false, default from config)')
+                                 help='Use GitHub CLI to automatically upload attachments (true/false, default from config)')
+    dry_run_parser.add_argument(
+        '--output-dir',
+        type=str,
+        default=None,
+        help='Directory for migration output files (logs, reports, attachments). '
+             'Defaults to <workspace>_<repo> folder in current directory'
+    )
+    dry_run_parser.add_argument(
+        '--cross-repo-mappings',
+        type=str,
+        help='Path to shared cross-repository mappings file (JSON). Used for rewriting cross-repo links.'
+    )
+    dry_run_parser.add_argument(
+        '--update-links-only',
+        action='store_true',
+        help='Phase 2 mode: Update cross-repository links only (assumes migration already complete)'
+    )
+    dry_run_parser.add_argument('--debug', action='store_true', help='Enable debug logging')
 
     # Test-auth subcommand
     test_auth_parser = subparsers.add_parser('test-auth', help='Test Bitbucket and GitHub API authentication')
@@ -256,10 +306,27 @@ to avoid storing sensitive data in configuration files.
     test_auth_parser.add_argument('--gh-owner', help='GitHub owner')
     test_auth_parser.add_argument('--gh-repo', help='GitHub repository name')
     test_auth_parser.add_argument('--gh-token', help='GitHub API token')
+    test_auth_parser.add_argument('--debug', action='store_true', help='Enable debug logging')
 
     # Clean subcommand
     clean_parser = subparsers.add_parser('clean', help='Remove output files generated by audit, dry-run, and migrate subcommands')
     clean_parser.add_argument('--all', action='store_true', help='Remove all outputs including the config file')
+    clean_parser.add_argument(
+        '--output-dir',
+        type=str,
+        help='Clean specific output directory (default: current directory). '
+             'Use this to clean outputs from a specific repository migration.'
+    )
+    clean_parser.add_argument(
+        '--workspace',
+        type=str,
+        help='Bitbucket workspace name - used to find default output directory'
+    )
+    clean_parser.add_argument(
+        '--repo',
+        type=str,
+        help='Repository name - used to find default output directory'
+    )
 
     return parser
 
@@ -346,6 +413,9 @@ def prompt_for_missing_args(args, required_fields, parser=None):
 
 
 def run_audit(args, parser=None):
+    # Set default output_dir for audit if not specified
+    if args.output_dir is None and hasattr(args, 'workspace') and hasattr(args, 'repo'):
+        args.output_dir = f"{args.workspace}_{args.repo}"
     """Run comprehensive audit of Bitbucket repository for migration planning.
 
     Performs a complete analysis of the Bitbucket repository including issues, pull
@@ -401,23 +471,32 @@ def run_audit(args, parser=None):
                 args.gh_repo = input(prompt).strip() or args.repo
 
         # Create audit orchestrator
-        auditor = AuditOrchestrator(args.workspace, args.repo, args.email, args.token)
+        auditor = AuditOrchestrator(args.workspace, args.repo, args.email, args.token, log_level=config.log_level)
         report = auditor.run_audit()
 
         # Save reports
-        auditor.save_reports(report)
+        output_dir = args.output_dir if hasattr(args, 'output_dir') and args.output_dir else f"{args.workspace}_{args.repo}"
+        auditor.save_reports(report, output_dir)
 
         # Generate migration config if not disabled
         if not getattr(args, 'no_config', False):
             gh_owner = args.gh_owner
             gh_repo = args.gh_repo
             config = auditor.generate_migration_config(gh_owner, gh_repo)
-            auditor.save_migration_config(config, 'migration_config.json')
+
+            # Override output_dir if specified
+            if hasattr(args, 'output_dir') and args.output_dir:
+                config['output_dir'] = args.output_dir
+
+            auditor.save_migration_config(config, f"config-{args.workspace}-{args.repo}.json", '.')
 
         print("\n✅ Audit completed successfully!")
-        print("📄 Reports saved: bitbucket_audit_report.json, bitbucket_audit_report.md")
+        print(f"📄 Reports saved to: {output_dir}/")
+        print("  - bitbucket_audit_report.json")
+        print("  - bitbucket_audit_report.md")
         if not getattr(args, 'no_config', False):
-            print("📋 Migration config generated: migration_config.json")
+            config_filename = f"config-{args.workspace}-{args.repo}.json"
+            print(f"📋 Migration config generated: {config_filename}")
 
     except KeyboardInterrupt:
         print("\nAudit interrupted by user")
@@ -761,11 +840,13 @@ def run_clean(args):
 
     By default, removes all output files except the configuration file.
     With --all flag, removes everything including the config file.
+    With --output-dir, cleans a specific repository's output directory.
+    With --all, automatically finds and cleans all repository subdirectories.
 
     Parameters
     ----------
     args : argparse.Namespace
-        Command-line arguments containing the --all flag.
+        Command-line arguments containing the --all, --output-dir, --workspace, --repo flags.
 
     Side Effects
     ------------
@@ -778,9 +859,36 @@ def run_clean(args):
     >>> args = argparse.Namespace(all=False)
     >>> run_clean(args)  # Remove outputs, keep config
     >>> args = argparse.Namespace(all=True)
-    >>> run_clean(args)  # Remove everything
+    >>> run_clean(args)  # Remove everything including all repo subdirs
+    >>> args = argparse.Namespace(output_dir='myworkspace_myrepo')
+    >>> run_clean(args)  # Clean specific repo directory
     """
     import shutil
+    from pathlib import Path
+    import glob
+
+    # Determine target directories
+    target_dirs = []
+    if getattr(args, 'output_dir', None):
+        # Clean specific directory
+        target_dirs = [args.output_dir]
+    elif getattr(args, 'workspace', None) and getattr(args, 'repo', None):
+        # Clean specific workspace/repo directory
+        target_dirs = [f"{args.workspace}_{args.repo}"]
+    elif getattr(args, 'all', False):
+        # Clean all repository directories found via config files
+        target_dirs = _find_repository_directories()
+        # Also clean the current directory to remove top-level config files
+        target_dirs.append('.')
+        if not target_dirs:
+            print("🧹 No repository directories found to clean.")
+            return
+        print(f"🧹 Found {len(target_dirs)} repository directories to clean:")
+        for dir_name in target_dirs:
+            print(f"  - {dir_name}")
+    else:
+        # Clean current directory
+        target_dirs = ['.']
 
     # List of output files to remove (excluding config by default)
     output_files = [
@@ -801,42 +909,146 @@ def run_clean(args):
         'attachments_temp'
     ]
 
-    # Config file
-    config_file = 'migration_config.json'
+    # Config files (only remove if --all is specified)
+    config_files = [
+        'migration_config.json',
+        'config-*.json',  # Pattern for workspace-specific configs
+        '*.json'         # Include other potential JSON files
+    ]
 
-    # Determine what to remove
-    if getattr(args, 'all', False):
-        files_to_remove = output_files + [config_file]
-        print("🧹 Cleaning all output files including configuration...")
+    # Shared files that should NOT be removed (exist at project root)
+    shared_files = [
+        'cross_repo_mappings.json'
+    ]
+
+    total_removed = 0
+
+    for target_dir in target_dirs:
+        target_path = Path(target_dir)
+
+        if len(target_dirs) > 1:
+            print(f"\n🧹 Cleaning {target_dir}/...")
+
+        # Determine what to remove
+        if getattr(args, 'all', False):
+            files_to_remove = output_files + config_files
+            if target_dir == '.':
+                print("  Removing all outputs including configuration files...")
+        else:
+            files_to_remove = output_files
+            if target_dir == '.':
+                print("  Removing output files (keeping configuration)...")
+
+        # Remove files
+        for file_pattern in files_to_remove:
+            if '*' in file_pattern:
+                # Handle glob patterns
+                import glob
+                pattern_path = target_path / file_pattern
+                matched_files = glob.glob(str(pattern_path))
+                for file_path_str in matched_files:
+                    file_path = Path(file_path_str)
+                    # Skip shared files that should be preserved
+                    if file_path.name in shared_files:
+                        if target_dir == '.':
+                            print(f"  ℹ Preserved shared file: {file_path} (not removed)")
+                        continue
+                    try:
+                        file_path.unlink()
+                        print(f"  ✓ Removed {file_path}")
+                        total_removed += 1
+                    except Exception as e:
+                        print(f"  ❌ Error removing {file_path}: {e}")
+                        sys.exit(1)
+            else:
+                # Handle regular files
+                file_path = target_path / file_pattern
+                if file_path.exists():
+                    # Skip shared files that should be preserved
+                    if file_path.name in shared_files:
+                        if target_dir == '.':
+                            print(f"  ℹ Preserved shared file: {file_path} (not removed)")
+                        continue
+                    try:
+                        file_path.unlink()
+                        print(f"  ✓ Removed {file_path}")
+                        total_removed += 1
+                    except Exception as e:
+                        print(f"  ❌ Error removing {file_path}: {e}")
+                        sys.exit(1)
+                else:
+                    if target_dir == '.':
+                        print(f"  - {file_path} not found (already clean)")
+
+        # Remove directories
+        for dir_name in output_dirs:
+            dir_path = target_path / dir_name
+            if dir_path.exists():
+                try:
+                    shutil.rmtree(dir_path)
+                    print(f"  ✓ Removed directory {dir_path}")
+                    total_removed += 1
+                except Exception as e:
+                    print(f"  ❌ Error removing directory {dir_path}: {e}")
+                    sys.exit(1)
+            else:
+                if target_dir == '.':
+                    print(f"  - Directory {dir_path} not found (already clean)")
+
+    # Warn about shared files that are preserved
+    if '.' in target_dirs:
+        for shared_file in shared_files:
+            if Path(shared_file).exists():
+                print(f"  ℹ Preserved shared file: {shared_file} (not removed)")
+
+    if total_removed > 0:
+        print(f"\n✅ Clean completed! Removed {total_removed} items from {len(target_dirs)} director{'y' if len(target_dirs) == 1 else 'ies'}.")
     else:
-        files_to_remove = output_files
-        print("🧹 Cleaning output files (keeping configuration)...")
+        print("\n✅ Clean completed! No items to remove.")
 
-    # Remove files
-    for file in files_to_remove:
-        if os.path.exists(file):
-            try:
-                os.remove(file)
-                print(f"  ✓ Removed {file}")
-            except Exception as e:
-                print(f"  ❌ Error removing {file}: {e}")
-                sys.exit(1)
-        else:
-            print(f"  - {file} not found (already clean)")
 
-    # Remove directories
-    for dir in output_dirs:
-        if os.path.exists(dir):
-            try:
-                shutil.rmtree(dir)
-                print(f"  ✓ Removed directory {dir}")
-            except Exception as e:
-                print(f"  ❌ Error removing directory {dir}: {e}")
-                sys.exit(1)
-        else:
-            print(f"  - Directory {dir} not found (already clean)")
+def _find_repository_directories():
+    """Find all repository directories by scanning for config files and migration outputs.
 
-    print("✅ Clean completed!")
+    Returns:
+        List of directory names that contain repository migration outputs
+    """
+    from pathlib import Path
+    import glob
+
+    repo_dirs = set()
+
+    # Look for config files with the pattern config-{workspace}-{repo}.json
+    config_pattern = "config-*-*.json"
+    for config_file in glob.glob(config_pattern):
+        try:
+            # Extract workspace and repo from filename
+            parts = config_file.replace('config-', '').replace('.json', '').split('-')
+            if len(parts) >= 2:
+                workspace = parts[0]
+                repo = '-'.join(parts[1:])  # Handle repo names with hyphens
+                expected_dir = f"{workspace}_{repo}"
+
+                # Check if the directory exists
+                if Path(expected_dir).is_dir():
+                    repo_dirs.add(expected_dir)
+        except Exception:
+            # Skip malformed filenames
+            continue
+
+    # Also look for directories that contain migration outputs
+    for item in Path('.').iterdir():
+        if item.is_dir() and not item.name.startswith('.') and item.name != '__pycache__':
+            # Check if directory contains migration files
+            has_migration_files = any((item / filename).exists() for filename in [
+                'migration_log.txt',
+                'migration_report.md',
+                'bitbucket_audit_report.json'
+            ])
+            if has_migration_files:
+                repo_dirs.add(item.name)
+
+    return sorted(list(repo_dirs))
 
 
 def run_migration(args, dry_run=False):
@@ -905,6 +1117,23 @@ def run_migration(args, dry_run=False):
     if hasattr(args, 'use_gh_cli'):
         config.use_gh_cli = args.use_gh_cli.lower() == 'true'
 
+    # Override config with CLI arguments if provided
+    if args.output_dir:
+        config.output_dir = args.output_dir
+    else:
+        # Default to workspace_repo format
+        config.output_dir = f"{config.bitbucket.workspace}_{config.bitbucket.repo}"
+
+    # Ensure directory exists
+    from pathlib import Path
+    Path(config.output_dir).mkdir(parents=True, exist_ok=True)
+
+    if args.cross_repo_mappings:
+        config.cross_repo_mappings_file = args.cross_repo_mappings
+
+    # Store update_links_only flag for orchestrator
+    update_links_only = args.update_links_only
+
     # Set dry run mode
     config.dry_run = dry_run
 
@@ -941,8 +1170,12 @@ def run_migration(args, dry_run=False):
         orchestrator.logger.info("After successful dry-run, use migrate subcommand to perform actual migration")
         orchestrator.logger.info("="*80 + "\n")
 
-    # Run migration using orchestrator
-    orchestrator.run_migration()
+    if update_links_only:
+        orchestrator.logger.info("Running in update-links-only mode (Phase 2)")
+        orchestrator.run_update_links_only()
+    else:
+        orchestrator.logger.info("Running full migration (Phase 1)")
+        orchestrator.run_migration()
 
 
 def main():

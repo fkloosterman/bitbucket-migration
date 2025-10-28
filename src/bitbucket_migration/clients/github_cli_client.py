@@ -7,6 +7,7 @@ authentication, and error handling.
 """
 
 import subprocess
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -29,6 +30,7 @@ class GitHubCliClient:
     Attributes:
         token (str): GitHub personal access token for authentication
         dry_run (bool): Whether to simulate CLI calls without making changes
+        logger (logging.Logger): Logger instance for this client
     """
 
     def __init__(self, token: str, dry_run: bool = False) -> None:
@@ -47,6 +49,7 @@ class GitHubCliClient:
 
         self.token = token
         self.dry_run = dry_run
+        self.logger = logging.getLogger('bitbucket_migration')
 
     def is_available(self) -> bool:
         """
@@ -175,10 +178,10 @@ class GitHubCliClient:
             if result.returncode == 0:
                 return "Uploaded via gh CLI"
             else:
-                print(f"ERROR uploading via CLI: {result.stderr}")
+                self.logger.error(f"ERROR uploading via CLI: {result.stderr}")
                 return None
         except subprocess.TimeoutExpired:
-            print(f"ERROR: gh CLI command timed out for {filepath.name}")
+            self.logger.error(f"ERROR: gh CLI command timed out for {filepath.name}")
             return None
         except Exception as e:
             raise APIError(f"Error uploading attachment via GitHub CLI: {e}")

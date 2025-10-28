@@ -7,7 +7,7 @@ to ensure all required settings are present and properly formatted.
 
 import json
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 from pathlib import Path
 
 from ..exceptions import ConfigurationError, ValidationError
@@ -74,35 +74,33 @@ class MigrationConfig:
         bitbucket: Bitbucket API configuration
         github: GitHub API configuration
         user_mapping: Mapping of Bitbucket users to GitHub users
-        repository_mapping: Cross-repository link mappings
         issue_type_mapping: Mapping of Bitbucket issue types to GitHub issue types
-        dry_run: Whether to simulate migration without making changes
         skip_issues: Whether to skip issue migration
         skip_prs: Whether to skip PR migration
         skip_pr_as_issue: Whether to skip migrating closed PRs as issues
         use_gh_cli: Whether to use GitHub CLI for attachment uploads
+        link_rewriting_config: Configuration for link rewriting and note templates
+        output_dir: Output directory for migration files (default: '.')
+        cross_repo_mappings_file: Path to cross-repository mappings file (optional)
     """
     bitbucket: BitbucketConfig
     github: GitHubConfig
     user_mapping: Dict[str, Any]
-    repository_mapping: Optional[Dict[str, str]] = field(default_factory=dict)
     issue_type_mapping: Dict[str, str] = field(default_factory=dict)
-    dry_run: bool = field(default=False)
     skip_issues: bool = field(default=False)
     skip_prs: bool = field(default=False)
     skip_pr_as_issue: bool = field(default=False)
     use_gh_cli: bool = field(default=False)
+    link_rewriting_config: 'LinkRewritingConfig' = field(default_factory=lambda: LinkRewritingConfig())
+    output_dir: str = field(default_factory=lambda: '.')
+    cross_repo_mappings_file: Optional[str] = field(default=None)
 
     def __post_init__(self):
         """Validate configuration after initialization."""
         if not self.user_mapping:
             raise ValidationError("User mapping cannot be empty")
 
-        # Validate repository mapping format if provided
-        if self.repository_mapping:
-            for key, value in self.repository_mapping.items():
-                if not key or not value:
-                    raise ValidationError(f"Invalid repository mapping: '{key}' -> '{value}'")
+        # Repository mapping is now handled by CrossRepoMappingStore
 
         # Validate issue type mapping format if provided
         if self.issue_type_mapping:
@@ -111,6 +109,73 @@ class MigrationConfig:
                     raise ValidationError(f"Invalid Bitbucket issue type in mapping: '{bb_type}'")
                 if not gh_type or not gh_type.strip():
                     raise ValidationError(f"Invalid GitHub issue type in mapping: '{bb_type}' -> '{gh_type}'")
+
+        # Set default output directory based on workspace and repo if not specified
+        if self.output_dir == '.':
+            self.output_dir = f"{self.bitbucket.workspace}_{self.bitbucket.repo}"
+
+        # Ensure output directory exists
+        output_path = Path(self.output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        # Validate cross_repo_mappings_file if provided
+        if self.cross_repo_mappings_file:
+            mapping_path = Path(self.cross_repo_mappings_file)
+            if mapping_path.exists() and not mapping_path.is_file():
+                raise ValidationError(
+                    f"Cross-repo mappings path is not a file: {self.cross_repo_mappings_file}"
+                )
+
+
+class LinkRewritingConfig:
+   """
+   Configuration for link rewriting and note templates.
+
+   Manages templates for different types of Bitbucket links when migrating to GitHub,
+   with support for enabling/disabling notes and markdown context awareness.
+   """
+
+   def __init__(self, config_dict: Optional[Dict] = None):
+       """
+       Initialize link rewriting configuration.
+
+       Args:
+           config_dict: Configuration dictionary containing link rewriting settings
+       """
+       config = config_dict or {}
+       self.enabled = config.get('enabled', True)
+       self.note_templates = config.get('note_templates', self._default_templates())
+       self.enable_notes = config.get('enable_notes', True)
+       self.enable_markdown_awareness = config.get('enable_markdown_context_awareness', True)
+
+   @staticmethod
+   def _default_templates() -> Dict[str, str]:
+       """Default note templates for different link types."""
+       return {
+           'issue_link': ' *(was [BB #{bb_num}]({bb_url}))*',
+           'pr_link': ' *(was [BB PR #{bb_num}]({bb_url}))*',
+           'commit_link': ' *(was [Bitbucket]({bb_url}))*',
+           'branch_link': ' *(was [Bitbucket]({bb_url}))*',
+           'compare_link': ' *(was [Bitbucket]({bb_url}))*',
+           'repo_home_link': '',
+           'cross_repo_link': ' *(was [Bitbucket]({bb_url}))*',
+           'short_issue_ref': ' *(was BB `#{bb_num}`)*',
+           'pr_ref': ' *(was BB PR `#{bb_num}`)*',
+           'mention': '',
+           'default': ' *(migrated link)*'
+       }
+
+   def get_template(self, link_type: str) -> str:
+       """
+       Get template for link type, falling back to default.
+
+       Args:
+           link_type: Type of link (e.g., 'issue_link', 'pr_link')
+
+       Returns:
+           Template string for the link type, or default template if not found
+       """
+       return self.note_templates.get(link_type, self.note_templates.get('default', ''))
 
 
 class ConfigValidator:
@@ -230,13 +295,14 @@ class ConfigLoader:
                 bitbucket=bitbucket_config,
                 github=github_config,
                 user_mapping=data['user_mapping'],
-                repository_mapping=data.get('repository_mapping', {}),
                 issue_type_mapping=data.get('issue_type_mapping', {}),
-                dry_run=bool(data.get('dry_run', False)),
                 skip_issues=bool(data.get('skip_issues', False)),
                 skip_prs=bool(data.get('skip_prs', False)),
                 skip_pr_as_issue=bool(data.get('skip_pr_as_issue', False)),
-                use_gh_cli=bool(data.get('use_gh_cli', False))
+                use_gh_cli=bool(data.get('use_gh_cli', False)),
+                link_rewriting_config=LinkRewritingConfig(data.get('link_rewriting_config')),
+                output_dir=data.get('output_dir', '.'),
+                cross_repo_mappings_file=data.get('cross_repo_mappings_file')
             )
 
         except TypeError as e:
@@ -277,13 +343,14 @@ class ConfigLoader:
                 bitbucket=bitbucket_config,
                 github=github_config,
                 user_mapping=data['user_mapping'],
-                repository_mapping=data.get('repository_mapping', {}),
                 issue_type_mapping=data.get('issue_type_mapping', {}),
-                dry_run=bool(data.get('dry_run', False)),
                 skip_issues=bool(data.get('skip_issues', False)),
                 skip_prs=bool(data.get('skip_prs', False)),
                 skip_pr_as_issue=bool(data.get('skip_pr_as_issue', False)),
-                use_gh_cli=bool(data.get('use_gh_cli', False))
+                use_gh_cli=bool(data.get('use_gh_cli', False)),
+                link_rewriting_config=LinkRewritingConfig(data.get('link_rewriting_config')),
+                output_dir=data.get('output_dir', '.'),
+                cross_repo_mappings_file=data.get('cross_repo_mappings_file')
             )
 
         except TypeError as e:
@@ -314,13 +381,19 @@ class ConfigLoader:
                 'token': config.github.token
             },
             'user_mapping': config.user_mapping,
-            'repository_mapping': config.repository_mapping,
             'issue_type_mapping': config.issue_type_mapping,
-            'dry_run': bool(config.dry_run),
             'skip_issues': bool(config.skip_issues),
             'skip_prs': bool(config.skip_prs),
             'skip_pr_as_issue': bool(config.skip_pr_as_issue),
-            'use_gh_cli': bool(config.use_gh_cli)
+            'use_gh_cli': bool(config.use_gh_cli),
+            'link_rewriting_config': {
+                'enabled': config.link_rewriting_config.enabled,
+                'enable_notes': config.link_rewriting_config.enable_notes,
+                'enable_markdown_awareness': config.link_rewriting_config.enable_markdown_awareness,
+                'note_templates': config.link_rewriting_config.note_templates
+            },
+            'output_dir': config.output_dir,
+            'cross_repo_mappings_file': config.cross_repo_mappings_file
         }
 
         try:

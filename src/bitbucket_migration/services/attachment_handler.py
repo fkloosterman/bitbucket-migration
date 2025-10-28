@@ -1,8 +1,11 @@
 import requests
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..clients.github_cli_client import GitHubCliClient
+
+logger = logging.getLogger('bitbucket_migration')
 
 class AttachmentHandler:
     def __init__(self, attachment_dir: Path, gh_cli_client: Optional[GitHubCliClient] = None, dry_run: bool = False):
@@ -13,30 +16,44 @@ class AttachmentHandler:
         self.dry_run = dry_run
         self.attachments: List[Dict] = []
     
-    def download_attachment(self, url: str, filename: str) -> Optional[Path]:
-        """Download attachment from Bitbucket"""
+    def download_attachment(self, url: str, filename: str, item_type: str = None, item_number: int = None, comment_seq: int = None) -> Optional[Path]:
+        """Download attachment from Bitbucket
+
+        Args:
+            url: The attachment URL
+            filename: The filename to save as
+            item_type: 'issue' or 'pr' (optional)
+            item_number: The issue or PR number (optional)
+            comment_seq: Comment sequence number if attachment is from a comment (optional)
+        """
         filepath = self.attachment_dir / filename
         if self.dry_run:
             # In dry-run, just record without downloading
             self.attachments.append({
                 'filename': filename,
-                'filepath': str(filepath)
+                'filepath': str(filepath),
+                'item_type': item_type,
+                'item_number': item_number,
+                'comment_seq': comment_seq
             })
             return filepath
         try:
             response = requests.get(url, stream=True)
             response.raise_for_status()
-            
+
             with open(filepath, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
             self.attachments.append({
                 'filename': filename,
-                'filepath': str(filepath)
+                'filepath': str(filepath),
+                'item_type': item_type,
+                'item_number': item_number,
+                'comment_seq': comment_seq
             })
             return filepath
         except Exception as e:
-            print(f"ERROR downloading attachment {filename}: {e}")
+            logger.error("Failed to download attachment %s: %s", filename, e, extra={'filename': filename, 'error': str(e)})
             return None
     
     def upload_to_github(self, filepath: Path, issue_number: int, github_client, gh_owner: str, gh_repo: str) -> Optional[str]:
@@ -59,35 +76,43 @@ class AttachmentHandler:
         github_client.create_comment(issue_number, comment_body)
         return comment_body
 
-    def extract_and_download_inline_images(self, text: str, use_gh_cli: bool = False) -> tuple:
-        """Extract Bitbucket-hosted inline images from markdown and download them."""
+    def extract_and_download_inline_images(self, text: str, use_gh_cli: bool = False, item_type: str = None, item_number: int = None, comment_seq: int = None) -> tuple:
+        """Extract Bitbucket-hosted inline images from markdown and download them.
+
+        Args:
+            text: The markdown text to process
+            use_gh_cli: Whether to use GitHub CLI for uploads
+            item_type: 'issue' or 'pr' (optional)
+            item_number: The issue or PR number (optional)
+            comment_seq: Comment sequence number if processing a comment (optional)
+        """
         if not text:
             return text, []
-        
+
         import re
-        
+
         # Pattern to match markdown images: ![alt](url)
         image_pattern = r'!\[([^\]]*)\]\(([^\)]+)\)'
-        
+
         downloaded_images = []
         images_found = 0
-        
+
         def replace_image(match):
             nonlocal images_found
             alt_text = match.group(1)
             image_url = match.group(2)
-            
+
             # Only process Bitbucket-hosted images
             if 'bitbucket.org' in image_url or 'bytebucket.org' in image_url:
                 images_found += 1
-                
+
                 # Extract filename from URL
                 filename = image_url.split('/')[-1].split('?')[0]
                 if not filename or filename == '':
                     filename = f"image_{images_found}.png"
-                
-                # Download the image
-                filepath = self.download_attachment(image_url, filename)
+
+                # Download the image with context
+                filepath = self.download_attachment(image_url, filename, item_type=item_type, item_number=item_number, comment_seq=comment_seq)
                 if filepath:
                     downloaded_images.append({
                         'filename': filename,
@@ -109,7 +134,7 @@ class AttachmentHandler:
             else:
                 # Return unchanged for non-Bitbucket images
                 return match.group(0)
-        
+
         updated_text = re.sub(image_pattern, replace_image, text)
-        
+
         return updated_text, downloaded_images

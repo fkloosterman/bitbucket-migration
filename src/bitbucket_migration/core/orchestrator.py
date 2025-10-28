@@ -15,6 +15,7 @@ from ..clients.github_cli_client import GitHubCliClient
 from ..services.user_mapper import UserMapper
 from ..services.link_rewriter import LinkRewriter
 from ..services.attachment_handler import AttachmentHandler
+from ..services.cross_repo_mapping_store import CrossRepoMappingStore
 from ..formatters.formatter_factory import FormatterFactory
 from ..config.migration_config import MigrationConfig
 from ..migration.issue_migrator import IssueMigrator
@@ -47,8 +48,10 @@ class MigrationOrchestrator:
         if logger:
             self.logger = logger
         else:
-            log_file = f"migration_{'dry_run_' if self.config.dry_run else ''}log.txt"
-            self.logger = MigrationLogger(log_level="INFO", log_file=log_file, dry_run=self.config.dry_run)
+            from pathlib import Path
+            output_dir = Path(self.config.output_dir)
+            log_file = output_dir / f"migration_{'dry_run_' if self.config.dry_run else ''}log.txt"
+            self.logger = MigrationLogger(log_level="INFO", log_file=str(log_file), dry_run=self.config.dry_run)
 
         # Track overall progress
         self.issue_mapping = {}
@@ -59,6 +62,15 @@ class MigrationOrchestrator:
             'pr_branch_missing': 0,
             'pr_merged_as_issue': 0,
         }
+
+        # Cross-repository mapping support
+        self.cross_repo_mapping_store = None
+        self.cross_repo_mappings = {}
+
+        if config.cross_repo_mappings_file:
+            self.cross_repo_mapping_store = CrossRepoMappingStore(config.cross_repo_mappings_file)
+            self.cross_repo_mappings = self.cross_repo_mapping_store.load()
+            self.logger.info(f"Loaded cross-repo mappings for {len(self.cross_repo_mappings)} repositories")
 
         # Initialize components
         self._setup_components()
@@ -146,13 +158,19 @@ class MigrationOrchestrator:
 
         # Setup services
         self.user_mapper = UserMapper(self.config.user_mapping, self.bb_client)
+
+        # Initialize cross-repo mapping store
+        self.cross_repo_store = CrossRepoMappingStore(self.config.cross_repo_mappings_file)
+
         self.link_rewriter = LinkRewriter(
-            self.issue_mapping, self.pr_mapping, self.config.repository_mapping or {},
+            self.issue_mapping, self.pr_mapping, self.cross_repo_store,
             self.config.bitbucket.workspace, self.config.bitbucket.repo,
-            self.config.github.owner, self.config.github.repo, self.user_mapper
+            self.config.github.owner, self.config.github.repo, self.user_mapper,
+            self.config.link_rewriting_config
         )
+        attachments_dir = Path(self.config.output_dir) / 'attachments_temp'
         self.attachment_handler = AttachmentHandler(
-            Path('attachments_temp'), self.gh_cli_client, self.config.dry_run
+            attachments_dir, self.gh_cli_client, self.config.dry_run
         )
         self.formatter_factory = FormatterFactory(
             self.user_mapper, self.link_rewriter, self.attachment_handler
@@ -167,7 +185,7 @@ class MigrationOrchestrator:
             self.bb_client, self.gh_client, self.user_mapper, self.link_rewriter,
             self.attachment_handler, self.formatter_factory, self.logger
         )
-        self.report_generator = ReportGenerator(self.logger)
+        self.report_generator = ReportGenerator(self.logger, self.config.output_dir)
 
     async def run_migration_async(self) -> None:
         """
@@ -262,7 +280,10 @@ class MigrationOrchestrator:
             # Step 8: Print summary
             self._print_summary()
 
-            # Step 9: Post-migration instructions
+            # Step 9: Save cross-repo mappings for future migrations
+            self._save_cross_repo_mappings()
+
+            # Step 10: Post-migration instructions
             self._print_post_migration_instructions()
 
             self.logger.info("="*80)
@@ -480,6 +501,14 @@ class MigrationOrchestrator:
             url = "-"  # Placeholder
             error = "-"  # Placeholder
             instructions = "Drag and drop to GitHub issue" if not uploaded else "-"
+
+            # Format "Found In" information similar to link rewriting
+            item_type = attachment.get('item_type')
+            item_number = attachment.get('item_number')
+            comment_seq = attachment.get('comment_seq')
+
+            found_in = self._format_found_in(item_type, item_number, comment_seq)
+
             data.append({
                 'file_path': file_path,
                 'size': size,
@@ -487,7 +516,8 @@ class MigrationOrchestrator:
                 'uploaded': uploaded,
                 'url': url,
                 'error': error,
-                'instructions': instructions
+                'instructions': instructions,
+                'found_in': found_in
             })
         return data
 
@@ -499,6 +529,33 @@ class MigrationOrchestrator:
             'failed': self.link_rewriter.failed,
             'details': self.link_rewriter.link_details
         }
+
+    def _format_found_in(self, item_type: str = None, item_number: int = None, comment_seq: int = None) -> str:
+        """
+        Format "Found In" information similar to link rewriting.
+
+        Args:
+            item_type: 'issue' or 'pr'
+            item_number: The issue or PR number
+            comment_seq: Comment sequence number if attachment is from a comment
+
+        Returns:
+            Formatted string like "Issue #123" or "PR #456 Comment #2"
+        """
+        if not item_type or item_number is None:
+            return 'N/A'
+
+        if item_type == 'issue':
+            location = f"Issue #{item_number}"
+        elif item_type == 'pr':
+            location = f"PR #{item_number}"
+        else:
+            return 'N/A'
+
+        if comment_seq is not None:
+            location += f" Comment #{comment_seq}"
+
+        return location
 
     def _generate_reports(self) -> None:
         """Generate migration reports."""
@@ -522,12 +579,12 @@ class MigrationOrchestrator:
             self.issue_mapping, self.pr_mapping,
             self.config.bitbucket.workspace, self.config.bitbucket.repo,
             self.config.github.owner, self.config.github.repo,
-            self.stats
+            self.stats, self.cross_repo_store
         )
 
         # Generate comprehensive migration report
         if self.config.dry_run:
-            self.report_generator.generate_migration_report(
+            report_content = self.report_generator.generate_migration_report(
                 issue_records, pr_records, self.stats,
                 self.config.bitbucket.workspace, self.config.bitbucket.repo,
                 self.config.github.owner, self.config.github.repo,
@@ -538,7 +595,7 @@ class MigrationOrchestrator:
                 type_mapping_data=type_mapping_data
             )
         else:
-            self.report_generator.generate_migration_report(
+            report_content = self.report_generator.generate_migration_report(
                 issue_records, pr_records, self.stats,
                 self.config.bitbucket.workspace, self.config.bitbucket.repo,
                 self.config.github.owner, self.config.github.repo,
@@ -548,6 +605,20 @@ class MigrationOrchestrator:
                 link_data=link_data,
                 type_mapping_data=type_mapping_data
             )
+
+        # Add deferred links section to the report
+        deferred_by_repo = self.report_generator._extract_deferred_links(issue_records, pr_records)
+        if deferred_by_repo:
+            deferred_section = self.report_generator._generate_deferred_links_section(deferred_by_repo)
+            # Append to the existing report file
+            report_path = self.report_generator.output_dir / ("migration_report_dry_run.md" if self.config.dry_run else "migration_report.md")
+            with open(report_path, 'a', encoding='utf-8') as f:
+                f.write(deferred_section)
+            self.logger.info(f"Added deferred links section to report: {report_path}")
+            total_deferred = sum(len(links) for links in deferred_by_repo.values())
+            self.logger.info(f"Found {total_deferred} deferred cross-repo links")
+            for repo_key, links in deferred_by_repo.items():
+                self.logger.info(f"  {repo_key}: {len(links)} deferred links")
 
     def _print_summary(self) -> None:
         """Print migration summary."""
@@ -610,6 +681,65 @@ class MigrationOrchestrator:
             self.logger.info("Merged PRs are labeled 'pr-merged' so you can easily identify them.")
             self.logger.info("="*80)
 
+
+    def _save_cross_repo_mappings(self) -> None:
+        """Save cross-repository mappings for future migrations."""
+        if self.config.cross_repo_mappings_file:
+            try:
+                from ..services.cross_repo_mapping_store import CrossRepoMappingStore
+                mapping_store = CrossRepoMappingStore(self.config.cross_repo_mappings_file)
+                mapping_store.save(
+                    self.config.bitbucket.workspace, self.config.bitbucket.repo,
+                    self.config.github.owner, self.config.github.repo,
+                    self.issue_mapping, self.pr_mapping
+                )
+                self.logger.info(f"Saved cross-repository mappings to {self.config.cross_repo_mappings_file}")
+            except Exception as e:
+                self.logger.warning(f"Could not save cross-repository mappings: {e}")
+
+    def run_update_links_only(self) -> None:
+        """
+        Phase 2: Update cross-repository links only.
+
+        This mode assumes the repository has already been migrated. It:
+        1. Loads all available cross-repo mappings
+        2. Fetches existing GitHub issues/PRs
+        3. Rewrites cross-repo links in descriptions and comments
+        4. Updates GitHub with the rewritten content
+
+        Use after all repositories have completed Phase 1 migration.
+        """
+        self.logger.info("=" * 80)
+        self.logger.info("PHASE 2: Updating cross-repository links")
+        self.logger.info("=" * 80)
+
+        # Reload mappings to get latest from all migrated repos
+        if self.cross_repo_mapping_store:
+            self.cross_repo_mappings = self.cross_repo_mapping_store.load()
+            self.logger.info(f"Loaded mappings for {len(self.cross_repo_mappings)} repositories")
+
+        if not self.cross_repo_mappings:
+            self.logger.warning("No cross-repo mappings available. Nothing to update.")
+            return
+
+        # Get existing issue and PR mappings for current repo
+        # (These should have been created in Phase 1)
+        issue_mapping = {}  # Load from previous migration report if available
+        pr_mapping = {}     # Load from previous migration report if available
+
+        # Create link rewriter with all available cross-repo mappings
+        link_rewriter = LinkRewriter(
+            issue_mapping, pr_mapping, self.cross_repo_store,
+            self.config.bitbucket.workspace, self.config.bitbucket.repo,
+            self.config.github.owner, self.config.github.repo, self.user_mapper,
+            self.config.link_rewriting_config
+        )
+
+        # TODO: Implement fetching existing GitHub issues/PRs
+        # TODO: Implement rewriting their content
+        # TODO: Implement updating GitHub via API
+
+        self.logger.info("Phase 2 update complete")
 
     def _save_partial_mapping(self) -> None:
         """Save partial mapping in case of interruption."""

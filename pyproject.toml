@@ -31,6 +31,11 @@ docs = [
     "mkdocs-material>=9.6.22",
     "pymdown-extensions>=10.16.1",
 ]
+test = [
+    "pytest>=8.0.0",
+    "pytest-benchmark>=4.0.0",
+    "pytest-cov>=4.1.0",
+]
 
 [project.scripts]
     migrate_bitbucket_to_github = "bitbucket_migration.migrate_bitbucket_to_github:main"
