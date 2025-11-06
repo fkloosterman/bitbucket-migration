@@ -3,36 +3,82 @@ import logging
 from typing import Optional, Dict, Any
 from .base_link_handler import BaseLinkHandler
 
-logger = logging.getLogger('bitbucket_migration')
+from ..core.migration_context import MigrationEnvironment, MigrationState
+from .services_data import LinkWriterData
+
 
 class IssueLinkHandler(BaseLinkHandler):
     """
     Handler for Bitbucket issue links.
+
+    Rewrites Bitbucket issue URLs to their corresponding GitHub issue URLs.
+    Supports both same-repo and cross-repo issue links.
     """
 
-    def __init__(self, issue_mapping: Dict[int, int], bb_workspace: str, bb_repo: str,
-                   gh_owner: str, gh_repo: str, template_config=None):
+    def __init__(self, environment: MigrationEnvironment, state: MigrationState, workspace: str = None, repo: str = None):
+        """
+        Initialize the IssueLinkHandler.
+
+        Args:
+            environment: Migration environment containing config and clients
+            state: Migration state for storing link data
+            workspace: Optional workspace override for cross-repo handling
+            repo: Optional repo override for cross-repo handling
+        """
+        super().__init__(environment, state, priority=1)
+
+        if repo:
+            self.bb_repo = repo
+            self.bb_workspace = environment.config.bitbucket.workspace if not workspace else workspace
+
+            self.gh_owner, self.gh_repo = self.environment.services.get('cross_repo_mapping_store').get_mapped_repo(
+                self.bb_workspace, self.bb_repo
+            )
+
+            if not self.gh_repo:
+                # no mapping found
+                self.logger.error(f"Could not find mapped GitHub repository for {workspace}/{repo}")
+
+            if not self.gh_owner:
+                self.gh_owner = self.environment.config.github.owner
+
+            self.issue_mapping = self.environment.services.get('cross_repo_mapping_store').get_issue_mapping(
+                self.bb_workspace, self.bb_repo
+            )
+        else:
+            self.bb_workspace = self.environment.config.bitbucket.workspace
+            self.bb_repo = self.environment.config.bitbucket.repo
+            self.gh_owner = self.environment.config.github.owner
+            self.gh_repo = self.environment.config.github.repo
+            self.issue_mapping = self.state.mappings.issues
+
+
         # Pre-compile pattern at initialization
         self.PATTERN = re.compile(
-            rf'https://bitbucket\.org/{re.escape(bb_workspace)}/{re.escape(bb_repo)}/issues/(\d+)(?:/[^/\s\)\"\'>]*)?'
+            rf'https://bitbucket\.org/{re.escape(self.bb_workspace)}/{re.escape(self.bb_repo)}/issues/(\d+)(?:/[^/\s\)\"\'>]*)?'
         )
-        super().__init__(priority=1, template_config=template_config)
 
-        self.issue_mapping = issue_mapping
-        self.bb_workspace = bb_workspace
-        self.bb_repo = bb_repo
-        self.gh_owner = gh_owner
-        self.gh_repo = gh_repo
-
-        logger.debug(
-            "IssueLinkHandler initialized for %s/%s -> %s/%s",
-            bb_workspace, bb_repo, gh_owner, gh_repo
+        self.logger.debug(
+            "IssueLinkHandler initialized for {0}/{1} -> {2}/{3}".format(
+                self.bb_workspace, self.bb_repo,
+                self.gh_owner, self.gh_repo
+            )
         )
 
     def handle(self, url: str, context: Dict[str, Any]) -> Optional[str]:
+        """
+        Handle Bitbucket issue link rewriting.
+
+        Args:
+            url: The Bitbucket issue URL to rewrite
+            context: Context information including item details and markdown context
+
+        Returns:
+            Rewritten GitHub issue URL or None if URL doesn't match
+        """
         match = self.PATTERN.match(url)  # Use pre-compiled pattern
         if not match:
-            logger.debug("URL did not match issue pattern: %s", url)
+            self.logger.debug(f"URL did not match issue pattern: {url}")
             return None
 
         bb_num = int(match.group(1))
@@ -41,7 +87,7 @@ class IssueLinkHandler(BaseLinkHandler):
         if gh_num:
             gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_num}"
 
-            markdown_context = context.get('markdown_context')
+            markdown_context = context.get('markdown_context', None)
 
             # If in markdown context (target or text), return URL only (no note)
             if markdown_context in ('target', 'text'):
@@ -62,17 +108,15 @@ class IssueLinkHandler(BaseLinkHandler):
         else:
             rewritten = url
 
-        # Update context with link details if needed
-        if 'link_details' in context:
-            context['link_details'].append({
-                'original': url,
-                'rewritten': rewritten,
-                'type': 'issue_link',
-                'reason': 'mapped' if gh_num else 'unmapped',
-                'item_type': context.get('item_type'),
-                'item_number': context.get('item_number'),
-                'comment_seq': context.get('comment_seq'),
-                'markdown_context': context.get('markdown_context')
-            })
+        context['details'].append({
+            'original': url,
+            'rewritten': rewritten,
+            'type': 'issue_link',
+            'reason': 'mapped' if gh_num else 'unmapped',
+            'item_type': context.get('item_type'),
+            'item_number': context.get('item_number'),
+            'comment_seq': context.get('comment_seq'),
+            'markdown_context': context.get('markdown_context', None)
+        })
 
         return rewritten

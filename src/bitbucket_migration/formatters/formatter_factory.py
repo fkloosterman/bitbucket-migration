@@ -4,6 +4,7 @@ from ..services.user_mapper import UserMapper
 from ..services.link_rewriter import LinkRewriter
 from ..services.attachment_handler import AttachmentHandler
 
+from ..core.migration_context import MigrationEnvironment, MigrationState
 
 class FormatterFactory:
     """
@@ -13,18 +14,18 @@ class FormatterFactory:
     and provides a centralized way to manage formatter creation.
     """
 
-    def __init__(self, user_mapper: UserMapper, link_rewriter: LinkRewriter, attachment_handler: AttachmentHandler):
+    def __init__(self, environment: MigrationEnvironment, state: MigrationState):
         """
         Initialize the factory with required services.
 
         Args:
-            user_mapper: Service for mapping Bitbucket users to GitHub users
-            link_rewriter: Service for rewriting links and mentions
-            attachment_handler: Service for handling attachments and inline images
+            environment: Migration environment containing services
+            state: Migration state (unused but kept for compatibility)
         """
-        self.user_mapper = user_mapper
-        self.link_rewriter = link_rewriter
-        self.attachment_handler = attachment_handler
+
+        self.user_mapper = environment.services.get('user_mapper')
+        self.link_rewriter = environment.services.get('link_rewriter')
+        self.attachment_handler = environment.services.get('attachment_handler')
 
     def get_issue_formatter(self) -> IssueContentFormatter:
         """

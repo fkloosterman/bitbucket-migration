@@ -3,39 +3,62 @@ import logging
 from typing import Optional, Dict, Any
 from .base_link_handler import BaseLinkHandler
 
-logger = logging.getLogger('bitbucket_migration')
+from ..core.migration_context import MigrationEnvironment, MigrationState
+from .services_data import LinkWriterData
+
 
 class RepoHomeLinkHandler(BaseLinkHandler):
     """
     Handler for Bitbucket repository home links.
-    Lowest priority to avoid matching specific links.
+
+    Handles repository root URLs that don't match more specific patterns
+    like issues, PRs, commits, etc. Has lowest priority to avoid interfering
+    with more specific link handlers.
     """
 
-    def __init__(self, repo_mapping: Dict[str, str], bb_workspace: str, bb_repo: str,
-                   gh_owner: str, gh_repo: str, template_config=None):
+    def __init__(self, environment: MigrationEnvironment, state: MigrationState):
+        """
+        Initialize the RepoHomeLinkHandler.
+
+        Args:
+            environment: Migration environment containing config and clients
+            state: Migration state for storing link data
+        """
         # Pre-compile pattern at initialization
         self.PATTERN = re.compile(
-            rf'https://bitbucket\.org/{re.escape(bb_workspace)}/{re.escape(bb_repo)}(?=\s|\)|"|\'|>|$|$)'
+            rf'https://bitbucket\.org/{re.escape(environment.config.bitbucket.workspace)}/{re.escape(environment.config.bitbucket.repo)}(?=\s|\)|"|\'|>|$|$)'
         )
-        super().__init__(priority=10, template_config=template_config)  # Low priority
+        super().__init__(environment, state, priority=10)  # Low priority
 
-        self.repo_mapping = repo_mapping
-        self.bb_workspace = bb_workspace
-        self.bb_repo = bb_repo
-        self.gh_owner = gh_owner
-        self.gh_repo = gh_repo
-
-        logger.debug(
-            "RepoHomeLinkHandler initialized for %s/%s -> %s/%s",
-            bb_workspace, bb_repo, gh_owner, gh_repo
+        self.logger.debug(
+            "RepoHomeLinkHandler initialized for {0}/{1} -> {2}/{3}".format(
+                self.environment.config.bitbucket.workspace,
+                self.environment.config.bitbucket.repo,
+                self.environment.config.github.owner,
+                self.environment.config.github.repo
+            )
         )
 
     def handle(self, url: str, context: Dict[str, Any]) -> Optional[str]:
-        workspace, repo = self.bb_workspace, self.bb_repo
-        if workspace == self.bb_workspace and repo == self.bb_repo:
-            gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}"
+        """
+        Handle Bitbucket repository home link rewriting.
 
-            markdown_context = context.get('markdown_context')
+        Args:
+            url: The Bitbucket repository home URL to rewrite
+            context: Context information including item details and markdown context
+
+        Returns:
+            Rewritten GitHub repository URL or None if URL doesn't match
+        """
+        # Initialize with default values
+        gh_owner = self.environment.config.github.owner
+        gh_repo = self.environment.config.github.repo
+
+        workspace, repo = self.environment.config.bitbucket.workspace, self.environment.config.bitbucket.repo
+        if workspace == self.environment.config.bitbucket.workspace and repo == self.environment.config.bitbucket.repo:
+            gh_url = f"https://github.com/{gh_owner}/{gh_repo}"
+
+            markdown_context = context.get('markdown_context', None)
 
             # If in markdown target context, return URL only (no note)
             if markdown_context == 'target':
@@ -54,12 +77,13 @@ class RepoHomeLinkHandler(BaseLinkHandler):
                     rewritten = f"[repository]({gh_url})"
         else:
             repo_key = f"{workspace}/{repo}"
-            if repo_key in self.repo_mapping:
-                gh_repo_full = self.repo_mapping[repo_key]
+            repo_mapping = self.environment.services.get('cross_repo_mapping_store').get_repository_mapping()
+            if repo_key in repo_mapping:
+                gh_repo_full = repo_mapping[repo_key]
                 if '/' in gh_repo_full:
                     gh_owner, gh_repo = gh_repo_full.split('/', 1)
                 else:
-                    gh_owner = self.gh_owner
+                    gh_owner = self.environment.config.github.owner
                     gh_repo = gh_repo_full
                 gh_url = f"https://github.com/{gh_owner}/{gh_repo}"
 
@@ -83,16 +107,15 @@ class RepoHomeLinkHandler(BaseLinkHandler):
             else:
                 rewritten = url
 
-        if 'link_details' in context:
-            context['link_details'].append({
-                'original': url,
-                'rewritten': rewritten,
-                'type': 'repo_home_link',
-                'reason': 'mapped' if rewritten != url else 'unmapped',
-                'item_type': context.get('item_type'),
-                'item_number': context.get('item_number'),
-                'comment_seq': context.get('comment_seq'),
-                'markdown_context': context.get('markdown_context')
-            })
+        context['details'].append({
+            'original': url,
+            'rewritten': rewritten,
+            'type': 'repo_home_link',
+            'reason': 'mapped' if rewritten != url else 'unmapped',
+            'item_type': context.get('item_type'),
+            'item_number': context.get('item_number'),
+            'comment_seq': context.get('comment_seq'),
+            'markdown_context': context.get('markdown_context', None)
+        })
 
         return rewritten

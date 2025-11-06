@@ -10,15 +10,9 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import time
 
-from ..clients.bitbucket_client import BitbucketClient
-from ..clients.github_client import GitHubClient
-from ..services.user_mapper import UserMapper
-from ..services.link_rewriter import LinkRewriter
-from ..services.attachment_handler import AttachmentHandler
-from ..formatters.formatter_factory import FormatterFactory
 from ..exceptions import MigrationError, APIError, AuthenticationError, NetworkError, ValidationError
-from ..utils.logging_config import MigrationLogger
 
+from ..core.migration_context import MigrationEnvironment, MigrationState
 
 class PullRequestMigrator:
     """
@@ -29,37 +23,26 @@ class PullRequestMigrator:
     handling attachments and comments.
     """
 
-    def __init__(self, bb_client: BitbucketClient, gh_client: GitHubClient,
-                  user_mapper: UserMapper, link_rewriter: LinkRewriter,
-                  attachment_handler: AttachmentHandler, formatter_factory: FormatterFactory,
-                  logger: MigrationLogger):
+    def __init__(self, environment: MigrationEnvironment, state: MigrationState):
         """
         Initialize the PullRequestMigrator.
 
         Args:
-            bb_client: Bitbucket API client
-            gh_client: GitHub API client
-            user_mapper: User mapping service
-            link_rewriter: Link rewriting service
-            attachment_handler: Attachment handling service
-            formatter_factory: Formatter factory
-            logger: Logger instance
+            environment: Migration environment containing all services and configuration
+            state: Migration state containing mappings and records
         """
-        self.bb_client = bb_client
-        self.gh_client = gh_client
-        self.user_mapper = user_mapper
-        self.link_rewriter = link_rewriter
-        self.attachment_handler = attachment_handler
-        self.formatter_factory = formatter_factory
-        self.logger = logger
+        self.environment = environment
+        self.state = state
 
-        # Track migration progress
-        self.pr_mapping = {}  # BB PR # -> GH issue/PR #
-        self.pr_records = []  # Detailed migration records
-        self.comment_mapping = {}  # BB comment ID -> GH comment ID
+        self.logger = self.environment.logger
 
+        self.user_mapper = self.environment.services.get('user_mapper')
+        self.link_rewriter = self.environment.services.get('link_rewriter')
+        self.attachment_handler = self.environment.services.get('attachment_handler')
+        self.formatter_factory = self.environment.services.get('formatter_factory')
+        
         # Migration statistics
-        self.stats = {
+        self.state.pr_migration_stats = {
             'prs_as_prs': 0,  # Open PRs that became GitHub PRs
             'prs_as_issues': 0,  # PRs that became GitHub issues
             'pr_branch_missing': 0,  # PRs that couldn't be migrated due to missing branches
@@ -88,9 +71,8 @@ class PullRequestMigrator:
             return date_str
 
     def migrate_pull_requests(self, bb_prs: List[Dict[str, Any]],
-                               milestone_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
-                               skip_pr_as_issue: bool = False,
-                               skip_link_rewriting: bool = False) -> List[Dict[str, Any]]:
+                                skip_pr_as_issue: bool = False,
+                                open_prs_only: bool = False) -> List[Dict[str, Any]]:
         """
         Migrate Bitbucket PRs to GitHub with intelligent branch checking.
 
@@ -100,14 +82,13 @@ class PullRequestMigrator:
 
         Args:
             bb_prs: List of Bitbucket pull requests to migrate
-            milestone_lookup: Optional mapping of milestone names to GitHub milestone data
             skip_pr_as_issue: Whether to skip migrating closed PRs as issues
-            skip_link_rewriting: If True, skip link rewriting (for two-pass migration)
+            open_prs_only: If True, only migrate open PRs
 
         Returns:
             List of migration records
         """
-        milestone_lookup = milestone_lookup or {}
+        milestone_lookup = self.state.mappings.milestones
 
         self.logger.info("="*80)
         self.logger.info("PHASE 2: Migrating Pull Requests")
@@ -132,8 +113,8 @@ class PullRequestMigrator:
                 if source_branch and dest_branch:
                     # Check if both branches exist on GitHub
                     self.logger.info(f"  Checking branch existence on GitHub...")
-                    source_exists = self.gh_client.check_branch_exists(source_branch)
-                    dest_exists = self.gh_client.check_branch_exists(dest_branch)
+                    source_exists = self.environment.clients.gh.check_branch_exists(source_branch)
+                    dest_exists = self.environment.clients.gh.check_branch_exists(dest_branch)
 
                     if source_exists and dest_exists:
                         # Try to create as actual GitHub PR
@@ -148,6 +129,9 @@ class PullRequestMigrator:
                             milestone_name = bb_pr['milestone'].get('name')
                             if milestone_name and milestone_name in milestone_lookup:
                                 milestone_number = milestone_lookup[milestone_name].get('number')
+                                self.logger.info(f"  Assigning to milestone: {milestone_name} (#{milestone_number})")
+                            elif milestone_name:
+                                self.logger.warning(f"  Milestone '{milestone_name}' not found in lookup - PR will not be assigned to a milestone")
 
                         # Note: Inline images will be handled in second pass
 
@@ -165,21 +149,21 @@ class PullRequestMigrator:
                         # Apply milestone to PR (must be done after creation)
                         if milestone_number and gh_pr:
                             try:
-                                self.gh_client.update_issue(gh_pr['number'], milestone=milestone_number)
-                                self.logger.info(f"    Applied milestone to PR #{gh_pr['number']}")
-                            except (APIError, AuthenticationError, NetworkError, ValidationError):
-                                self.logger.warning(f"    Warning: Could not apply milestone to PR")
+                                self.environment.clients.gh.update_issue(gh_pr['number'], milestone=milestone_number)
+                                self.logger.info(f"  ✓ Applied milestone to PR #{gh_pr['number']}")
+                            except (APIError, AuthenticationError, NetworkError, ValidationError) as e:
+                                self.logger.warning(f"  ⚠️  Warning: Could not apply milestone to PR #{gh_pr['number']}: {e}")
                             except Exception as e:
-                                self.logger.warning(f"    Warning: Unexpected error applying milestone to PR: {e}")
+                                self.logger.warning(f"  ⚠️  Warning: Unexpected error applying milestone to PR #{gh_pr['number']}: {e}")
 
                         if gh_pr:
-                            self.pr_mapping[pr_num] = gh_pr['number']
-                            self.stats['prs_as_prs'] += 1
+                            self.state.mappings.prs[pr_num] = gh_pr['number']
+                            self.state.pr_migration_stats['prs_as_prs'] += 1
 
                             # Apply labels to the migrated PR
                             labels = ['migrated-from-bitbucket']
                             try:
-                                self.gh_client.update_issue(gh_pr['number'], labels=labels)
+                                self.environment.clients.gh.update_issue(gh_pr['number'], labels=labels)
                                 self.logger.info(f"    Applied labels to PR #{gh_pr['number']}")
                             except (APIError, AuthenticationError, NetworkError, ValidationError):
                                 self.logger.warning(f"    Warning: Could not apply labels to PR")
@@ -195,7 +179,7 @@ class PullRequestMigrator:
 
                             # Comments will be created in the second pass to avoid duplication
 
-                            self.pr_records.append({
+                            self.state.pr_records.append({
                                 'bb_number': pr_num,
                                 'gh_number': gh_pr['number'],
                                 'gh_type': 'PR',
@@ -209,7 +193,7 @@ class PullRequestMigrator:
                                 'attachments': 0,  # Will be updated after fetching
                                 'links_rewritten': 0,  # Will be updated in second pass
                                 'bb_url': bb_pr.get('links', {}).get('html', {}).get('href', ''),
-                                'gh_url': f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/pull/{gh_pr['number']}",
+                                'gh_url': f"https://github.com/{self.environment.clients.gh.owner}/{self.environment.clients.gh.repo}/pull/{gh_pr['number']}",
                                 'remarks': ['Migrated as GitHub PR', 'Branches exist on GitHub']
                             })
 
@@ -225,10 +209,10 @@ class PullRequestMigrator:
                                         self.logger.info(f"    Processing {att_name}...")
                                         filepath = self.attachment_handler.download_attachment(att_url, att_name, item_type='pr', item_number=pr_num)
                                         if filepath:
-                                            self.attachment_handler.upload_to_github(filepath, gh_pr['number'], self.gh_client, self.gh_client.owner, self.gh_client.repo)
+                                            self.attachment_handler.upload_to_github(filepath, gh_pr['number'])
 
                             # Update the record with attachments count
-                            for record in self.pr_records:
+                            for record in self.state.pr_records:
                                 if record['gh_number'] == gh_pr['number']:
                                     record['attachments'] = len(pr_attachments)
                                     break
@@ -240,39 +224,41 @@ class PullRequestMigrator:
                     else:
                         # Branches don't exist
                         self.logger.info(f"  ✗ Cannot create as PR - branches missing on GitHub")
-                        self.stats['pr_branch_missing'] += 1
+                        self.state.pr_migration_stats['pr_branch_missing'] += 1
                 else:
                     self.logger.info(f"  ✗ Missing branch information in Bitbucket data")
             else:
                 # MERGED, DECLINED, or SUPERSEDED - always migrate as issue
-                if skip_pr_as_issue:
+                if open_prs_only:
+                    self.logger.info(f"  → Skipping migration of {pr_state} PR")
+                elif skip_pr_as_issue:
                     self.logger.info(f"  → Skipping migration as issue (PR was {pr_state}, --skip-pr-as-issue enabled)")
                 else:
                     self.logger.info(f"  → Migrating as issue (PR was {pr_state} - safest approach)")
 
                 if pr_state in ['MERGED', 'SUPERSEDED']:
-                    self.stats['pr_merged_as_issue'] += 1
+                    self.state.pr_migration_stats['pr_merged_as_issue'] += 1
 
             # Skip or migrate as issue based on flag
-            if skip_pr_as_issue:
-                self.logger.info(f"  ✓ Skipped PR #{pr_num} (not migrated as issue due to --skip-pr-as-issue flag)")
+            if skip_pr_as_issue or (open_prs_only and pr_state != 'OPEN'):
+                self.logger.info(f"  ✓ Skipped PR #{pr_num}")
 
                 # Still record PR details for report
                 author = bb_pr.get('author', {}).get('display_name', 'Unknown') if bb_pr.get('author') else 'Unknown (deleted user)'
                 gh_author = self.user_mapper.map_user(author) if author != 'Unknown (deleted user)' else None
 
                 # Determine remarks
-                remarks = ['Not migrated (--skip-pr-as-issue flag)']
+                remarks = ['Not migrated']
                 if pr_state in ['MERGED', 'SUPERSEDED']:
                     remarks.append('Original PR was merged')
                 elif pr_state == 'DECLINED':
                     remarks.append('Original PR was declined')
                 if not source_branch or not dest_branch:
                     remarks.append('Branch information missing')
-                elif not self.gh_client.check_branch_exists(source_branch) or not self.gh_client.check_branch_exists(dest_branch):
+                elif not self.environment.clients.gh.check_branch_exists(source_branch) or not self.environment.clients.gh.check_branch_exists(dest_branch):
                     remarks.append('One or both branches do not exist on GitHub')
 
-                self.pr_records.append({
+                self.state.pr_records.append({
                     'bb_number': pr_num,
                     'gh_number': None,  # Not migrated
                     'gh_type': 'Skipped',
@@ -304,6 +290,9 @@ class PullRequestMigrator:
                 milestone_name = bb_pr['milestone'].get('name')
                 if milestone_name and milestone_name in milestone_lookup:
                     milestone_number = milestone_lookup[milestone_name].get('number')
+                    self.logger.info(f"  Assigning to milestone: {milestone_name} (#{milestone_number})")
+                elif milestone_name:
+                    self.logger.warning(f"  Milestone '{milestone_name}' not found in lookup - PR-as-issue will not be assigned to a milestone")
 
             # Note: Inline images will be handled in second pass
 
@@ -324,14 +313,14 @@ class PullRequestMigrator:
                 milestone=milestone_number
             )
 
-            self.pr_mapping[pr_num] = gh_issue['number']
-            self.stats['prs_as_issues'] += 1
+            self.state.mappings.prs[pr_num] = gh_issue['number']
+            self.state.pr_migration_stats['prs_as_issues'] += 1
 
             # Get commit_id for inline comments
             commit_id = None
             if source_branch:
                 try:
-                    response = self.gh_client.session.get(f"{self.gh_client.base_url}/branches/{source_branch}")
+                    response = self.environment.clients.gh.session.get(f"{self.environment.clients.gh.base_url}/branches/{source_branch}")
                     response.raise_for_status()
                     commit_id = response.json()['commit']['sha']
                     self.logger.info(f"  Commit ID fetched for branch {source_branch}: {commit_id}")
@@ -353,10 +342,10 @@ class PullRequestMigrator:
                 remarks.append('Original PR was declined')
             if not source_branch or not dest_branch:
                 remarks.append('Branch information missing')
-            elif not self.gh_client.check_branch_exists(source_branch) or not self.gh_client.check_branch_exists(dest_branch):
+            elif not self.environment.clients.gh.check_branch_exists(source_branch) or not self.environment.clients.gh.check_branch_exists(dest_branch):
                 remarks.append('One or both branches do not exist on GitHub')
 
-            self.pr_records.append({
+            self.state.pr_records.append({
                 'bb_number': pr_num,
                 'gh_number': gh_issue['number'],
                 'gh_type': 'Issue',
@@ -370,7 +359,7 @@ class PullRequestMigrator:
                 'attachments': 0,  # Will be updated after fetching
                 'links_rewritten': 0,  # Will be updated in second pass
                 'bb_url': bb_pr.get('links', {}).get('html', {}).get('href', ''),
-                'gh_url': f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/issues/{gh_issue['number']}",
+                'gh_url': f"https://github.com/{self.environment.clients.gh.owner}/{self.environment.clients.gh.repo}/issues/{gh_issue['number']}",
                 'remarks': remarks
             })
 
@@ -389,15 +378,15 @@ class PullRequestMigrator:
                         filepath = self.attachment_handler.download_attachment(att_url, att_name, item_type='pr', item_number=pr_num)
                         if filepath:
                             self.logger.info(f"    Creating attachment note...")
-                            self.attachment_handler.upload_to_github(filepath, gh_issue['number'], self.gh_client, self.gh_client.owner, self.gh_client.repo)
+                            self.attachment_handler.upload_to_github(filepath, gh_issue['number'])
 
             # Update the record with attachments count
-            for record in self.pr_records:
+            for record in self.state.pr_records:
                 if record['gh_number'] == gh_issue['number']:
                     record['attachments'] = len(pr_attachments)
                     break
 
-        return self.pr_records
+        return self.state.pr_records
 
     def _create_gh_pr(self, title: str, body: str, head: str, base: str) -> Optional[Dict[str, Any]]:
         """
@@ -413,7 +402,7 @@ class PullRequestMigrator:
             Created GitHub PR data, or None if creation failed
         """
         try:
-            pr = self.gh_client.create_pull_request(title, body, head, base)
+            pr = self.environment.clients.gh.create_pull_request(title, body, head, base)
             return pr
 
         except (APIError, AuthenticationError, NetworkError, ValidationError):
@@ -438,7 +427,7 @@ class PullRequestMigrator:
             Created GitHub issue data
         """
         try:
-            issue = self.gh_client.create_issue(
+            issue = self.environment.clients.gh.create_issue(
                 title=title,
                 body=body,
                 labels=labels,
@@ -448,7 +437,7 @@ class PullRequestMigrator:
 
             # Close if needed
             if state == 'closed':
-                self.gh_client.update_issue(issue['number'], state='closed')
+                self.environment.clients.gh.update_issue(issue['number'], state='closed')
 
             return issue
 
@@ -471,7 +460,7 @@ class PullRequestMigrator:
             Created comment data
         """
         try:
-            return self.gh_client.create_comment(issue_number, body)
+            return self.environment.clients.gh.create_comment(issue_number, body)
         except (APIError, AuthenticationError, NetworkError, ValidationError):
             raise  # Re-raise client exceptions
         except Exception as e:
@@ -489,7 +478,7 @@ class PullRequestMigrator:
             List of attachment dictionaries
         """
         try:
-            return self.bb_client.get_attachments("pr", pr_id)
+            return self.environment.clients.bb.get_attachments("pr", pr_id)
         except (APIError, AuthenticationError, NetworkError) as e:
             self.logger.warning(f"    Warning: Could not fetch PR attachments: {e}")
             return []
@@ -508,7 +497,7 @@ class PullRequestMigrator:
             List of comment dictionaries
         """
         try:
-            return self.bb_client.get_comments("pr", pr_id)
+            return self.environment.clients.bb.get_comments("pr", pr_id)
         except (APIError, AuthenticationError, NetworkError) as e:
             self.logger.warning(f"    Warning: Could not fetch PR comments: {e}")
             return []
@@ -527,7 +516,7 @@ class PullRequestMigrator:
             List of activity dictionaries
         """
         try:
-            return self.bb_client.get_activity(pr_id)
+            return self.environment.clients.bb.get_activity(pr_id)
         except (APIError, AuthenticationError, NetworkError) as e:
             self.logger.warning(f"    Warning: Could not fetch PR activity: {e}")
             return []
@@ -608,7 +597,7 @@ class PullRequestMigrator:
             Next GitHub issue/PR number
         """
         # This is a simplified implementation; in practice, you'd track this more carefully
-        return len(self.pr_mapping) + len(self.pr_records) + 1
+        return len(self.state.mappings.prs) + len(self.state.pr_records) + 1
 
     def _sort_comments_topologically(self, comments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -675,7 +664,7 @@ class PullRequestMigrator:
 
         # Update the PR or issue body
         try:
-            self.gh_client.update_issue(gh_number, body=body)
+            self.environment.clients.gh.update_issue(gh_number, body=body)
             if as_pr:
                 self.logger.info(f"  Updated PR #{gh_number} with rewritten links")
             else:
@@ -704,7 +693,7 @@ class PullRequestMigrator:
         if as_pr:
             # For PRs, get commit_id from the PR
             try:
-                pr_data = self.gh_client.get_pull_request(gh_number)
+                pr_data = self.environment.clients.gh.get_pull_request(gh_number)
                 commit_id = pr_data.get('head', {}).get('sha')
             except Exception:
                 commit_id = None
@@ -729,9 +718,9 @@ class PullRequestMigrator:
                 parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
                 if parent_id:
                     self.logger.info(f"  Comment {activity_id} is a reply to comment {parent_id}")
-                    parent_gh_id = self.comment_mapping.get(parent_id)
+                    parent_gh_id = self.state.mappings.pr_comments.get(parent_id)
                     if parent_gh_id:
-                        self.logger.info(f"    Parent {parent_id} maps to GitHub comment {parent_gh_id}")
+                        self.logger.info(f"    Parent {parent_id} maps to GitHub comment {parent_gh_id['gh_id']}")
                     else:
                         self.logger.warning(f"    Parent {parent_id} not found in comment_mapping yet")
 
@@ -762,7 +751,7 @@ class PullRequestMigrator:
                 # Check if this is an inline comment
                 inline_data = comment.get('inline')
                 parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
-                in_reply_to = self.comment_mapping.get(parent_id) if parent_id else None
+                in_reply_to = self.state.mappings.pr_comments.get(parent_id) if parent_id else None
 
                 if inline_data and commit_id:
                     # Attempt to create as inline review comment
@@ -772,10 +761,10 @@ class PullRequestMigrator:
                         start_line = inline_data.get('from')
 
                         # Log attempt details
-                        self.logger.info(f"  Attempting inline comment: path={path}, line={line}, start_line={start_line}, commit={commit_id[:7] if commit_id else 'None'}, in_reply_to={in_reply_to}")
+                        self.logger.info(f"  Attempting inline comment: path={path}, line={line}, start_line={start_line}, commit={commit_id[:7] if commit_id else 'None'}, in_reply_to={in_reply_to['gh_id']}")
 
                         if path and line:
-                            gh_comment = self.gh_client.create_pr_review_comment(
+                            gh_comment = self.environment.clients.gh.create_pr_review_comment(
                                 pull_number=gh_number,
                                 body=comment_body,
                                 path=path,
@@ -784,18 +773,24 @@ class PullRequestMigrator:
                                 start_line=start_line if start_line and start_line != line else None,
                                 start_side='LEFT' if start_line and start_line != line else None,  # Use 'LEFT' for start if multi-line
                                 commit_id=commit_id,
-                                in_reply_to=in_reply_to
+                                in_reply_to=in_reply_to['gh_id']
                             )
-                            self.comment_mapping[activity_id] = gh_comment['id']
-                            # Store comment data for potential child replies
-                            self.comment_mapping[f"{activity_id}_data"] = {'body': comment_body}
+                            if not activity_id=='unknown':
+                                self.state.mappings.pr_comments[activity_id] = {
+                                    'gh_id': gh_comment['id'],
+                                    # Store comment data for potential child replies
+                                    'body': comment_body
+                                    }
                             self.logger.info(f"  ✓ Created inline comment on {path}:{line} for PR #{gh_number}")
                         else:
                             # Fallback if required fields missing
                             self.logger.warning(f"  Missing path ({path}) or line ({line}) for inline comment, using regular comment")
                             gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
-                            self.comment_mapping[activity_id] = gh_comment['id']
-                            self.comment_mapping[f"{activity_id}_data"] = {'body': comment_body}
+                            if not activity_id=='unknown':
+                                self.state.mappings.pr_comments[activity_id] = {
+                                    'gh_id': gh_comment['id'],
+                                    'body': comment_body
+                                }
                     except (APIError, AuthenticationError, NetworkError, ValidationError) as e:
                         # Fallback to regular comment on failure
                         self.logger.warning(f"  Failed to create inline comment: {e}")
@@ -810,8 +805,11 @@ class PullRequestMigrator:
                         comment_body = context_note + comment_body
 
                         gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
-                        self.comment_mapping[activity_id] = gh_comment['id']
-                        self.comment_mapping[f"{activity_id}_data"] = {'body': comment_body}
+                        if not activity_id=='unknown':
+                            self.state.mappings.pr_comments[activity_id] = {
+                                'gh_id': gh_comment['id'],
+                                'body': comment_body
+                            }
                     except Exception as e:
                         # Unexpected error, fallback
                         self.logger.error(f"  Unexpected error creating inline comment: {e}")
@@ -825,23 +823,26 @@ class PullRequestMigrator:
                         comment_body = context_note + comment_body
 
                         gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
-                        self.comment_mapping[activity_id] = gh_comment['id']
-                        self.comment_mapping[f"{activity_id}_data"] = {'body': comment_body}
+                        if not activity_id=='unknown':
+                            self.state.mappings.pr_comments[activity_id] = {
+                                'gh_id': gh_comment['id'],
+                                'body': comment_body
+                            }
                 else:
                     # Regular comment
                     if parent_id:
                         # Check if parent was successfully migrated
-                        parent_gh_id = self.comment_mapping.get(parent_id)
+                        parent_gh_id = self.state.mappings.pr_comments.get(parent_id)
                         if parent_gh_id:
                             # Create link to parent comment on GitHub
                             # Format: https://github.com/owner/repo/pull/123#issuecomment-456
-                            parent_url = f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/pull/{gh_number}#issuecomment-{parent_gh_id}"
+                            parent_url = f"https://github.com/{self.environment.clients.gh.owner}/{self.environment.clients.gh.repo}/pull/{gh_number}#issuecomment-{parent_gh_id['gh_id']}"
 
                             # Optionally get parent comment body for quoting
-                            parent_comment_data = self.comment_mapping.get(f"{parent_id}_data")
-                            if parent_comment_data and 'body' in parent_comment_data:
+                            # parent_comment_data = self.state.mappings.pr_comments.get(f"{parent_id}_data")
+                            if 'body' in parent_gh_id:
                                 # Extract first line or first 100 chars of parent for quote
-                                parent_body = parent_comment_data['body']
+                                parent_body = parent_gh_id['body']
                                 parent_preview = parent_body.split('\n')[0][:100]
                                 if len(parent_body.split('\n')[0]) > 100:
                                     parent_preview += "..."
@@ -858,9 +859,12 @@ class PullRequestMigrator:
 
                     try:
                         gh_comment = self._create_gh_comment(gh_number, comment_body, is_pr=True)
-                        self.comment_mapping[activity_id] = gh_comment['id']
-                        # Store comment data for potential child replies
-                        self.comment_mapping[f"{activity_id}_data"] = {'body': comment_body}
+                        if not activity_id=='unknown':
+                            self.state.mappings.pr_comments[activity_id] = {
+                                'gh_id': gh_comment['id'],
+                                # Store comment data for potential child replies
+                                'body': comment_body
+                            }
                     except ValidationError as e:
                         if 'locked' in str(e).lower():
                             self.logger.warning(f"  Skipping comment on locked PR #{gh_number}: {e}")
@@ -882,7 +886,7 @@ class PullRequestMigrator:
                 if update_body:
                     try:
                         gh_comment = self._create_gh_comment(gh_number, update_body, is_pr=True)
-                        self.comment_mapping[activity_id] = gh_comment['id']
+                        # self.state.mappings.pr_comments[activity_id] = {'gh_id': gh_comment['id']} # no mapping for generated update comments
                         migrated_comments_count += 1
                         self.logger.info(f"  Created update comment for PR #{gh_number}")
                     except ValidationError as e:
@@ -905,7 +909,7 @@ class PullRequestMigrator:
                 approval_body = f"{user} approved the pull request on {formatted_date}"
                 try:
                     gh_comment = self._create_gh_comment(gh_number, approval_body, is_pr=True)
-                    self.comment_mapping[activity_id] = gh_comment['id']
+                    # self.state.mappings.pr_comments[activity_id] = {'gh_id':gh_comment['id']} # no mapping for generated approval comment
                     migrated_comments_count += 1
                     self.logger.info(f"  Created approval comment for PR #{gh_number}")
                 except ValidationError as e:
@@ -921,7 +925,7 @@ class PullRequestMigrator:
             time.sleep(0.5)
 
         # Update the record with actual counts
-        for record in self.pr_records:
+        for record in self.state.pr_records:
             if record['gh_number'] == gh_number:
                 record['comments'] = migrated_comments_count
                 record['links_rewritten'] = links_in_body + links_in_comments

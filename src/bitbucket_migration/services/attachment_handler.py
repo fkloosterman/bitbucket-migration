@@ -5,16 +5,45 @@ from typing import Dict, List, Optional
 
 from ..clients.github_cli_client import GitHubCliClient
 
-logger = logging.getLogger('bitbucket_migration')
+from ..core.migration_context import MigrationEnvironment, MigrationState
+from .services_data import AttachmentData
+
 
 class AttachmentHandler:
-    def __init__(self, attachment_dir: Path, gh_cli_client: Optional[GitHubCliClient] = None, dry_run: bool = False):
-        self.attachment_dir = attachment_dir
-        self.attachment_dir.mkdir(exist_ok=True)
-        self.gh_cli_client = gh_cli_client
-        self.use_gh_cli = gh_cli_client is not None
-        self.dry_run = dry_run
-        self.attachments: List[Dict] = []
+    """
+    Handles downloading and uploading attachments from Bitbucket to GitHub.
+
+    This class manages the attachment migration process, including downloading
+    attachments from Bitbucket, storing them temporarily, and uploading them
+    to GitHub issues via the GitHub CLI or by creating manual upload comments.
+    """
+    def __init__(self, environment: MigrationEnvironment, state: MigrationState):
+        """
+        Initialize the AttachmentHandler.
+
+        Args:
+            environment: Migration environment containing config and clients
+            state: Migration state for storing attachment data
+        """
+        self.environment = environment
+        self.state = state
+
+        self.data = AttachmentData()
+        self.state.services[self.__class__.__name__] = self.data
+
+        self.logger = self.environment.logger
+
+        self.data.attachment_dir = self.environment.base_dir_manager.get_subcommand_dir(
+            "dry-run" if self.environment.dry_run else "migrate",
+            self.environment.config.bitbucket.workspace,
+            self.environment.config.bitbucket.repo
+        ) / 'attachments_temp'
+
+        self.data.attachment_dir.mkdir(exist_ok=True)
+
+        self.gh_cli_client = self.environment.clients.gh_cli
+        self.use_gh_cli = self.gh_cli_client is not None
+        self.dry_run = self.environment.dry_run
     
     def download_attachment(self, url: str, filename: str, item_type: str = None, item_number: int = None, comment_seq: int = None) -> Optional[Path]:
         """Download attachment from Bitbucket
@@ -26,10 +55,10 @@ class AttachmentHandler:
             item_number: The issue or PR number (optional)
             comment_seq: Comment sequence number if attachment is from a comment (optional)
         """
-        filepath = self.attachment_dir / filename
+        filepath = self.data.attachment_dir / filename
         if self.dry_run:
             # In dry-run, just record without downloading
-            self.attachments.append({
+            self.data.attachments.append({
                 'filename': filename,
                 'filepath': str(filepath),
                 'item_type': item_type,
@@ -44,7 +73,7 @@ class AttachmentHandler:
             with open(filepath, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            self.attachments.append({
+            self.data.attachments.append({
                 'filename': filename,
                 'filepath': str(filepath),
                 'item_type': item_type,
@@ -53,38 +82,71 @@ class AttachmentHandler:
             })
             return filepath
         except Exception as e:
-            logger.error("Failed to download attachment %s: %s", filename, e, extra={'filename': filename, 'error': str(e)})
+            self.logger.error("Failed to download attachment %s: %s", filename, e, extra={'filename': filename, 'error': str(e)})
             return None
     
-    def upload_to_github(self, filepath: Path, issue_number: int, github_client, gh_owner: str, gh_repo: str) -> Optional[str]:
-        """Upload attachment to GitHub issue"""
+    def upload_to_github(self, filepath: Path, issue_number: int) -> Optional[str]:
+        """
+        Upload attachment to GitHub issue.
+
+        Uses GitHub CLI if available, otherwise creates a comment with upload instructions.
+
+        Args:
+            filepath: Path to the attachment file
+            issue_number: GitHub issue number to attach to
+
+        Returns:
+            Upload result or comment body
+        """
+        github_client = self.environment.clients.gh
+        gh_owner = self.environment.config.github.workspace
+        gh_repo = self.environment.config.github.repo
+
         if self.use_gh_cli and self.gh_cli_client:
             return self.gh_cli_client.upload_attachment(filepath, issue_number, gh_owner, gh_repo)
         else:
-            return self._create_upload_comment(filepath, issue_number, github_client)
-    
-    
-    def _create_upload_comment(self, filepath: Path, issue_number: int, github_client) -> str:
-        """Create comment noting attachment for manual upload"""
+            return self._create_upload_comment(filepath, issue_number)
+
+    def _create_upload_comment(self, filepath: Path, issue_number: int) -> str:
+        """
+        Create a comment with instructions for manual attachment upload.
+
+        Args:
+            filepath: Path to the attachment file
+            issue_number: GitHub issue number
+
+        Returns:
+            The comment body that was created
+        """
+        github_client = self.environment.clients.gh
+
         file_size = filepath.stat().st_size
         size_mb = round(file_size / (1024 * 1024), 2)
-        
+
         comment_body = f'''📎 **Attachment from Bitbucket**: `{filepath.name}` ({size_mb} MB)
 
-*Note: This file was attached to the original Bitbucket issue. Please drag and drop this file from `{self.attachment_dir}/{filepath.name}` to embed it in this issue.*
+*Note: This file was attached to the original Bitbucket issue. Please drag and drop this file from `{self.data.attachment_dir}/{filepath.name}` to embed it in this issue.*
 '''
         github_client.create_comment(issue_number, comment_body)
         return comment_body
 
-    def extract_and_download_inline_images(self, text: str, use_gh_cli: bool = False, item_type: str = None, item_number: int = None, comment_seq: int = None) -> tuple:
-        """Extract Bitbucket-hosted inline images from markdown and download them.
+    def extract_and_download_inline_images(self, text: str, use_gh_cli: bool = False, item_type: str = None, item_number: int = None, comment_seq: int = None) -> tuple[str, list]:
+        """
+        Extract Bitbucket-hosted inline images from markdown and download them.
+
+        Processes markdown image syntax ![alt](url) and downloads any images hosted
+        on Bitbucket or Bytebucket domains. Updates the markdown with appropriate
+        notes based on the upload method.
 
         Args:
             text: The markdown text to process
-            use_gh_cli: Whether to use GitHub CLI for uploads
-            item_type: 'issue' or 'pr' (optional)
-            item_number: The issue or PR number (optional)
+            use_gh_cli: Whether to use GitHub CLI for uploads (affects output format)
+            item_type: 'issue' or 'pr' (optional, for context tracking)
+            item_number: The issue or PR number (optional, for context tracking)
             comment_seq: Comment sequence number if processing a comment (optional)
+
+        Returns:
+            Tuple of (updated_text, downloaded_images_list)
         """
         if not text:
             return text, []
@@ -121,13 +183,13 @@ class AttachmentHandler:
                     })
 
                     if self.dry_run:
-                        return f"![{alt_text}]({image_url})\n\n📷 *Inline image: `{filename}` (will be downloaded to {self.attachment_dir})*"
+                        return f"![{alt_text}]({image_url})\n\n📷 *Inline image: `{filename}` (will be downloaded to {self.data.attachment_dir})*"
                     elif use_gh_cli:
                         # With gh CLI, the image will be uploaded, so just keep the markdown
                         return f"![{alt_text}]({image_url})\n\n📷 *Original Bitbucket image (will be uploaded via gh CLI)*"
                     else:
                         # Return modified markdown with note about manual upload
-                        return f"![{alt_text}]({image_url})\n\n📷 *Original Bitbucket image (download from `{self.attachment_dir}/{filename}` and drag-and-drop here)*"
+                        return f"![{alt_text}]({image_url})\n\n📷 *Original Bitbucket image (download from `{self.data.attachment_dir}/{filename}` and drag-and-drop here)*"
                 else:
                     # Failed to download
                     return match.group(0)

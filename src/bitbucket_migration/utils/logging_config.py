@@ -19,7 +19,7 @@ class MigrationLogger:
     console output. Replaces the simple self.log() method in the original script.
     """
 
-    def __init__(self, log_level: str = "INFO", log_file: Optional[str] = None, dry_run: bool = False):
+    def __init__(self, log_level: str = "INFO", log_file: Optional[str] = None, dry_run: bool = False, overwrite: bool = False):
         """
         Initialize the logger.
 
@@ -27,8 +27,11 @@ class MigrationLogger:
             log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
             log_file: Optional file path for logging to file
             dry_run: Whether this is a dry run (affects log formatting)
+            overwrite: Whether to overwrite existing log file instead of appending
         """
         self.dry_run = dry_run
+        self.log_level = log_level  # Store log_level as instance attribute
+        self.overwrite = overwrite
         self.logger = logging.getLogger('bitbucket_migration')
         self.logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
 
@@ -48,10 +51,14 @@ class MigrationLogger:
             log_path = Path(log_file)
             log_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Use RotatingFileHandler to prevent log files from growing too large
-            file_handler = logging.handlers.RotatingFileHandler(
-                log_path, maxBytes=10*1024*1024, backupCount=5  # 10MB max, 5 backups
-            )
+            if overwrite:
+                # Use regular FileHandler with 'w' mode to overwrite
+                file_handler = logging.FileHandler(log_path, mode='w')
+            else:
+                # Use RotatingFileHandler to prevent log files from growing too large
+                file_handler = logging.handlers.RotatingFileHandler(
+                    log_path, maxBytes=10*1024*1024, backupCount=5  # 10MB max, 5 backups
+                )
             file_handler.setFormatter(formatter)
             self.logger.addHandler(file_handler)
 
@@ -122,7 +129,7 @@ class MigrationLogger:
         self.debug(f"RATE LIMIT: Waiting {wait_time:.2f}s for {api} API")
 
 
-def setup_logger(log_level: str = "INFO", log_file: Optional[str] = None, dry_run: bool = False) -> MigrationLogger:
+def setup_logger(log_level: str = "INFO", log_file: Optional[str] = None, dry_run: bool = False, overwrite: bool = False) -> MigrationLogger:
     """
     Convenience function to set up and return a MigrationLogger instance.
 
@@ -130,8 +137,9 @@ def setup_logger(log_level: str = "INFO", log_file: Optional[str] = None, dry_ru
         log_level: Logging level
         log_file: Optional log file path
         dry_run: Whether this is a dry run
+        overwrite: Whether to overwrite existing log file instead of appending
 
     Returns:
         Configured MigrationLogger instance
     """
-    return MigrationLogger(log_level, log_file, dry_run)
+    return MigrationLogger(log_level, log_file, dry_run, overwrite)

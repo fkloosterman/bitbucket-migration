@@ -7,18 +7,11 @@ and metadata preservation.
 """
 
 from typing import List, Dict, Any, Optional
-from pathlib import Path
 import time
 
-from ..clients.bitbucket_client import BitbucketClient
-from ..clients.github_client import GitHubClient
-from ..services.user_mapper import UserMapper
-from ..services.link_rewriter import LinkRewriter
-from ..services.attachment_handler import AttachmentHandler
-from ..formatters.formatter_factory import FormatterFactory
 from ..exceptions import MigrationError, APIError, AuthenticationError, NetworkError, ValidationError
-from ..utils.logging_config import MigrationLogger
 
+from ..core.migration_context import MigrationEnvironment, MigrationState
 
 class IssueMigrator:
     """
@@ -29,52 +22,39 @@ class IssueMigrator:
     and comments.
     """
 
-    def __init__(self, bb_client: BitbucketClient, gh_client: GitHubClient,
-                   user_mapper: UserMapper, link_rewriter: LinkRewriter,
-                   attachment_handler: AttachmentHandler, formatter_factory: FormatterFactory,
-                   logger: MigrationLogger, type_mapping: Optional[Dict[str, Dict[str, Any]]] = None):
+    def __init__(self, environment: MigrationEnvironment, state: MigrationState):
         """
         Initialize the IssueMigrator.
 
         Args:
-            bb_client: Bitbucket API client
-            gh_client: GitHub API client
-            user_mapper: User mapping service
-            link_rewriter: Link rewriting service
-            attachment_handler: Attachment handling service
-            formatter_factory: Formatter factory
-            logger: Logger instance
-            type_mapping: Optional mapping of Bitbucket issue types to GitHub type data (id and name)
+            environment: Migration environment containing all services and configuration
+            state: Migration state containing mappings and records
         """
-        self.bb_client = bb_client
-        self.gh_client = gh_client
-        self.user_mapper = user_mapper
-        self.link_rewriter = link_rewriter
-        self.attachment_handler = attachment_handler
-        self.formatter_factory = formatter_factory
-        self.logger = logger
-        self.type_mapping = type_mapping or {}  # GitHub issue type mapping
 
-        # Track migration progress
-        self.issue_mapping = {}  # BB issue # -> GH issue #
-        self.issue_records = []  # Detailed migration records
-        self.comment_mapping = {}  # BB comment ID -> GH comment ID
+        self.environment = environment
+        self.state = state
+
+        self.logger = self.environment.logger
+
+        self.user_mapper = self.environment.services.get('user_mapper')
+        self.link_rewriter = self.environment.services.get('link_rewriter')
+        self.attachment_handler = self.environment.services.get('attachment_handler')
+        self.formatter_factory = self.environment.services.get('formatter_factory')
+        self.type_mapping = self.state.mappings.issue_types
 
     def migrate_issues(self, bb_issues: List[Dict[str, Any]],
-                        milestone_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
-                        skip_link_rewriting: bool = False) -> List[Dict[str, Any]]:
+                        open_issues_only: bool = False) -> List[Dict[str, Any]]:
         """
         Migrate all Bitbucket issues to GitHub.
 
         Args:
             bb_issues: List of Bitbucket issues to migrate
-            milestone_lookup: Optional mapping of milestone names to GitHub milestone data
-            skip_link_rewriting: If True, skip link rewriting (for two-pass migration)
+            open_issues_only: If True, only migrate open issues
 
         Returns:
             List of migration records
         """
-        milestone_lookup = milestone_lookup or {}
+        milestone_lookup = self.state.mappings.milestones
 
         self.logger.info("="*80)
         self.logger.info("PHASE 1: Migrating Issues")
@@ -109,10 +89,10 @@ class IssueMigrator:
                     labels=['migration-placeholder'],
                     state='closed'
                 )
-                self.issue_mapping[expected_num] = placeholder['number']
+                self.state.mappings.issues[expected_num] = placeholder['number']
 
                 # Record placeholder for report
-                self.issue_records.append({
+                self.state.issue_records.append({
                     'bb_number': expected_num,
                     'gh_number': placeholder['number'],
                     'title': '[Placeholder - Deleted Issue]',
@@ -125,11 +105,15 @@ class IssueMigrator:
                     'attachments': 0,
                     'links_rewritten': 0,
                     'bb_url': '',
-                    'gh_url': f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/issues/{placeholder['number']}",
+                    'gh_url': f"https://github.com/{self.environment.clients.gh.owner}/{self.environment.clients.gh.repo}/issues/{placeholder['number']}",
                     'remarks': ['Placeholder for deleted/missing issue']
                 })
 
                 expected_num += 1
+
+            if open_issues_only and bb_issue.get('state', 'open') not in ['open', 'new']:
+                self.logger.info(f"Skipping migration of closed issue #{issue_num}: {bb_issue.get('title', 'No title')}")
+                continue
 
             # Migrate actual issue
             self.logger.info(f"Migrating issue #{issue_num}: {bb_issue.get('title', 'No title')}")
@@ -159,6 +143,9 @@ class IssueMigrator:
                 milestone_name = bb_issue['milestone'].get('name')
                 if milestone_name and milestone_name in milestone_lookup:
                     milestone_number = milestone_lookup[milestone_name].get('number')
+                    self.logger.info(f"  Assigning to milestone: {milestone_name} (#{milestone_number})")
+                elif milestone_name:
+                    self.logger.warning(f"  Milestone '{milestone_name}' not found in lookup - issue will not be assigned to a milestone")
 
             # Map issue kind/type
             labels = ['migrated-from-bitbucket']
@@ -202,7 +189,7 @@ class IssueMigrator:
                 type=issue_type_name
             )
 
-            self.issue_mapping[issue_num] = gh_issue['number']
+            self.state.mappings.issues[issue_num] = gh_issue['number']
 
             # Migrate attachments
             attachments = self._fetch_bb_issue_attachments(issue_num)
@@ -217,12 +204,12 @@ class IssueMigrator:
                         filepath = self.attachment_handler.download_attachment(att_url, att_name, item_type='issue', item_number=issue_num)
                         if filepath:
                             self.logger.info(f"    Creating attachment note on GitHub...")
-                            self.attachment_handler.upload_to_github(filepath, gh_issue['number'], self.gh_client, self.gh_client.owner, self.gh_client.repo)
+                            self.attachment_handler.upload_to_github(filepath, gh_issue['number'])
 
             # Comments will be created in the second pass to avoid duplication
 
             # Record migration details (comments and links will be updated in second pass)
-            self.issue_records.append({
+            self.state.issue_records.append({
                 'bb_number': issue_num,
                 'gh_number': gh_issue['number'],
                 'title': bb_issue.get('title', f'Issue #{issue_num}'),
@@ -235,7 +222,7 @@ class IssueMigrator:
                 'attachments': len(attachments),
                 'links_rewritten': 0,  # Will be updated in second pass
                 'bb_url': bb_issue.get('links', {}).get('html', {}).get('href', ''),
-                'gh_url': f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/issues/{gh_issue['number']}",
+                'gh_url': f"https://github.com/{self.environment.clients.gh.owner}/{self.environment.clients.gh.repo}/issues/{gh_issue['number']}",
                 'remarks': []
             })
 
@@ -271,7 +258,7 @@ class IssueMigrator:
                 for bb_type, count in fallback_summary.items():
                     self.logger.info(f"    - '{bb_type}' ({count} issues) → Label 'type: {bb_type}'")
 
-        return self.issue_records, type_stats, type_fallbacks
+        return self.state.issue_records, type_stats, type_fallbacks
 
     def _create_gh_issue(self, title: str, body: str, labels: Optional[List[str]] = None,
                           state: str = 'open', assignees: Optional[List[str]] = None,
@@ -292,7 +279,7 @@ class IssueMigrator:
             Created GitHub issue data
         """
         try:
-            issue = self.gh_client.create_issue(
+            issue = self.environment.clients.gh.create_issue(
                 title=title,
                 body=body,
                 labels=labels,
@@ -304,7 +291,7 @@ class IssueMigrator:
 
             # Close if needed
             if state == 'closed':
-                self.gh_client.update_issue(issue['number'], state='closed')
+                self.environment.clients.gh.update_issue(issue['number'], state='closed')
 
             return issue
 
@@ -326,7 +313,7 @@ class IssueMigrator:
             Created comment data
         """
         try:
-            return self.gh_client.create_comment(issue_number, body)
+            return self.environment.clients.gh.create_comment(issue_number, body)
         except (APIError, AuthenticationError, NetworkError, ValidationError):
             raise  # Re-raise client exceptions
         except Exception as e:
@@ -344,7 +331,7 @@ class IssueMigrator:
             List of attachment dictionaries
         """
         try:
-            return self.bb_client.get_attachments("issue", issue_id)
+            return self.environment.clients.bb.get_attachments("issue", issue_id)
         except (APIError, AuthenticationError, NetworkError) as e:
             self.logger.warning(f"    Warning: Could not fetch issue attachments: {e}")
             return []
@@ -363,7 +350,7 @@ class IssueMigrator:
             List of comment dictionaries
         """
         try:
-            return self.bb_client.get_comments("issue", issue_id)
+            return self.environment.clients.bb.get_comments("issue", issue_id)
         except (APIError, AuthenticationError, NetworkError) as e:
             self.logger.warning(f"    Warning: Could not fetch issue comments: {e}")
             return []
@@ -386,7 +373,7 @@ class IssueMigrator:
             List of change dictionaries
         """
         try:
-            return self.bb_client.get_changes(issue_id)
+            return self.environment.clients.bb.get_changes(issue_id)
         except (APIError, AuthenticationError, NetworkError) as e:
             self.logger.warning(f"    Warning: Could not fetch issue changes: {e}")
             return []
@@ -424,7 +411,7 @@ class IssueMigrator:
             Next GitHub issue number
         """
         # This is a simplified implementation; in practice, you'd track this more carefully
-        return len(self.issue_mapping) + 1
+        return len(self.state.mappings.issues) + 1
 
     def _sort_comments_topologically(self, comments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -490,7 +477,7 @@ class IssueMigrator:
 
         # Update the issue body
         try:
-            self.gh_client.update_issue(gh_issue_number, body=body)
+            self.environment.clients.gh.update_issue(gh_issue_number, body=body)
             self.logger.info(f"  Updated issue #{gh_issue_number} with rewritten links")
         except Exception as e:
             self.logger.warning(f"  Warning: Could not update issue #{gh_issue_number}: {e}")
@@ -510,7 +497,6 @@ class IssueMigrator:
         for change in changes:
             comment_id = change.get('id')
             change_data = change.get('changes', {})
-            self.logger.info(f"  Change: comment_id={comment_id}, changes={change_data}")
 
             # Classify the change based on the logic provided
             if 'content' in change_data:
@@ -599,17 +585,17 @@ class IssueMigrator:
             parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
             if parent_id:
                 # Check if parent was successfully migrated
-                parent_gh_id = self.comment_mapping.get(parent_id)
-                if parent_gh_id:
+                parent_comment = self.state.mappings.issue_comments.get(parent_id)
+                if parent_comment:
                     # Create link to parent comment on GitHub
                     # Format: https://github.com/owner/repo/issues/123#issuecomment-456
-                    parent_url = f"https://github.com/{self.gh_client.owner}/{self.gh_client.repo}/issues/{gh_issue_number}#issuecomment-{parent_gh_id}"
+                    parent_url = f"https://github.com/{self.environment.clients.gh.owner}/{self.environment.clients.gh.repo}/issues/{gh_issue_number}#issuecomment-{parent_comment['gh_id']}"
                     
                     # Optionally get parent comment body for quoting
-                    parent_comment_data = self.comment_mapping.get(f"{parent_id}_data")
-                    if parent_comment_data and 'body' in parent_comment_data:
+                    # parent_comment_data = self.state.mappings.issue_comments.get(f"{parent_id}_data")
+                    if 'body' in parent_comment:
                         # Extract first line or first 100 chars of parent for quote
-                        parent_body = parent_comment_data['body']
+                        parent_body = parent_comment['body']
                         parent_preview = parent_body.split('\n')[0][:100]
                         if len(parent_body.split('\n')[0]) > 100:
                             parent_preview += "..."
@@ -626,9 +612,11 @@ class IssueMigrator:
             
             try:
                 gh_comment = self._create_gh_comment(gh_issue_number, comment_body)
-                self.comment_mapping[comment['id']] = gh_comment['id']
-                # Store comment data for potential child replies
-                self.comment_mapping[f"{comment['id']}_data"] = {'body': comment_body}
+                self.state.mappings.issue_comments[comment['id']] = {
+                    'gh_id': gh_comment['id'],
+                    # Store comment data for potential child replies
+                    'body': comment_body
+                    }
             except ValidationError as e:
                 if 'locked' in str(e).lower():
                     self.logger.warning(f"  Skipping comment on locked issue #{gh_issue_number}: {e}")
@@ -644,7 +632,6 @@ class IssueMigrator:
         for change in description_changes:
             # Check if this is a content change (description edit)
             if 'content' in change.get('changes', {}):
-                self.logger.info(f"  Processing description change: {change}")
                 change_date = change.get('created_on', '')
                 formatted_date = self._format_date(change_date) if hasattr(self, '_format_date') else change_date
 
@@ -730,7 +717,7 @@ class IssueMigrator:
                 time.sleep(0.5)
 
         # Update the record with actual counts
-        for record in self.issue_records:
+        for record in self.state.issue_records:
             if record['gh_number'] == gh_issue_number:
                 record['comments'] = migrated_comments_count
                 record['links_rewritten'] = links_in_body + links_in_comments

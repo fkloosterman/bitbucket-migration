@@ -106,7 +106,7 @@ class IssueContentFormatter(ContentFormatter):
             mentions_unmapped = 0
             unmapped_list = []
         else:
-            content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(content, 'issue', issue['id'], comment_id=None)
+            content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(content, 'issue', issue['id'], comment_seq=None, comment_id=None)
 
         # Extract and download inline images
         content, inline_images = self.attachment_handler.extract_and_download_inline_images(content, kwargs.get('use_gh_cli', False), item_type='issue', item_number=issue['id'])
@@ -179,7 +179,7 @@ class PullRequestContentFormatter(ContentFormatter):
             mentions_unmapped = 0
             unmapped_list = []
         else:
-            description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(description, 'pr', pr['id'], comment_id=None)
+            description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(description, 'pr', pr['id'], comment_seq=None, comment_id=None)
 
         # Extract and download inline images
         description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, kwargs.get('use_gh_cli', False), item_type='pr', item_number=pr['id'])
@@ -236,7 +236,7 @@ class PullRequestContentFormatter(ContentFormatter):
             mentions_unmapped = 0
             unmapped_list = []
         else:
-            description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(description, 'pr', pr['id'], comment_id=None)
+            description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(description, 'pr', pr['id'], comment_seq=None, comment_id=None)
 
         # Extract and download inline images
         description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, kwargs.get('use_gh_cli', False), item_type='pr', item_number=pr['id'])
@@ -297,7 +297,7 @@ class CommentContentFormatter(ContentFormatter):
             unmapped_list = []
         else:
             comment_id = comment.get('id')
-            content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(content, item_type, item_number, comment_id=comment_seq)
+            content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(content, item_type, item_number, comment_seq=comment_seq, comment_id=comment_id)
 
         # Extract and download inline images
         content, inline_images = self.attachment_handler.extract_and_download_inline_images(content, kwargs.get('use_gh_cli', False), item_type=item_type, item_number=item_number, comment_seq=comment_seq)

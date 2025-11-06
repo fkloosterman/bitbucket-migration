@@ -71,6 +71,46 @@ class BitbucketClient:
         # Base URL for repository API endpoints
         self.base_url = f"https://api.bitbucket.org/2.0/repositories/{workspace}/{repo}"
 
+    def list_repositories(self) -> List[Dict[str, Any]]:
+        """
+        List all repositories in the workspace.
+
+        Returns:
+            List of repository dictionaries
+
+        Raises:
+            APIError: If the API request fails
+            AuthenticationError: If authentication fails
+            NetworkError: If there's a network connectivity issue
+        """
+        url = f"https://api.bitbucket.org/2.0/repositories/{self.workspace}"
+        repos = []
+        
+        while url:
+            try:
+                response = self.session.get(url)
+                response.raise_for_status()
+                data = response.json()
+                
+                repos.extend(data.get('values', []))
+                url = data.get('next')
+                
+            except requests.exceptions.HTTPError as e:
+                if response.status_code == 401:
+                    raise AuthenticationError("Bitbucket API authentication failed. Please check your credentials.")
+                elif response.status_code == 403:
+                    raise AuthenticationError("Bitbucket API access forbidden. Please check your token permissions.")
+                elif response.status_code == 404:
+                    raise APIError(f"Workspace not found: {self.workspace}", status_code=404)
+                else:
+                    raise APIError(f"Bitbucket API error: {e}", status_code=response.status_code)
+            except requests.exceptions.RequestException as e:
+                raise NetworkError(f"Network error communicating with Bitbucket API: {e}")
+            except Exception as e:
+                raise APIError(f"Unexpected error fetching repositories: {e}")
+        
+        return repos
+
     def get_issues(self) -> List[Dict[str, Any]]:
         """
         Fetch all issues from the Bitbucket repository.
@@ -200,18 +240,18 @@ class BitbucketClient:
         """
         import logging
         logger = logging.getLogger(__name__)
-        
+
         if item_type not in ['issue', 'pr']:
             raise ValidationError(f"Invalid item type: {item_type}. Must be 'issue' or 'pr'")
 
         endpoint = "issues" if item_type == "issue" else "pullrequests"
         url = f"{self.base_url}/{endpoint}/{item_id}/comments"
-        
-        logger.info(f"[COMMENTS DEBUG] Fetching comments for {item_type} #{item_id}")
+
+        logger.debug(f"Fetching comments for {item_type} #{item_id}")
 
         try:
             comments = self._paginate(url)
-            logger.info(f"[COMMENTS DEBUG] Total comments fetched for {item_type} #{item_id}: {len(comments)}")
+            logger.debug(f"Total comments fetched for {item_type} #{item_id}: {len(comments)}")
             return comments
         except (APIError, AuthenticationError, NetworkError):
             raise  # Re-raise API-related errors
@@ -453,6 +493,10 @@ class BitbucketClient:
             AuthenticationError: If authentication fails
             NetworkError: If there's a network connectivity issue
         """
+        # In dry-run mode, skip API calls
+        if self.dry_run:
+            return True
+            
         try:
             # Try to fetch repository info as a basic connection test
             url = f"{self.base_url}"

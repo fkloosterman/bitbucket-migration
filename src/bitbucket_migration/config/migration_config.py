@@ -7,7 +7,7 @@ to ensure all required settings are present and properly formatted.
 
 import json
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, List
 from pathlib import Path
 
 from ..exceptions import ConfigurationError, ValidationError
@@ -66,65 +66,50 @@ class GitHubConfig:
 
 
 @dataclass
+class RepositoryConfig:
+    """Configuration for a single repository in multi-repo migration."""
+    bitbucket_repo: str
+    github_repo: str
+    # output_dir removed - now derived from base_dir + subcommand structure
+
+
+@dataclass
+class ExternalRepositoryConfig:
+    """External repository referenced but not migrated here."""
+    bitbucket_repo: str
+    github_repo: Optional[str]  # None if not being migrated
+    github_owner: Optional[str] = None
+
+
+@dataclass
+class OptionsConfig:
+    """Migration options configuration."""
+    skip_issues: bool = False
+    open_issues_only: bool = False
+    skip_prs: bool = False
+    open_prs_only: bool = False
+    skip_pr_as_issue: bool = False
+    skip_milestones: bool = False
+    open_milestones_only: bool = False
+    use_gh_cli: bool = False
+    dry_run: bool = False
+
+
+@dataclass
 class MigrationConfig:
-    """
-    Complete migration configuration.
-
-    Attributes:
-        bitbucket: Bitbucket API configuration
-        github: GitHub API configuration
-        user_mapping: Mapping of Bitbucket users to GitHub users
-        issue_type_mapping: Mapping of Bitbucket issue types to GitHub issue types
-        skip_issues: Whether to skip issue migration
-        skip_prs: Whether to skip PR migration
-        skip_pr_as_issue: Whether to skip migrating closed PRs as issues
-        use_gh_cli: Whether to use GitHub CLI for attachment uploads
-        link_rewriting_config: Configuration for link rewriting and note templates
-        output_dir: Output directory for migration files (default: '.')
-        cross_repo_mappings_file: Path to cross-repository mappings file (optional)
-    """
-    bitbucket: BitbucketConfig
-    github: GitHubConfig
+    """Unified configuration for multi-repository migrations (v2.0)."""
+    format_version: str  # Required: "2.0"
+    bitbucket: BitbucketConfig  # No repo field
+    github: GitHubConfig        # No repo field
+    repositories: List[RepositoryConfig]
     user_mapping: Dict[str, Any]
+    base_dir: str = "."  # Optional: defaults to current directory
+    external_repositories: List[ExternalRepositoryConfig] = field(default_factory=list)
     issue_type_mapping: Dict[str, str] = field(default_factory=dict)
-    skip_issues: bool = field(default=False)
-    skip_prs: bool = field(default=False)
-    skip_pr_as_issue: bool = field(default=False)
-    use_gh_cli: bool = field(default=False)
+    options: OptionsConfig = field(default_factory=lambda: OptionsConfig())
+    # cross_repo_mappings_file: str = "cross_repo_mappings.json"
     link_rewriting_config: 'LinkRewritingConfig' = field(default_factory=lambda: LinkRewritingConfig())
-    output_dir: str = field(default_factory=lambda: '.')
-    cross_repo_mappings_file: Optional[str] = field(default=None)
-
-    def __post_init__(self):
-        """Validate configuration after initialization."""
-        if not self.user_mapping:
-            raise ValidationError("User mapping cannot be empty")
-
-        # Repository mapping is now handled by CrossRepoMappingStore
-
-        # Validate issue type mapping format if provided
-        if self.issue_type_mapping:
-            for bb_type, gh_type in self.issue_type_mapping.items():
-                if not bb_type or not bb_type.strip():
-                    raise ValidationError(f"Invalid Bitbucket issue type in mapping: '{bb_type}'")
-                if not gh_type or not gh_type.strip():
-                    raise ValidationError(f"Invalid GitHub issue type in mapping: '{bb_type}' -> '{gh_type}'")
-
-        # Set default output directory based on workspace and repo if not specified
-        if self.output_dir == '.':
-            self.output_dir = f"{self.bitbucket.workspace}_{self.bitbucket.repo}"
-
-        # Ensure output directory exists
-        output_path = Path(self.output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-
-        # Validate cross_repo_mappings_file if provided
-        if self.cross_repo_mappings_file:
-            mapping_path = Path(self.cross_repo_mappings_file)
-            if mapping_path.exists() and not mapping_path.is_file():
-                raise ValidationError(
-                    f"Cross-repo mappings path is not a file: {self.cross_repo_mappings_file}"
-                )
+    # dry_run: bool = False  # For compatibility with existing code
 
 
 class LinkRewritingConfig:
@@ -236,13 +221,13 @@ class ConfigValidator:
 
 class ConfigLoader:
     """
-    Loads and validates configuration from JSON files.
+    Loads and validates unified configuration from JSON files (v2.0 format only).
     """
 
     @staticmethod
     def load_from_file(config_path: str) -> MigrationConfig:
         """
-        Load and validate configuration from JSON file.
+        Load and validate unified configuration from JSON file (v2.0 format only).
 
         Args:
             config_path: Path to the configuration JSON file
@@ -275,46 +260,42 @@ class ConfigLoader:
         except UnicodeDecodeError as e:
             raise ConfigurationError(f"Configuration file encoding error: {e}")
 
-        # Validate required sections
-        required_keys = ['bitbucket', 'github', 'user_mapping']
-        for key in required_keys:
-            if key not in data:
-                raise ConfigurationError(f"Missing required section '{key}' in configuration file")
-
-        # Validate each section
-        ConfigValidator.validate_bitbucket_data(data['bitbucket'])
-        ConfigValidator.validate_github_data(data['github'])
-        ConfigValidator.validate_user_mapping(data['user_mapping'])
-
-        # Create configuration objects
-        try:
-            bitbucket_config = BitbucketConfig(**data['bitbucket'])
-            github_config = GitHubConfig(**data['github'])
-
-            return MigrationConfig(
-                bitbucket=bitbucket_config,
-                github=github_config,
-                user_mapping=data['user_mapping'],
-                issue_type_mapping=data.get('issue_type_mapping', {}),
-                skip_issues=bool(data.get('skip_issues', False)),
-                skip_prs=bool(data.get('skip_prs', False)),
-                skip_pr_as_issue=bool(data.get('skip_pr_as_issue', False)),
-                use_gh_cli=bool(data.get('use_gh_cli', False)),
-                link_rewriting_config=LinkRewritingConfig(data.get('link_rewriting_config')),
-                output_dir=data.get('output_dir', '.'),
-                cross_repo_mappings_file=data.get('cross_repo_mappings_file')
+        # Validate format version (required for v2.0)
+        format_version = data.get('format_version')
+        if format_version != '2.0':
+            raise ConfigurationError(
+                f"Unsupported config format. Expected version 2.0, got {format_version}. "
+                f"See docs/reference/migration_config.md for current format."
             )
 
-        except TypeError as e:
-            raise ValidationError(f"Invalid configuration format: {e}")
+        # Validate required fields for v2.0
+        if 'repositories' not in data or not isinstance(data['repositories'], list):
+            raise ConfigurationError(
+                "Config must have 'repositories' array. "
+                "See docs/reference/migration_config.md for format."
+            )
+
+        if 'repo' in data.get('bitbucket', {}):
+            raise ConfigurationError(
+                "Invalid config: 'bitbucket.repo' field not allowed in v2.0 format. "
+                "Use 'repositories' array instead."
+            )
+
+        if 'repo' in data.get('github', {}):
+            raise ConfigurationError(
+                "Invalid config: 'github.repo' field not allowed in v2.0 format. "
+                "Use 'repositories' array instead."
+            )
+
+        return ConfigLoader._load_unified_config(data)
 
     @staticmethod
     def load_from_dict(data: Dict[str, Any]) -> MigrationConfig:
         """
-        Load and validate configuration from dictionary.
+        Load and validate unified configuration from dictionary (v2.0 format).
 
         Args:
-            data: Configuration dictionary
+            data: Configuration dictionary in v2.0 format
 
         Returns:
             Validated MigrationConfig object
@@ -323,43 +304,175 @@ class ConfigLoader:
             ConfigurationError: If configuration data is missing required keys
             ValidationError: If configuration data is invalid
         """
+        # Validate format version
+        format_version = data.get('format_version')
+        if format_version != '2.0':
+            raise ConfigurationError(
+                f"Unsupported config format. Expected version 2.0, got {format_version}."
+            )
+
         # Validate required sections
-        required_keys = ['bitbucket', 'github', 'user_mapping']
+        required_keys = ['bitbucket', 'github', 'user_mapping', 'repositories']
         for key in required_keys:
             if key not in data:
                 raise ConfigurationError(f"Missing required section '{key}' in configuration data")
 
+        # Validate repositories array
+        if not isinstance(data['repositories'], list) or len(data['repositories']) == 0:
+            raise ValidationError("'repositories' must be a non-empty list")
+
+        # Validate no repo fields in bitbucket/github sections
+        if 'repo' in data.get('bitbucket', {}):
+            raise ValidationError("bitbucket section should not have 'repo' field in v2.0 format")
+        if 'repo' in data.get('github', {}):
+            raise ValidationError("github section should not have 'repo' field in v2.0 format")
+
         # Validate each section
-        ConfigValidator.validate_bitbucket_data(data['bitbucket'])
-        ConfigValidator.validate_github_data(data['github'])
         ConfigValidator.validate_user_mapping(data['user_mapping'])
 
         # Create configuration objects
         try:
-            bitbucket_config = BitbucketConfig(**data['bitbucket'])
-            github_config = GitHubConfig(**data['github'])
+            # Parse bitbucket/github configs (with placeholder repo values for validation)
+            bitbucket_data = data['bitbucket'].copy()
+            bitbucket_data['repo'] = '__unified_config__'  # Placeholder for validation
+            bitbucket_config = BitbucketConfig(**bitbucket_data)
+
+            github_data = data['github'].copy()
+            github_data['repo'] = '__unified_config__'  # Placeholder for validation
+            github_config = GitHubConfig(**github_data)
+
+            # Parse repositories
+            repositories = []
+            for idx, repo_data in enumerate(data['repositories']):
+                if not isinstance(repo_data, dict):
+                    raise ValidationError(f"Repository entry {idx} must be a dictionary")
+                if 'bitbucket_repo' not in repo_data:
+                    raise ValidationError(f"Repository entry {idx}: missing 'bitbucket_repo' field")
+                if 'github_repo' not in repo_data:
+                    raise ValidationError(f"Repository entry {idx}: missing 'github_repo' field")
+                repositories.append(RepositoryConfig(**repo_data))
+
+            # Parse external repositories
+            external_repositories = []
+            for idx, ext_repo_data in enumerate(data.get('external_repositories', [])):
+                if not isinstance(ext_repo_data, dict):
+                    raise ValidationError(f"External repository entry {idx} must be a dictionary")
+                if 'bitbucket_repo' not in ext_repo_data:
+                    raise ValidationError(f"External repository entry {idx}: missing 'bitbucket_repo' field")
+                external_repositories.append(ExternalRepositoryConfig(**ext_repo_data))
+
+            # Parse options
+            options_data = data.get('options', {})
+            options = OptionsConfig(**options_data)
 
             return MigrationConfig(
+                format_version='2.0',
                 bitbucket=bitbucket_config,
                 github=github_config,
+                repositories=repositories,
                 user_mapping=data['user_mapping'],
+                base_dir=data.get('base_dir', '.'),
+                external_repositories=external_repositories,
                 issue_type_mapping=data.get('issue_type_mapping', {}),
-                skip_issues=bool(data.get('skip_issues', False)),
-                skip_prs=bool(data.get('skip_prs', False)),
-                skip_pr_as_issue=bool(data.get('skip_pr_as_issue', False)),
-                use_gh_cli=bool(data.get('use_gh_cli', False)),
-                link_rewriting_config=LinkRewritingConfig(data.get('link_rewriting_config')),
-                output_dir=data.get('output_dir', '.'),
-                cross_repo_mappings_file=data.get('cross_repo_mappings_file')
+                options=options,
+                # cross_repo_mappings_file=data.get('cross_repo_mappings_file', 'cross_repo_mappings.json'),
+                link_rewriting_config=LinkRewritingConfig(data.get('link_rewriting_config'))
             )
 
         except TypeError as e:
             raise ValidationError(f"Invalid configuration format: {e}")
 
     @staticmethod
+    def _load_unified_config(data: Dict[str, Any]) -> MigrationConfig:
+        """
+        Load unified configuration format (v2.0) for multi-repository migrations.
+
+        Args:
+            data: Configuration dictionary in v2.0 format
+
+        Returns:
+            Validated MigrationConfig object
+
+        Raises:
+            ConfigurationError: If configuration is invalid
+            ValidationError: If configuration data is invalid
+        """
+        # Validate user mapping
+        ConfigValidator.validate_user_mapping(data['user_mapping'])
+
+        # Parse bitbucket and github configs (with placeholder repo values for validation)
+        try:
+            bitbucket_data = data['bitbucket'].copy()
+            bitbucket_data['repo'] = '__unified_config__'  # Placeholder for validation
+            bitbucket_config = BitbucketConfig(**bitbucket_data)
+
+            github_data = data['github'].copy()
+            github_data['repo'] = '__unified_config__'  # Placeholder for validation
+            github_config = GitHubConfig(**github_data)
+        except (TypeError, ValidationError) as e:
+            raise ValidationError(f"Invalid bitbucket/github configuration: {e}")
+
+        # Parse repositories
+        try:
+            repositories = []
+            for idx, repo_data in enumerate(data['repositories']):
+                if not isinstance(repo_data, dict):
+                    raise ValidationError(f"Repository entry {idx} must be a dictionary")
+
+                # Validate required fields
+                if 'bitbucket_repo' not in repo_data:
+                    raise ValidationError(f"Repository entry {idx}: missing 'bitbucket_repo' field")
+                if 'github_repo' not in repo_data:
+                    raise ValidationError(f"Repository entry {idx}: missing 'github_repo' field")
+
+                repositories.append(RepositoryConfig(**repo_data))
+        except TypeError as e:
+            raise ValidationError(f"Invalid repository configuration: {e}")
+
+        # Parse external repositories
+        try:
+            external_repositories = []
+            for idx, ext_repo_data in enumerate(data.get('external_repositories', [])):
+                if not isinstance(ext_repo_data, dict):
+                    raise ValidationError(f"External repository entry {idx} must be a dictionary")
+
+                # Validate required fields
+                if 'bitbucket_repo' not in ext_repo_data:
+                    raise ValidationError(f"External repository entry {idx}: missing 'bitbucket_repo' field")
+
+                external_repositories.append(ExternalRepositoryConfig(**ext_repo_data))
+        except TypeError as e:
+            raise ValidationError(f"Invalid external repository configuration: {e}")
+
+        # Parse options
+        try:
+            options_data = data.get('options', {})
+            options = OptionsConfig(**options_data)
+        except TypeError as e:
+            raise ValidationError(f"Invalid options configuration: {e}")
+
+        # Create unified config
+        try:
+            return MigrationConfig(
+                format_version='2.0',
+                bitbucket=bitbucket_config,
+                github=github_config,
+                repositories=repositories,
+                user_mapping=data['user_mapping'],
+                base_dir=data.get('base_dir', '.'),
+                external_repositories=external_repositories,
+                issue_type_mapping=data.get('issue_type_mapping', {}),
+                options=options,
+                # cross_repo_mappings_file=data.get('cross_repo_mappings_file', 'cross_repo_mappings.json'),
+                link_rewriting_config=LinkRewritingConfig(data.get('link_rewriting_config'))
+            )
+        except TypeError as e:
+            raise ValidationError(f"Invalid unified configuration format: {e}")
+
+    @staticmethod
     def save_to_file(config: MigrationConfig, config_path: str) -> None:
         """
-        Save configuration to JSON file.
+        Save unified configuration to JSON file (v2.0 format).
 
         Args:
             config: MigrationConfig object to save
@@ -369,31 +482,51 @@ class ConfigLoader:
 
         # Convert config objects to dictionaries
         data = {
+            'format_version': '2.0',
             'bitbucket': {
                 'workspace': config.bitbucket.workspace,
-                'repo': config.bitbucket.repo,
                 'email': config.bitbucket.email,
                 'token': config.bitbucket.token
             },
             'github': {
                 'owner': config.github.owner,
-                'repo': config.github.repo,
                 'token': config.github.token
             },
+            'repositories': [
+                {
+                    'bitbucket_repo': repo.bitbucket_repo,
+                    'github_repo': repo.github_repo
+                }
+                for repo in config.repositories
+            ],
             'user_mapping': config.user_mapping,
+            'base_dir': config.base_dir,
+            'external_repositories': [
+                {
+                    'bitbucket_repo': ext_repo.bitbucket_repo,
+                    'github_repo': ext_repo.github_repo,
+                    'github_owner': ext_repo.github_owner
+                }
+                for ext_repo in config.external_repositories
+            ],
             'issue_type_mapping': config.issue_type_mapping,
-            'skip_issues': bool(config.skip_issues),
-            'skip_prs': bool(config.skip_prs),
-            'skip_pr_as_issue': bool(config.skip_pr_as_issue),
-            'use_gh_cli': bool(config.use_gh_cli),
+            'options': {
+                'skip_issues': config.options.skip_issues,
+                'open_issues_only': config.options.open_issues_only,
+                'skip_prs': config.options.skip_prs,
+                'open_prs_only': config.options.open_prs_only,
+                'skip_pr_as_issue': config.options.skip_pr_as_issue,
+                'skip_milestones': config.options.skip_milestones,
+                'open_milestones_only': config.options.open_milestones_only,
+                'use_gh_cli': config.options.use_gh_cli
+            },
+            # 'cross_repo_mappings_file': config.cross_repo_mappings_file,
             'link_rewriting_config': {
                 'enabled': config.link_rewriting_config.enabled,
                 'enable_notes': config.link_rewriting_config.enable_notes,
                 'enable_markdown_awareness': config.link_rewriting_config.enable_markdown_awareness,
                 'note_templates': config.link_rewriting_config.note_templates
-            },
-            'output_dir': config.output_dir,
-            'cross_repo_mappings_file': config.cross_repo_mappings_file
+            }
         }
 
         try:

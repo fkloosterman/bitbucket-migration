@@ -7,6 +7,7 @@ estimates using shared components from the migration system.
 """
 
 from .audit_utils import AuditUtils
+from .auditor import Auditor
 from .audit_orchestrator import AuditOrchestrator
 
-__all__ = ['AuditUtils', 'AuditOrchestrator']
+__all__ = ['AuditUtils', 'Auditor', 'AuditOrchestrator']

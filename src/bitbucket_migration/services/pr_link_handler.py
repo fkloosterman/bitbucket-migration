@@ -3,45 +3,64 @@ import logging
 from typing import Optional, Dict, Any
 from .base_link_handler import BaseLinkHandler
 
-logger = logging.getLogger('bitbucket_migration')
+from ..core.migration_context import MigrationEnvironment, MigrationState
+from .services_data import LinkWriterData
+
 
 class PrLinkHandler(BaseLinkHandler):
     """
     Handler for Bitbucket pull request links.
+
+    Rewrites Bitbucket pull request URLs to their corresponding GitHub issue URLs.
+    Pull requests in GitHub are represented as issues with additional pull request data.
     """
 
-    def __init__(self, pr_mapping: Dict[int, int], bb_workspace: str, bb_repo: str,
-                   gh_owner: str, gh_repo: str, template_config=None):
+    def __init__(self, environment: MigrationEnvironment, state: MigrationState):
+        """
+        Initialize the PrLinkHandler.
+
+        Args:
+            environment: Migration environment containing config and clients
+            state: Migration state for storing link data
+        """
         # Pre-compile pattern at initialization
         self.PATTERN = re.compile(
-            rf'https://bitbucket\.org/{re.escape(bb_workspace)}/{re.escape(bb_repo)}/pull-requests/(\d+)(?:/[^/\s\)\"\'>]*)?'
+            rf'https://bitbucket\.org/{re.escape(environment.config.bitbucket.workspace)}/{re.escape(environment.config.bitbucket.repo)}/pull-requests/(\d+)(?:/[^/\s\)\"\'>]*)?'
         )
-        super().__init__(priority=2, template_config=template_config)  # High priority, after issues
+        super().__init__(environment, state, priority=2)  # High priority, after issues
 
-        self.pr_mapping = pr_mapping
-        self.bb_workspace = bb_workspace
-        self.bb_repo = bb_repo
-        self.gh_owner = gh_owner
-        self.gh_repo = gh_repo
-
-        logger.debug(
-            "PrLinkHandler initialized for %s/%s -> %s/%s",
-            bb_workspace, bb_repo, gh_owner, gh_repo
+        self.logger.debug(
+            "PrLinkHandler initialized for {0}/{1} -> {2}/{3}".format(
+                self.environment.config.bitbucket.workspace,
+                self.environment.config.bitbucket.repo,
+                self.environment.config.github.owner,
+                self.environment.config.github.repo
+            )
         )
 
     def handle(self, url: str, context: Dict[str, Any]) -> Optional[str]:
+        """
+        Handle Bitbucket pull request link rewriting.
+
+        Args:
+            url: The Bitbucket pull request URL to rewrite
+            context: Context information including item details and markdown context
+
+        Returns:
+            Rewritten GitHub issue URL or None if URL doesn't match
+        """
         match = self.PATTERN.match(url)  # Use pre-compiled pattern
         if not match:
-            logger.debug("URL did not match PR pattern: %s", url)
+            self.logger.debug(f"URL did not match PR pattern: {url}")
             return None
 
         bb_num = int(match.group(1))
-        gh_num = self.pr_mapping.get(bb_num)
+        gh_num = self.state.mappings.prs.get(bb_num)
 
         if gh_num:
-            gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_num}"
+            gh_url = f"https://github.com/{self.environment.config.github.owner}/{self.environment.config.github.repo}/issues/{gh_num}"
 
-            markdown_context = context.get('markdown_context')
+            markdown_context = context.get('markdown_context', None)
 
             # If in markdown context (target or text), return URL only (no note)
             if markdown_context in ('target', 'text'):
@@ -62,17 +81,15 @@ class PrLinkHandler(BaseLinkHandler):
         else:
             rewritten = url
 
-        # Update context with link details if needed
-        if 'link_details' in context:
-            context['link_details'].append({
-                'original': url,
-                'rewritten': rewritten,
-                'type': 'pr_link',
-                'reason': 'mapped' if gh_num else 'unmapped',
-                'item_type': context.get('item_type'),
-                'item_number': context.get('item_number'),
-                'comment_seq': context.get('comment_seq'),
-                'markdown_context': context.get('markdown_context')
-            })
+        context['details'].append({
+            'original': url,
+            'rewritten': rewritten,
+            'type': 'pr_link',
+            'reason': 'mapped' if gh_num else 'unmapped',
+            'item_type': context.get('item_type'),
+            'item_number': context.get('item_number'),
+            'comment_seq': context.get('comment_seq'),
+            'markdown_context': context.get('markdown_context', None)
+        })
 
         return rewritten

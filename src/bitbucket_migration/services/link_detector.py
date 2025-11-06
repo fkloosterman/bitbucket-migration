@@ -97,7 +97,7 @@ class LinkDetector:
         
         # Log detected URLs
         if matches:
-            logger.debug("Detected %d URLs in text", len(matches), extra={'urls': matches})
+            logger.debug(f"Detected {len(matches)} URLs in text")
         else:
             logger.debug("No URLs detected in text")
         

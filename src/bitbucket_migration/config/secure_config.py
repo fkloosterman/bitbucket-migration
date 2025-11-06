@@ -11,9 +11,6 @@ import json
 from typing import Dict, Any, Optional
 from pathlib import Path
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-import base64
 from dotenv import load_dotenv
 
 from .migration_config import MigrationConfig, ConfigLoader, ConfigValidator, BitbucketConfig, GitHubConfig
@@ -65,8 +62,16 @@ class SecureConfigLoader(ConfigLoader):
         # Validate tokens
         SecureConfigLoader._validate_tokens(data)
 
-        # Use parent class for the rest
-        return ConfigLoader.load_from_dict(data)
+        # Detect format and load appropriately with our modified data
+        if 'repositories' in data and isinstance(data['repositories'], list):
+            # New unified format
+            return ConfigLoader._load_unified_config(data)
+        else:
+            # Old per-repo format no longer supported - only v2.0 unified format
+            raise ConfigurationError(
+                "Unsupported config format. Only v2.0 unified format is supported. "
+                "See docs/reference/migration_config.md for current format."
+            )
 
     @staticmethod
     def _load_tokens_from_env(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -170,101 +175,7 @@ class SecureConfigLoader(ConfigLoader):
         """
         return token.startswith('ghp_') or token.startswith('github_pat_')
 
-    @staticmethod
-    def generate_encryption_key() -> str:
-        """
-        Generate a new encryption key for secure config storage.
 
-        Returns:
-            Base64-encoded encryption key
-        """
-        key = Fernet.generate_key()
-        return base64.urlsafe_b64encode(key).decode()
-
-    @staticmethod
-    def encrypt_config_value(value: str, key: str) -> str:
-        """
-        Encrypt a configuration value.
-
-        Args:
-            value: The value to encrypt
-            key: Base64-encoded encryption key
-
-        Returns:
-            Encrypted value
-        """
-        f = Fernet(key.encode())
-        return f.encrypt(value.encode()).decode()
-
-    @staticmethod
-    def decrypt_config_value(encrypted_value: str, key: str) -> str:
-        """
-        Decrypt a configuration value.
-
-        Args:
-            encrypted_value: The encrypted value
-            key: Base64-encoded encryption key
-
-        Returns:
-            Decrypted value
-        """
-        f = Fernet(key.encode())
-        return f.decrypt(encrypted_value.encode()).decode()
-
-    @staticmethod
-    def save_secure_config(config: MigrationConfig, config_path: str, encryption_key: Optional[str] = None) -> None:
-        """
-        Save configuration to file with optional encryption of sensitive fields.
-
-        Args:
-            config: MigrationConfig object to save
-            config_path: Path where to save the configuration
-            encryption_key: Optional encryption key for sensitive fields
-        """
-        config_path = Path(config_path)
-
-        # Convert config objects to dictionaries
-        data = {
-            'bitbucket': {
-                'workspace': config.bitbucket.workspace,
-                'repo': config.bitbucket.repo,
-                'email': config.bitbucket.email,
-                'token': config.bitbucket.token
-            },
-            'github': {
-                'owner': config.github.owner,
-                'repo': config.github.repo,
-                'token': config.github.token
-            },
-            'user_mapping': config.user_mapping,
-            'repository_mapping': config.repository_mapping,
-            'issue_type_mapping': config.issue_type_mapping,
-            'dry_run': bool(config.dry_run),
-            'skip_issues': bool(config.skip_issues),
-            'skip_prs': bool(config.skip_prs),
-            'skip_pr_as_issue': bool(config.skip_pr_as_issue),
-            'use_gh_cli': bool(config.use_gh_cli)
-        }
-
-        # Encrypt sensitive fields if key provided
-        if encryption_key:
-            data['bitbucket']['token'] = SecureConfigLoader.encrypt_config_value(
-                config.bitbucket.token, encryption_key
-            )
-            data['github']['token'] = SecureConfigLoader.encrypt_config_value(
-                config.github.token, encryption_key
-            )
-            data['_encrypted'] = True
-            data['_encryption_key'] = encryption_key
-
-        try:
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-
-        except PermissionError:
-            raise ConfigurationError(f"Permission denied writing configuration file: {config_path}")
-        except Exception as e:
-            raise ConfigurationError(f"Error saving configuration file: {e}")
 
 
 def load_config_secure(config_path: str) -> MigrationConfig:

@@ -115,6 +115,10 @@ class GitHubCliClient:
             ValidationError: If token is empty
             APIError: If there's an unexpected error during authentication
         """
+        # Validate custom token if provided
+        if token is not None and (not token or not token.strip()):
+            raise ValidationError("GitHub token cannot be empty")
+        
         auth_token = token or self.token
         if not auth_token or not auth_token.strip():
             raise ValidationError("GitHub token cannot be empty")
@@ -151,7 +155,10 @@ class GitHubCliClient:
             ValidationError: If parameters are invalid
             APIError: If there's an unexpected error during upload
         """
-        if not filepath or not filepath.exists():
+        self.logger.debug(f"upload_attachment called with filepath={filepath}, exists={filepath.exists() if filepath else 'None'}, dry_run={self.dry_run}")
+        if not filepath:
+            raise ValidationError("Attachment filepath must exist")
+        if not self.dry_run and not filepath.exists():
             raise ValidationError("Attachment filepath must exist")
         if not isinstance(issue_number, int) or issue_number <= 0:
             raise ValidationError("Issue number must be a positive integer")
@@ -165,13 +172,13 @@ class GitHubCliClient:
 
         try:
             file_size = filepath.stat().st_size
-            size_mb = round(file_size / (1024 * 1024), 2)
+            size_mb = file_size / (1024 * 1024)
 
             # Create a comment with the attached file
             result = subprocess.run([
                 'gh', 'issue', 'comment', str(issue_number),
                 '--repo', f'{owner}/{repo}',
-                '--body', f'📎 **Attachment from Bitbucket**: `{filepath.name}` ({size_mb} MB)',
+                '--body', f'📎 **Attachment from Bitbucket**: `{filepath.name}` ({size_mb:.2f} MB)',
                 '--attach', str(filepath)
             ], capture_output=True, text=True, timeout=60)
 
@@ -205,7 +212,19 @@ class GitHubCliClient:
                                   text=True,
                                   timeout=5)
             if result.returncode == 0:
-                return result.stdout.split()[2] if len(result.stdout.split()) > 2 else 'unknown'
+                output = result.stdout.strip()
+                parts = output.split()
+                
+                # Try to extract version from different formats
+                # Format 1: "gh version 2.25.0 (2023-01-15)"
+                # Format 2: "2.40.0"
+                if len(parts) >= 3 and parts[0] == 'gh' and parts[1] == 'version':
+                    return parts[2]
+                elif len(parts) == 1 and '.' in parts[0]:
+                    # Single version number (must contain dot to be valid version)
+                    return parts[0]
+                else:
+                    return 'unknown'
             return None
         except Exception as e:
             raise APIError(f"Error getting GitHub CLI version: {e}")

@@ -3,8 +3,6 @@ import logging
 from typing import Dict, Tuple, Optional, List, Any
 from urllib.parse import urlparse
 
-logger = logging.getLogger('bitbucket_migration')
-
 from .user_mapper import UserMapper
 from .base_link_handler import BaseLinkHandler
 from .link_detector import LinkDetector
@@ -16,6 +14,9 @@ from .branch_link_handler import BranchLinkHandler
 from .compare_link_handler import CompareLinkHandler
 from .cross_repo_link_handler import CrossRepoLinkHandler
 from .cross_repo_mapping_store import CrossRepoMappingStore
+
+from ..core.migration_context import MigrationEnvironment, MigrationState
+from .services_data import LinkWriterData
 
 class LinkRewriter:
     """
@@ -33,7 +34,7 @@ class LinkRewriter:
     """
     # Class-level compiled patterns for markdown link detection
     MARKDOWN_LINK_PATTERN = re.compile(
-        r'\[(?P<text>[^\]]*(?:\[[^\]]*\][^\]]*)*)\]\((?P<url>https?://[^\s)]+)\)'
+        r'(?<!\!)\[(?P<text>[^\]]*(?:\[[^\]]*\][^\]]*)*)\]\((?P<url>https?://[^\s)]+)\)'
     )
 
     # Also add image link pattern
@@ -49,50 +50,100 @@ class LinkRewriter:
         'compare': re.compile(r'https://github\.com/[\w-]+/[\w.-]+/compare/[^/]+\.\.\.[^/]+'),
         'tree': re.compile(r'https://github\.com/[\w-]+/[\w.-]+/tree/.+'),
         'blob': re.compile(r'https://github\.com/[\w-]+/[\w.-]+/blob/.+'),
+        'raw': re.compile(r'https://github\.com/[\w-]+/[\w.-]+/raw/.+'),
         'repo': re.compile(r'https://github\.com/[\w-]+/[\w.-]+/?$'),
     }
-    def __init__(self, issue_mapping: Dict[int, int], pr_mapping: Dict[int, int],
-                        cross_repo_store: CrossRepoMappingStore, bb_workspace: str, bb_repo: str,
-                        gh_owner: str, gh_repo: str, user_mapper: UserMapper, template_config=None):
-            self.issue_mapping = issue_mapping
-            self.pr_mapping = pr_mapping
-            self.cross_repo_store = cross_repo_store
-            self.bb_workspace = bb_workspace
-            self.bb_repo = bb_repo
-            self.gh_owner = gh_owner
-            self.gh_repo = gh_repo
-            self.user_mapper = user_mapper
-            self.template_config = template_config
-            self.unhandled_bb_links = []
-            # New attributes for tracking link rewriting metrics
-            self.link_details: List[Dict[str, Any]] = []
-            self.total_processed: int = 0
-            self.successful: int = 0
-            self.failed: int = 0
-            # Validation failure tracking
-            self.validation_failures: List[Dict[str, Any]] = []
-            self.validation_errors: int = 0
-            # Context for current item being processed
-            self.current_item_type = None
-            self.current_item_number = None
-            self.current_comment_seq = None
-            # Track processed URLs to avoid duplicates
-            self.processed_urls = set()
-            
-            # Initialize handlers
-            self.handlers: List[BaseLinkHandler] = [
-                IssueLinkHandler(issue_mapping, bb_workspace, bb_repo, gh_owner, gh_repo, template_config),
-                PrLinkHandler(pr_mapping, bb_workspace, bb_repo, gh_owner, gh_repo, template_config),
-                CommitLinkHandler(bb_workspace, bb_repo, gh_owner, gh_repo, template_config),
-                BranchLinkHandler(bb_workspace, bb_repo, gh_owner, gh_repo, template_config),
-                CompareLinkHandler(bb_workspace, bb_repo, gh_owner, gh_repo, template_config),
-                CrossRepoLinkHandler(self.cross_repo_store, bb_workspace, bb_repo, gh_owner, gh_repo, issue_mapping, pr_mapping, template_config=template_config),
-                RepoHomeLinkHandler(self.cross_repo_store, bb_workspace, bb_repo, gh_owner, gh_repo, template_config),
-            ]
+    def __init__(self, environment: MigrationEnvironment, state: MigrationState, handlers: Optional[List[BaseLinkHandler]] = None):
+        """
+        Initialize the LinkRewriter.
 
-            # Sort once at initialization instead of per URL
-            self.handlers = sorted(self.handlers, key=lambda h: h.get_priority())
-            logger.info("Initialized %d link handlers (sorted by priority)", len(self.handlers))
+        Args:
+            environment: Migration environment containing config and clients
+            state: Migration state for storing link data
+            handlers: Optional list of link handler classes to use
+        """
+        self.environment = environment
+        self.state = state
+
+        self.logger = self.environment.logger
+
+        self.data = LinkWriterData()
+        self.state.services[self.__class__.__name__] = self.data
+
+        self.unhandled_bb_links = []
+        # Validation failure tracking
+        self.validation_failures: List[Dict[str, Any]] = []
+        self.validation_errors: int = 0
+        # Context for current item being processed
+        self.current_item_type = None
+        self.current_item_number = None
+        self.current_comment_seq = None
+        self.current_comment_id = None
+        # Track processed URLs to avoid duplicates
+        self.processed_urls = set()
+
+        # Build repository lookup including external repos
+        self.repo_lookup = self._build_repo_lookup(getattr(self.environment.config, 'external_repositories', []))
+
+        # Initialize handlers
+        if handlers is None:
+            handlers = [IssueLinkHandler, PrLinkHandler, CommitLinkHandler, BranchLinkHandler, CompareLinkHandler, CrossRepoLinkHandler, RepoHomeLinkHandler]
+
+        handlers = set(handlers)
+
+        if not all([issubclass(h, BaseLinkHandler) for h in handlers]):
+            raise ValueError("Expect handlers to be a subclass of `BaseLinkHandler`")
+
+        self.handlers: List[BaseLinkHandler] = [
+            h(self.environment, self.state) for h in handlers
+        ]
+
+        # Sort once at initialization instead of per URL
+        self.handlers = sorted(self.handlers, key=lambda h: h.get_priority())
+        self.logger.info(f"Initialized {len(self.handlers)} link handlers (sorted by priority)")
+        self.logger.info(f"Built repository lookup with {len(self.repo_lookup)} external repositories")
+
+    def _build_repo_lookup(self, external_repos: List[Any]) -> Dict[str, Dict[str, Any]]:
+        """
+        Build repository lookup dictionary including external repositories.
+
+        Args:
+            external_repos: List of ExternalRepositoryConfig objects
+
+        Returns:
+            Dictionary mapping "{workspace}/{repo}" to repository info
+        """
+        repo_lookup = {}
+
+        # Add external repositories to lookup
+        for ext_repo in external_repos:
+            key = f"{self.environment.config.bitbucket.workspace}/{ext_repo.bitbucket_repo}"
+
+            if ext_repo.github_repo:
+                # Repository is being migrated (either here or elsewhere)
+                gh_owner = ext_repo.github_owner or self.environment.config.github.owner
+                repo_lookup[key] = {
+                    'github_repo': f"{gh_owner}/{ext_repo.github_repo}",
+                    'github_owner': gh_owner,
+                    'github_repo_name': ext_repo.github_repo,
+                    'type': 'external'
+                }
+                self.logger.debug(
+                    "Added external repo to lookup: {0} -> {1}".format(
+                        key, repo_lookup[key]['github_repo']
+                    )
+                )
+            else:
+                # Repository is not being migrated
+                repo_lookup[key] = {
+                    'github_repo': None,
+                    'type': 'not_migrating'
+                }
+                self.logger.debug(
+                    "Added non-migrating repo to lookup: {0} (will preserve Bitbucket links)".format(key)
+                )
+
+        return repo_lookup
 
     def validate_github_url(self, url: str, expected_type: Optional[str] = None) -> bool:
         """
@@ -115,7 +166,7 @@ class LinkRewriter:
         if expected_type:
             pattern = self.GITHUB_URL_PATTERNS.get(expected_type)
             if not pattern:
-                logger.warning("Unknown GitHub URL type: %s", expected_type)
+                self.logger.warning(f"Unknown GitHub URL type: {expected_type}")
                 return True  # Don't block unknown types
             return bool(pattern.match(url))
         else:
@@ -123,7 +174,8 @@ class LinkRewriter:
             return any(pattern.match(url) for pattern in self.GITHUB_URL_PATTERNS.values())
 
     def rewrite_links(self, text: str, item_type: str = 'issue',
-                          item_number: Optional[int] = None, comment_id: Optional[int] = None) -> Tuple[str, int, List[Dict], int, int, List[str], List[Dict]]:
+                          item_number: Optional[int] = None,
+                          comment_seq: Optional[int] = None, comment_id: Optional[int] = None) -> Tuple[str, int, List[Dict], int, int, List[str], List[Dict]]:
         """
         Rewrite Bitbucket links in text to GitHub equivalents.
 
@@ -140,16 +192,17 @@ class LinkRewriter:
             Tuple of (rewritten_text, links_found, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures)
         """
         if not text:
-            logger.debug("Empty text provided to rewrite_links, returning early with empty results")
+            self.logger.debug("Empty text provided to rewrite_links, returning early with empty results")
             return text, 0, [], 0, 0, [], []
 
         # Set current context
         self.current_item_type = item_type
         self.current_item_number = item_number
-        self.current_comment_seq = comment_id
+        self.current_comment_seq = comment_seq
+        self.current_comment_id = comment_id
 
-        original_text = text
         links_found = 0
+
         self.processed_urls = set()
         # Clear validation failures for this processing session
         self.validation_failures = []
@@ -158,21 +211,21 @@ class LinkRewriter:
         # PHASE 1: Process markdown links FIRST to prevent nesting
         text, md_links = self._rewrite_markdown_links(text)
         links_found += md_links
-        logger.info("Markdown links processed: %d", md_links)
+        self.logger.info(f"Markdown links processed: {md_links}")
 
         # PHASE 1b: Process image links
         text, img_links = self._rewrite_image_links(text)
         links_found += img_links
-        logger.info("Image links processed: %d", img_links)
+        self.logger.info(f"Image links processed: {img_links}")
 
         # PHASE 2: Process remaining plain URLs
         text, url_links = self._rewrite_urls_with_handlers(text)
         links_found += url_links
-        logger.info("Plain URLs processed: %d", url_links)
+        self.logger.info(f"Plain URLs processed: {url_links}")
 
         # PHASE 2.5: Escape non-URL angle brackets to prevent GitHub markdown misinterpretation
         text = self._escape_non_url_angle_brackets(text)
-        logger.info("Non-URL angle brackets escaped")
+        self.logger.info("Non-URL angle brackets escaped")
 
         # PHASE 3: Rewrite mentions
         text, mention_replaced, mention_unmapped, unmapped_list = self._rewrite_mentions(text)
@@ -192,9 +245,10 @@ class LinkRewriter:
         self.current_item_type = None
         self.current_item_number = None
         self.current_comment_seq = None
+        self.current_comment_id = None
 
-        logger.info("Total links rewritten: %d", links_found)
-        logger.info("Validation errors: %d", self.validation_errors)
+        self.logger.info(f"Total links rewritten: {links_found}")
+        self.logger.info(f"Validation errors: {self.validation_errors}")
         return text, links_found, self.unhandled_bb_links, mention_replaced, mention_unmapped, unmapped_list, self.validation_failures
 
     def _rewrite_markdown_links(self, text: str) -> Tuple[str, int]:
@@ -220,7 +274,7 @@ class LinkRewriter:
             if original_match in self.processed_urls:
                 return original_match
 
-            logger.debug("Processing markdown link: text='%s', url='%s'", text_part, url)
+            self.logger.debug(f"Processing markdown link: text='{text_part}', url='{url}'")
 
             # Rewrite URLs in text portion if present
             new_text_part = text_part
@@ -232,10 +286,11 @@ class LinkRewriter:
                 for handler in self.handlers:
                     if handler.can_handle(text_url):
                         context = {
-                            'link_details': self.link_details,
+                            'details': self.data.details,
                             'item_type': self.current_item_type,
                             'item_number': self.current_item_number,
                             'comment_seq': self.current_comment_seq,
+                            'comment_id': self.current_comment_id,
                             'markdown_context': 'text'  # URL in link text
                         }
                         rewritten = handler.handle(text_url, context)
@@ -254,7 +309,7 @@ class LinkRewriter:
                             new_text_part = new_text_part.replace(text_url, new_text_url)
                             text_urls_found += 1
                             links_found += 1
-                            logger.debug("URL in markdown text rewritten: %s -> %s", text_url, new_text_url)
+                            self.logger.debug(f"URL in markdown text rewritten: {text_url} -> {new_text_url}")
                             
                             # Mark the rewritten URL as processed to prevent double processing in Phase 2
                             self.processed_urls.add(new_text_url)
@@ -262,13 +317,14 @@ class LinkRewriter:
                             # Validate the rewritten GitHub URL in text
                             if new_text_url.startswith('https://github.com'):
                                 if not self.validate_github_url(new_text_url):
-                                    logger.error("Invalid GitHub URL generated in markdown text: %s", new_text_url)
+                                    self.logger.error(f"Invalid GitHub URL generated in markdown text: {new_text_url}")
                                     self.validation_failures.append({
                                         'original_url': text_url,
                                         'invalid_url': new_text_url,
                                         'item_type': self.current_item_type,
                                         'item_number': self.current_item_number,
                                         'comment_seq': self.current_comment_seq,
+                                        'comment_id': self.current_comment_id,
                                         'context': 'markdown_text'
                                     })
                                     self.validation_errors += 1
@@ -281,10 +337,11 @@ class LinkRewriter:
             for handler in self.handlers:
                 if handler.can_handle(url):
                     context = {
-                        'link_details': self.link_details,
+                        'details': self.data.details,
                         'item_type': self.current_item_type,
                         'item_number': self.current_item_number,
                         'comment_seq': self.current_comment_seq,
+                        'comment_id': self.current_comment_id,
                         'markdown_context': 'target'  # Track context
                     }
                     rewritten = handler.handle(url, context)
@@ -306,18 +363,19 @@ class LinkRewriter:
 
                         url_changed = True
                         links_found += 1
-                        logger.debug("Markdown URL rewritten: %s -> %s", url, new_url)
+                        self.logger.debug(f"Markdown URL rewritten: {url} -> {new_url}")
 
                         # Validate the rewritten GitHub URL
                         if new_url.startswith('https://github.com'):
                             if not self.validate_github_url(new_url):
-                                logger.error("Invalid GitHub URL generated: %s", new_url)
+                                self.logger.error(f"Invalid GitHub URL generated: {new_url}")
                                 self.validation_failures.append({
                                     'original_url': url,
                                     'invalid_url': new_url,
                                     'item_type': self.current_item_type,
                                     'item_number': self.current_item_number,
                                     'comment_seq': self.current_comment_seq,
+                                    'comment_id': self.current_comment_id,
                                     'context': 'markdown_target'
                                 })
                                 self.validation_errors += 1
@@ -363,7 +421,7 @@ class LinkRewriter:
             if original_match in self.processed_urls:
                 return original_match
 
-            logger.debug("Processing image link: alt='%s', url='%s'", alt_text, url)
+            self.logger.debug(f"Processing image link: alt='{alt_text}', url='{url}'")
 
             # Rewrite the URL portion
             new_url = url
@@ -372,10 +430,11 @@ class LinkRewriter:
             for handler in self.handlers:
                 if handler.can_handle(url):
                     context = {
-                        'link_details': self.link_details,
+                        'details': self.data.details,
                         'item_type': self.current_item_type,
                         'item_number': self.current_item_number,
                         'comment_seq': self.current_comment_seq,
+                        'comment_id': self.current_comment_id,
                         'markdown_context': 'target'  # Track context
                     }
                     rewritten = handler.handle(url, context)
@@ -397,18 +456,19 @@ class LinkRewriter:
 
                         url_changed = True
                         links_found += 1
-                        logger.debug("Image URL rewritten: %s -> %s", url, new_url)
+                        self.logger.debug(f"Image URL rewritten: {url} -> {new_url}")
 
                         # Validate the rewritten GitHub URL
                         if new_url.startswith('https://github.com'):
                             if not self.validate_github_url(new_url):
-                                logger.error("Invalid GitHub URL generated in image: %s", new_url)
+                                self.logger.error(f"Invalid GitHub URL generated in image: {new_url}")
                                 self.validation_failures.append({
                                     'original_url': url,
                                     'invalid_url': new_url,
                                     'item_type': self.current_item_type,
                                     'item_number': self.current_item_number,
                                     'comment_seq': self.current_comment_seq,
+                                    'comment_id': self.current_comment_id,
                                     'context': 'image_target'
                                 })
                                 self.validation_errors += 1
@@ -442,7 +502,7 @@ class LinkRewriter:
             
             # Skip malformed URLs that contain markdown syntax (indicates LinkDetector extracted across markdown boundaries)
             if '](' in url or '[' in url or '(' in url and url.count('(') > 1:
-                logger.debug("Skipping malformed URL containing markdown syntax: %s", url)
+                self.logger.debug(f"Skipping malformed URL containing markdown syntax: {url}")
                 self.processed_urls.add(url)
                 continue
             
@@ -456,23 +516,24 @@ class LinkRewriter:
                 
                 # Pattern: ](url) - URL is in markdown target position
                 if before == '](' and after == ')':
-                    logger.debug("Skipping URL inside markdown target: %s", url)
+                    self.logger.debug(f"Skipping URL inside markdown target: {url}")
                     self.processed_urls.add(url)
                     continue
             
             self.processed_urls.add(url)
 
-            logger.debug("Processing URL: %s", url, extra={'url': url})
+            self.logger.debug(f"Processing URL: {url}")
             handled = False
             # No need to sort - handlers already sorted by priority in __init__
             for handler in self.handlers:
                 if handler.can_handle(url):
-                    logger.debug("Handler %s can handle URL: %s", handler.__class__.__name__, url, extra={'handler': handler.__class__.__name__, 'url': url})
+                    self.logger.debug(f"Handler {handler.__class__.__name__} can handle URL: {url}")
                     context = {
-                        'link_details': self.link_details,
+                        'details': self.data.details,
                         'item_type': self.current_item_type,
                         'item_number': self.current_item_number,
-                        'comment_seq': self.current_comment_seq
+                        'comment_seq': self.current_comment_seq,
+                        'comment_id': self.current_comment_id,
                         # No markdown_context for plain URLs - they should return formatted markdown
                     }
                     rewritten = handler.handle(url, context)
@@ -484,19 +545,19 @@ class LinkRewriter:
                             
                             # Validate GitHub URL
                             if not self.validate_github_url(gh_url):
-                                logger.error(
-                                    "Invalid GitHub URL generated: %s from %s",
-                                    gh_url, url
+                                self.logger.error(
+                                    f"Invalid GitHub URL generated: {gh_url} from {url}"
                                 )
                                 # Add to failed links for reporting
-                                self.link_details.append({
+                                self.data.details.append({
                                     'original': url,
                                     'rewritten': gh_url,
                                     'type': 'invalid_github_url',
                                     'reason': 'validation_failed',
                                     'item_type': self.current_item_type,
                                     'item_number': self.current_item_number,
-                                    'comment_seq': self.current_comment_seq
+                                    'comment_seq': self.current_comment_seq,
+                                    'comment_id': self.current_comment_id,
                                 })
                                 self.validation_failures.append({
                                     'original_url': url,
@@ -504,30 +565,31 @@ class LinkRewriter:
                                     'item_type': self.current_item_type,
                                     'item_number': self.current_item_number,
                                     'comment_seq': self.current_comment_seq,
+                                    'comment_id': self.current_comment_id,
                                     'context': 'plain_url'
                                 })
                                 self.validation_errors += 1
-                                self.failed += 1
-                                self.total_processed += 1
+                                self.data.failed += 1
+                                self.data.total_processed += 1
                                 handled = True
                                 # Don't replace - keep original
                                 break
                         
                         text = text.replace(url, rewritten)
                         links_found += 1
-                        self.successful += 1
-                        logger.debug("URL rewritten: %s -> %s", url, rewritten, extra={'original': url, 'rewritten': rewritten})
+                        self.data.successful += 1
+                        self.logger.debug(f"URL rewritten: {url} -> {rewritten}")
                     else:
-                        self.failed += 1
-                        logger.debug("URL not rewritten: %s", url, extra={'url': url})
-                    self.total_processed += 1
+                        self.data.failed += 1
+                        self.logger.debug(f"URL not rewritten: {url}")
+                    self.data.total_processed += 1
                     handled = True
                     break
                 else:
-                    logger.debug("Handler %s cannot handle URL: %s", handler.__class__.__name__, url, extra={'handler': handler.__class__.__name__, 'url': url})
+                    self.logger.debug(f"Handler {handler.__class__.__name__} cannot handle URL: {url}")
 
             if not handled:
-                logger.warning("URL not handled by any handler: %s", url, extra={'url': url})
+                self.logger.warning(f"URL not handled by any handler: {url}")
                 # Add as unhandled
                 self.unhandled_bb_links.append({
                     'url': url,
@@ -535,17 +597,18 @@ class LinkRewriter:
                     'item_number': self.current_item_number,
                     'context': text[max(0, text.find(url)-50):min(len(text), text.find(url)+len(url)+50)]
                 })
-                self.link_details.append({
+                self.data.details.append({
                     'original': url,
                     'rewritten': url,
                     'type': 'unhandled',
                     'reason': 'unhandled',
                     'item_type': self.current_item_type,
                     'item_number': self.current_item_number,
-                    'comment_seq': self.current_comment_seq
+                    'comment_seq': self.current_comment_seq,
+                    'comment_id': self.current_comment_id,
                 })
-                self.failed += 1
-                self.total_processed += 1
+                self.data.failed += 1
+                self.data.total_processed += 1
 
         return text, links_found
     
@@ -615,12 +678,14 @@ class LinkRewriter:
                 bb_username = bb_mention
                 bb_username_normalized = bb_username
             
-            gh_username = self.user_mapper.map_mention(bb_username)
-            
+            self.logger.info("call map_mention")
+            gh_username = self.environment.services.get('user_mapper').map_mention(bb_username)
+            self.logger.info("gh_username obtained")
+
             if gh_username:
                 mentions_replaced += 1
                 rewritten = f"@{gh_username}"
-                self.link_details.append({
+                self.data.details.append({
                       'original': original_mention,
                       'rewritten': rewritten,
                       'type': 'mention',
@@ -628,14 +693,18 @@ class LinkRewriter:
                       'item_type': self.current_item_type,
                       'item_number': self.current_item_number,
                       'comment_seq': self.current_comment_seq,
+                      'comment_id': self.current_comment_id,
                       'markdown_context': 'target'
                   })
-                self.successful += 1
+                self.data.successful += 1
             else:
                 is_account_id = ':' in bb_username or (len(bb_username) == 24 and all(c in '0123456789abcdef' for c in bb_username.lower()))
                 
                 if is_account_id:
-                    display_name = self.user_mapper.account_id_to_display_name.get(bb_username)
+                    self.logger.info("before account_id_to_display_name")
+
+                    display_name = self.state.services['UserMapper'].account_id_to_display_name.get(bb_username)
+                    self.logger.info("after account_id_to_display_name")
                     if display_name:
                         mentions_unmapped += 1
                         unmapped_list.append(bb_username)
@@ -649,7 +718,7 @@ class LinkRewriter:
                     unmapped_list.append(bb_username)
                     rewritten = f"@{bb_username_normalized} *(Bitbucket user, needs GitHub mapping)*"
                 
-                self.link_details.append({
+                self.data.details.append({
                       'original': original_mention,
                       'rewritten': rewritten,
                       'type': 'mention',
@@ -657,10 +726,11 @@ class LinkRewriter:
                       'item_type': self.current_item_type,
                       'item_number': self.current_item_number,
                       'comment_seq': self.current_comment_seq,
+                      'comment_id': self.current_comment_id,
                       'markdown_context': 'target'
                   })
-                self.failed += 1
-            self.total_processed += 1
+                self.data.failed += 1
+            self.data.total_processed += 1
             return rewritten
         
         return re.sub(pattern, replace_mention, text), mentions_replaced, mentions_unmapped, unmapped_list
@@ -678,29 +748,30 @@ class LinkRewriter:
             self.processed_urls.add(original_ref)
             
             bb_num = int(match.group(1))
-            gh_num = self.issue_mapping.get(bb_num)
+            gh_num = self.state.mappings.issues.get(bb_num)
             if gh_num and bb_num != gh_num:
                 links_found += 1
-                gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_num}"
+                gh_url = f"https://github.com/{self.environment.config.github.owner}/{self.environment.config.github.repo}/issues/{gh_num}"
 
                 # Validate the generated GitHub URL
                 if not self.validate_github_url(gh_url, 'issue'):
-                    logger.error("Invalid GitHub issue URL generated: %s", gh_url)
+                    self.logger.error(f"Invalid GitHub issue URL generated: {gh_url}")
                     self.validation_failures.append({
                         'original_url': original_ref,
                         'invalid_url': gh_url,
                         'item_type': self.current_item_type,
                         'item_number': self.current_item_number,
                         'comment_seq': self.current_comment_seq,
+                        'comment_id': self.current_comment_id,
                         'context': 'short_issue_ref'
                     })
                     self.validation_errors += 1
 
-                note = self.template_config.get_template('short_issue_ref').format(
+                note = self.environment.config.link_rewriting_config.get_template('short_issue_ref').format(
                     bb_num=bb_num, gh_num=gh_num, bb_url="", gh_url=gh_url
-                ) if self.template_config else f" *(was BB `#{bb_num}`)*"
+                ) if self.environment.config.link_rewriting_config else f" *(was BB `#{bb_num}`)*"
                 rewritten = f"[#{gh_num}]({gh_url}){note}"
-                self.link_details.append({
+                self.data.details.append({
                       'original': original_ref,
                       'rewritten': rewritten,
                       'type': 'short_issue_ref',
@@ -708,13 +779,14 @@ class LinkRewriter:
                       'item_type': self.current_item_type,
                       'item_number': self.current_item_number,
                       'comment_seq': self.current_comment_seq,
+                      'comment_id': self.current_comment_id,
                       'markdown_context': 'target'
                   })
-                self.successful += 1
+                self.data.successful += 1
             elif gh_num and bb_num == gh_num:
                 links_found += 1
                 rewritten = f"#{gh_num}"
-                self.link_details.append({
+                self.data.details.append({
                       'original': original_ref,
                       'rewritten': rewritten,
                       'type': 'short_issue_ref',
@@ -722,12 +794,13 @@ class LinkRewriter:
                       'item_type': self.current_item_type,
                       'item_number': self.current_item_number,
                       'comment_seq': self.current_comment_seq,
+                      'comment_id': self.current_comment_id,
                       'markdown_context': 'target'
                   })
-                self.successful += 1
+                self.data.successful += 1
             else:
                 rewritten = original_ref
-                self.link_details.append({
+                self.data.details.append({
                       'original': original_ref,
                       'rewritten': rewritten,
                       'type': 'short_issue_ref',
@@ -735,10 +808,11 @@ class LinkRewriter:
                       'item_type': self.current_item_type,
                       'item_number': self.current_item_number,
                       'comment_seq': self.current_comment_seq,
+                      'comment_id': self.current_comment_id,
                       'markdown_context': 'target'
                   })
-                self.failed += 1
-            self.total_processed += 1
+                self.data.failed += 1
+            self.data.total_processed += 1
             return rewritten
 
         return re.sub(pattern, replace_short_issue, text, flags=re.IGNORECASE), links_found
@@ -756,30 +830,31 @@ class LinkRewriter:
             self.processed_urls.add(original_ref)
             
             bb_num = int(match.group(1))
-            gh_num = self.pr_mapping.get(bb_num)
+            gh_num = self.state.mappings.prs.get(bb_num)
             
             if gh_num:
                 links_found += 1
-                gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}/issues/{gh_num}"
+                gh_url = f"https://github.com/{self.environment.config.github.owner}/{self.environment.config.github.repo}/issues/{gh_num}"
 
                 # Validate the generated GitHub URL
                 if not self.validate_github_url(gh_url, 'issue'):
-                    logger.error("Invalid GitHub PR URL generated: %s", gh_url)
+                    self.logger.error("Invalid GitHub PR URL generated: %s", gh_url)
                     self.validation_failures.append({
                         'original_url': original_ref,
                         'invalid_url': gh_url,
                         'item_type': self.current_item_type,
                         'item_number': self.current_item_number,
                         'comment_seq': self.current_comment_seq,
+                        'comment_id': self.current_comment_id,
                         'context': 'pr_ref'
                     })
                     self.validation_errors += 1
 
-                note = self.template_config.get_template('pr_ref').format(
+                note = self.environment.config.link_rewriting_config.get_template('pr_ref').format(
                     bb_num=bb_num, gh_num=gh_num, bb_url="", gh_url=gh_url
-                ) if self.template_config else f" *(was BB PR `#{bb_num}`)*"
+                ) if self.environment.config.link_rewriting_config else f" *(was BB PR `#{bb_num}`)*"
                 rewritten = f"[#{gh_num}]({gh_url}){note}"
-                self.link_details.append({
+                self.data.details.append({
                       'original': original_ref,
                       'rewritten': rewritten,
                       'type': 'pr_ref',
@@ -787,12 +862,13 @@ class LinkRewriter:
                       'item_type': self.current_item_type,
                       'item_number': self.current_item_number,
                       'comment_seq': self.current_comment_seq,
+                      'comment_id': self.current_comment_id,
                       'markdown_context': 'target'
                   })
-                self.successful += 1
+                self.data.successful += 1
             else:
                 rewritten = original_ref
-                self.link_details.append({
+                self.data.details.append({
                       'original': original_ref,
                       'rewritten': rewritten,
                       'type': 'pr_ref',
@@ -800,10 +876,11 @@ class LinkRewriter:
                       'item_type': self.current_item_type,
                       'item_number': self.current_item_number,
                       'comment_seq': self.current_comment_seq,
+                      'comment_id': self.current_comment_id,
                       'markdown_context': 'target'
                   })
-                self.failed += 1
-            self.total_processed += 1
+                self.data.failed += 1
+            self.data.total_processed += 1
             return rewritten
         
         return re.sub(pattern, replace_pr_ref, text, flags=re.IGNORECASE), links_found
@@ -822,17 +899,18 @@ class LinkRewriter:
                       'item_number': self.current_item_number,
                       'context': text[max(0, text.find(unhandled_url)-50):min(len(text), text.find(unhandled_url)+len(unhandled_url)+50)]
                   })
-                self.link_details.append({
+                self.data.details.append({
                       'original': unhandled_url,
                       'rewritten': unhandled_url,
                       'type': 'unhandled',
                       'reason': 'unhandled',
                       'item_type': self.current_item_type,
                       'item_number': self.current_item_number,
-                      'comment_seq': self.current_comment_seq
+                      'comment_seq': self.current_comment_seq,
+                      'comment_id': self.current_comment_id,
                   })
-                self.failed += 1
-                self.total_processed += 1
+                self.data.failed += 1
+                self.data.total_processed += 1
     
     def _deduplicate_link_details(self):
         """
@@ -843,9 +921,9 @@ class LinkRewriter:
         """
         seen = set()
         unique_details = []
-        for detail in self.link_details:
+        for detail in self.data.details:
             key = (detail['original'], detail['item_type'], detail['item_number'], detail['comment_seq'])
             if key not in seen:
                 seen.add(key)
                 unique_details.append(detail)
-        self.link_details = unique_details
+        self.data.details = unique_details

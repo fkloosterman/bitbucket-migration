@@ -1,17 +1,59 @@
+"""
+User mapping service for Bitbucket to GitHub migration.
+
+This module handles mapping Bitbucket users to GitHub users, including
+resolving account IDs to usernames and handling various user mapping formats.
+"""
+
 from typing import Dict, Any, Optional, List
 import re
 from ..clients.bitbucket_client import BitbucketClient
 from ..exceptions import APIError, AuthenticationError, NetworkError
 
+from ..core.migration_context import MigrationEnvironment, MigrationState
+from .services_data import UserMapperData
+
+
 class UserMapper:
-    def __init__(self, user_mapping: Dict[str, Any], bb_client: BitbucketClient):
-        self.user_mapping = user_mapping
-        self.bb_client = bb_client
-        self.account_id_to_username: Dict[str, str] = {}
-        self.account_id_to_display_name: Dict[str, str] = {}
+    """
+    Handles mapping of Bitbucket users to GitHub users.
+
+    This class manages user mappings for @mentions and user references during
+    migration, supporting various mapping formats and account ID resolution.
+    """
+
+    def __init__(self, environment: MigrationEnvironment, state: MigrationState):
+        """
+        Initialize the UserMapper.
+
+        Args:
+            environment: Migration environment containing config and clients
+            state: Migration state for storing user mapping data
+        """
+        self.environment = environment
+        self.state = state
+
+        self.data = UserMapperData()
+        self.state.services[self.__class__.__name__] = self.data
+
+        # Handle different config formats (dict during audit, dataclass during migration)
+        try:
+            self.user_mapping = self.environment.config.user_mapping
+        except AttributeError:
+            self.user_mapping = {}
+
+        self.bb_client = self.environment.clients.bb
     
     def map_user(self, bb_username: str) -> Optional[str]:
-        """Map Bitbucket username or display name to GitHub username"""
+        """
+        Map Bitbucket username or display name to GitHub username.
+
+        Args:
+            bb_username: Bitbucket username or display name to map
+
+        Returns:
+            GitHub username if found, None otherwise
+        """
         if not bb_username:
             return None
 
@@ -62,10 +104,10 @@ class UserMapper:
         
         # First, check if this is an account ID and resolve it to a username
         resolved_username = bb_username
-        if bb_username in self.account_id_to_username or bb_username in self.account_id_to_display_name:
+        if bb_username in self.data.account_id_to_username or bb_username in self.data.account_id_to_display_name:
             # Try username first (if available)
-            username = self.account_id_to_username.get(bb_username)
-            display_name = self.account_id_to_display_name.get(bb_username)
+            username = self.data.account_id_to_username.get(bb_username)
+            display_name = self.data.account_id_to_display_name.get(bb_username)
             
             # Prefer username, but fall back to display_name if username is None
             if username:
@@ -102,10 +144,17 @@ class UserMapper:
         return None
     
     def add_account_mapping(self, account_id: str, username: str, display_name: str = None):
-        """Add account ID to username mapping"""
-        self.account_id_to_username[account_id] = username
+        """
+        Add account ID to username mapping.
+
+        Args:
+            account_id: Bitbucket account ID
+            username: Associated Bitbucket username
+            display_name: Optional display name for the user
+        """
+        self.data.account_id_to_username[account_id] = username
         if display_name:
-            self.account_id_to_display_name[account_id] = display_name
+            self.data.account_id_to_display_name[account_id] = display_name
 
     def build_account_id_mappings(self, bb_issues: List[Dict[str, Any]], bb_prs: List[Dict[str, Any]]) -> int:
         """
@@ -134,9 +183,9 @@ class UserMapper:
                 
                 if account_id:
                     if username:
-                        self.account_id_to_username[account_id] = username
+                        self.data.account_id_to_username[account_id] = username
                     if display_name:
-                        self.account_id_to_display_name[account_id] = display_name
+                        self.data.account_id_to_display_name[account_id] = display_name
                     if account_id not in users_found:
                         users_found[account_id] = (username, display_name)
             
@@ -149,9 +198,9 @@ class UserMapper:
                 
                 if account_id:
                     if username:
-                        self.account_id_to_username[account_id] = username
+                        self.data.account_id_to_username[account_id] = username
                     if display_name:
-                        self.account_id_to_display_name[account_id] = display_name
+                        self.data.account_id_to_display_name[account_id] = display_name
                     if account_id not in users_found:
                         users_found[account_id] = (username, display_name)
         
@@ -166,9 +215,9 @@ class UserMapper:
                 
                 if account_id:
                     if username:
-                        self.account_id_to_username[account_id] = username
+                        self.data.account_id_to_username[account_id] = username
                     if display_name:
-                        self.account_id_to_display_name[account_id] = display_name
+                        self.data.account_id_to_display_name[account_id] = display_name
                     if account_id not in users_found:
                         users_found[account_id] = (username, display_name)
             
@@ -182,9 +231,9 @@ class UserMapper:
                     
                     if account_id:
                         if username:
-                            self.account_id_to_username[account_id] = username
+                            self.data.account_id_to_username[account_id] = username
                         if display_name:
-                            self.account_id_to_display_name[account_id] = display_name
+                            self.data.account_id_to_display_name[account_id] = display_name
                         if account_id not in users_found:
                             users_found[account_id] = (username, display_name)
             
@@ -196,9 +245,9 @@ class UserMapper:
                 
                 if account_id:
                     if username:
-                        self.account_id_to_username[account_id] = username
+                        self.data.account_id_to_username[account_id] = username
                     if display_name:
-                        self.account_id_to_display_name[account_id] = display_name
+                        self.data.account_id_to_display_name[account_id] = display_name
                     if account_id not in users_found:
                         users_found[account_id] = (username, display_name)
         
@@ -250,7 +299,7 @@ class UserMapper:
                         # Check if it's an account ID
                         is_account_id = ':' in mention or (len(mention) == 24 and all(c in '0123456789abcdef' for c in mention.lower()))
                         
-                        if is_account_id and mention not in self.account_id_to_username:
+                        if is_account_id and mention not in self.data.account_id_to_username:
                             unresolved_account_ids.add(mention)
         
         # Scan PR comments
@@ -265,7 +314,7 @@ class UserMapper:
                         
                         is_account_id = ':' in mention or (len(mention) == 24 and all(c in '0123456789abcdef' for c in mention.lower()))
                         
-                        if is_account_id and mention not in self.account_id_to_username:
+                        if is_account_id and mention not in self.data.account_id_to_username:
                             unresolved_account_ids.add(mention)
         
         if unresolved_account_ids:
@@ -277,6 +326,6 @@ class UserMapper:
                     display_name = user_info.get('display_name')
                     
                     if username:
-                        self.account_id_to_username[account_id] = username
+                        self.data.account_id_to_username[account_id] = username
                     if display_name:
-                        self.account_id_to_display_name[account_id] = display_name
+                        self.data.account_id_to_display_name[account_id] = display_name

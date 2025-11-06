@@ -121,6 +121,7 @@ class GitHubClient:
                 wait_time = float(headers['Retry-After'])
                 return wait_time
             except (ValueError, TypeError):
+                # Invalid Retry-After header, continue to other methods
                 pass
 
         # Priority 2: Rate limit reset for 403 errors
@@ -128,16 +129,21 @@ class GitHubClient:
             reset_time = int(headers.get('X-RateLimit-Reset', 0))
             remaining = int(headers.get('X-RateLimit-Remaining', 1))
 
-            if remaining == 0 and reset_time > 0:
-                wait_time = max(0, reset_time - time.time() + 1)
-                # Cap at 5 minutes for safety (in case of edge cases)
-                wait_time = min(wait_time, 300)
-                return wait_time
+            if remaining == 0:
+                # We have no remaining quota - this is a rate limit
+                if reset_time > 0:
+                    # Calculate exact wait time from reset
+                    wait_time = max(0, reset_time - time.time() + 1)
+                    # Cap at 5 minutes for safety (in case of edge cases)
+                    wait_time = min(wait_time, 300)
+                    return wait_time
+                else:
+                    # No reset time available, use conservative default
+                    return 60
             else:
-                # This 403 might not be a rate limit - could be permissions or other policy
-                # For PR review comments, GitHub sometimes returns 403 for rate limits without proper headers
-                # Let's assume it's a rate limit and wait a short time
-                return 30  # Wait 30 seconds as fallback for ambiguous 403 errors
+                # This 403 has remaining quota, so it's likely not a rate limit
+                # but a permission/policy issue - don't retry
+                return 0
 
         # Priority 3: Progressive backoff for 429 (secondary limits)
         if status_code == 429:
@@ -190,14 +196,17 @@ class GitHubClient:
                 if response.status_code in [403, 429]:
                     wait_time = self._calculate_wait_time(response.headers, response.status_code)
 
-                    if attempt < max_retries:
-                        if wait_time > 0:
-                            print(f"Rate limit hit (status {response.status_code}). Waiting {wait_time:.0f}s before retry {attempt+1}/{max_retries}")
-                            time.sleep(wait_time)
-                        else:
-                            print(f"Rate limit hit (status {response.status_code}) but no wait time calculated. Continuing immediately.")
+                    if attempt < max_retries and wait_time > 0:
+                        # Can retry
+                        print(f"Rate limit hit (status {response.status_code}). Waiting {wait_time:.0f}s before retry {attempt+1}/{max_retries}")
+                        time.sleep(wait_time)
                         continue
+                    elif wait_time == 0:
+                        # No wait needed, likely a permission issue rather than rate limit
+                        # Return response so raise_for_status() can be called
+                        return response
                     else:
+                        # Cannot retry (either exhausted retries or no wait time needed)
                         if response.status_code == 403:
                             raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
                         else:  # 429
@@ -277,6 +286,9 @@ class GitHubClient:
             response.raise_for_status()
             return response.json()
 
+        except NetworkError:
+            # Re-raise NetworkError from _make_request_with_retry
+            raise
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 401:
                 raise AuthenticationError("GitHub authentication failed. Please check your token.")
@@ -285,6 +297,15 @@ class GitHubClient:
             elif e.response.status_code == 422:
                 raise ValidationError(f"Invalid issue data: {e}")
             elif e.response.status_code == 403:
+                # Check if it's a rate limit or permission issue
+                try:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '').lower()
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests']):
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                except (ValueError, AttributeError, TypeError):
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
@@ -415,6 +436,106 @@ class GitHubClient:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
         except Exception as e:
             raise APIError(f"Unexpected error fetching GitHub pull request: {e}")
+    
+    def get_issue(self, issue_number: int) -> Dict[str, Any]:
+        """
+        Get details of a GitHub issue.
+
+        Args:
+            issue_number: The issue number
+
+        Returns:
+            Issue data
+
+        Raises:
+            ValidationError: If issue_number is invalid
+            APIError: If the API request fails
+            AuthenticationError: If authentication fails
+            NetworkError: If there's a network connectivity issue
+        """
+        if not isinstance(issue_number, int) or issue_number <= 0:
+            raise ValidationError("Issue number must be a positive integer")
+
+        # Read operations are allowed in dry-run mode
+        try:
+            response = self._make_request_with_retry('GET', f"{self.base_url}/issues/{issue_number}")
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                raise AuthenticationError("GitHub authentication failed. Please check your token.")
+            elif e.response.status_code == 404:
+                raise APIError(f"Issue not found: {issue_number}", status_code=404)
+            elif e.response.status_code == 403:
+                raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
+            else:
+                raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
+        except requests.exceptions.RequestException as e:
+            raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except Exception as e:
+            raise APIError(f"Unexpected error fetching GitHub issue: {e}")
+
+    def get_comments(self, issue_number: int) -> List[Dict[str, Any]]:
+        """
+        Get all comments for a GitHub issue or PR.
+
+        Args:
+            issue_number: The issue or PR number
+
+        Returns:
+            List of comment dictionaries
+
+        Raises:
+            ValidationError: If issue_number is invalid
+            APIError: If the API request fails
+            AuthenticationError: If authentication fails
+            NetworkError: If there's a network connectivity issue
+        """
+        if not isinstance(issue_number, int) or issue_number <= 0:
+            raise ValidationError("Issue number must be a positive integer")
+
+        # Read operations are allowed in dry-run mode
+        comments = []
+        params = {'per_page': 100}
+        url = f"{self.base_url}/issues/{issue_number}/comments"
+
+        try:
+            # Paginate through all comments
+            while url:
+                response = self._make_request_with_retry('GET', url, params=params)
+                response.raise_for_status()
+
+                page_data = response.json()
+                comments.extend(page_data)
+
+                # Get next page URL from Link header
+                link_header = response.headers.get('Link', '')
+                url = None
+                params = None  # Only use params on first request
+
+                if link_header:
+                    # Parse Link header for next page
+                    for link in link_header.split(','):
+                        if 'rel="next"' in link:
+                            url = link[link.index('<')+1:link.index('>')]
+                            break
+
+            return comments
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                raise AuthenticationError("GitHub authentication failed. Please check your token.")
+            elif e.response.status_code == 404:
+                raise APIError(f"Issue/PR not found: {issue_number}", status_code=404)
+            elif e.response.status_code == 403:
+                raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
+            else:
+                raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
+        except requests.exceptions.RequestException as e:
+            raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except Exception as e:
+            raise APIError(f"Unexpected error fetching GitHub comments: {e}")
 
     def create_comment(self, issue_number: int, body: str) -> Dict[str, Any]:
         """
@@ -466,10 +587,12 @@ class GitHubClient:
             elif e.response.status_code == 403:
                 # Check if this is a locked issue/PR
                 try:
-                    error_msg = e.response.json().get('message', '')
-                    if 'locked' in error_msg.lower():
-                        raise ValidationError(f"Issue/PR #{issue_number} is locked and cannot accept new comments")
-                except:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '')
+                        if 'locked' in error_msg.lower():
+                            raise ValidationError(f"Issue/PR #{issue_number} is locked and cannot accept new comments")
+                except (ValueError, AttributeError, TypeError):
                     pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
@@ -704,6 +827,60 @@ class GitHubClient:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
         except Exception as e:
             raise APIError(f"Unexpected error updating GitHub issue: {e}")
+        
+    def update_pull_request(self, pull_number: int, **kwargs) -> Dict[str, Any]:
+        """
+        Update a GitHub pull request.
+
+        Args:
+            pull_number: The pull request number to update
+            **kwargs: Fields to update (state, title, body, base, etc.)
+
+        Returns:
+            Updated pull request data (or simulated data in dry-run mode)
+
+        Raises:
+            ValidationError: If pull_number is invalid
+            APIError: If the API request fails
+            AuthenticationError: If authentication fails
+            NetworkError: If there's a network connectivity issue
+        """
+        if not isinstance(pull_number, int) or pull_number <= 0:
+            raise ValidationError("Pull request number must be a positive integer")
+
+        if not kwargs:
+            raise ValidationError("No fields to update")
+
+        # In dry-run mode, return simulated data
+        if self.dry_run:
+            return {
+                'number': pull_number,
+                'state': kwargs.get('state', 'open'),
+                'title': kwargs.get('title', f'Pull Request #{pull_number}'),
+                'body': kwargs.get('body', ''),
+                'html_url': f"https://github.com/{self.owner}/{self.repo}/pull/{pull_number}"
+            }
+
+        try:
+            response = self._make_request_with_retry('PATCH', f"{self.base_url}/pulls/{pull_number}", json=kwargs)
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                raise AuthenticationError("GitHub authentication failed. Please check your token.")
+            elif e.response.status_code == 404:
+                raise APIError(f"Pull request not found: {pull_number}", status_code=404)
+            elif e.response.status_code == 422:
+                raise ValidationError(f"Invalid pull request update data: {e}")
+            elif e.response.status_code == 403:
+                raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
+            else:
+                raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
+        except requests.exceptions.RequestException as e:
+            raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except Exception as e:
+            raise APIError(f"Unexpected error updating GitHub pull request: {e}")
 
     def get_issue_types(self, org: str) -> Dict[str, int]:
         """
@@ -751,8 +928,187 @@ class GitHubClient:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except (ValueError, AttributeError, TypeError) as e:
+            # Handle JSON parsing errors from issue_types
+            raise APIError(f"Error parsing issue types response: {e}")
         except Exception as e:
             raise APIError(f"Unexpected error fetching GitHub issue types: {e}")
+
+    def get_milestones(self, state: str = 'all') -> List[Dict[str, Any]]:
+        """
+        Get all milestones for the repository.
+        
+        Args:
+            state: Filter by state ('open', 'closed', 'all')
+        
+        Returns:
+            List of milestone dictionaries
+        
+        Raises:
+            ValidationError: If state is invalid
+            APIError: If the API request fails
+            AuthenticationError: If authentication fails
+            NetworkError: If there's a network connectivity issue
+        """
+        if state not in ['open', 'closed', 'all']:
+            raise ValidationError("State must be 'open', 'closed', or 'all'")
+        
+        # Read operations are allowed in dry-run mode
+        milestones = []
+        params = {'state': state, 'per_page': 100}
+        url = f"{self.base_url}/milestones"
+        
+        try:
+            # Paginate through all milestones
+            while url:
+                response = self._make_request_with_retry('GET', url, params=params)
+                response.raise_for_status()
+                
+                page_data = response.json()
+                milestones.extend(page_data)
+                
+                # Get next page URL from Link header
+                link_header = response.headers.get('Link', '')
+                url = None
+                params = None  # Only use params on first request
+                
+                if link_header:
+                    # Parse Link header for next page
+                    for link in link_header.split(','):
+                        if 'rel="next"' in link:
+                            url = link[link.index('<')+1:link.index('>')]
+                            break
+            
+            return milestones
+        
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                raise AuthenticationError("GitHub authentication failed. Please check your token.")
+            elif e.response.status_code == 404:
+                raise APIError(f"Repository not found: {self.owner}/{self.repo}", status_code=404)
+            elif e.response.status_code == 403:
+                raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
+            else:
+                raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
+        except requests.exceptions.RequestException as e:
+            raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except Exception as e:
+            raise APIError(f"Unexpected error fetching GitHub milestones: {e}")
+
+    def get_milestone_by_title(self, title: str) -> Optional[Dict[str, Any]]:
+        """
+        Find a milestone by its title (case-sensitive).
+        
+        Args:
+            title: Milestone title to search for
+        
+        Returns:
+            Milestone dict if found, None otherwise
+        
+        Raises:
+            ValidationError: If title is empty
+            APIError: If the API request fails
+            AuthenticationError: If authentication fails
+            NetworkError: If there's a network connectivity issue
+        """
+        if not title or not title.strip():
+            raise ValidationError("Milestone title cannot be empty")
+        
+        try:
+            # Fetch all milestones (both open and closed)
+            all_milestones = self.get_milestones(state='all')
+            
+            # Search for milestone with matching title (case-sensitive)
+            for milestone in all_milestones:
+                if milestone.get('title') == title.strip():
+                    return milestone
+            
+            return None
+        
+        except (APIError, AuthenticationError, NetworkError):
+            raise  # Re-raise client exceptions
+        except Exception as e:
+            raise APIError(f"Unexpected error searching for milestone: {e}")
+
+    def create_milestone(self, title: str, state: str = 'open',
+                        description: Optional[str] = None,
+                        due_on: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Create a new milestone on GitHub.
+        
+        Args:
+            title: Milestone title (required)
+            state: 'open' or 'closed' (default: 'open')
+            description: Optional milestone description
+            due_on: Optional due date (ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ)
+        
+        Returns:
+            Created milestone data with 'number' field
+        
+        Raises:
+            ValidationError: If title is empty or state is invalid
+            APIError: If the API request fails
+            AuthenticationError: If authentication fails
+            NetworkError: If there's a network connectivity issue
+        """
+        if not title or not title.strip():
+            raise ValidationError("Milestone title cannot be empty")
+        if state not in ['open', 'closed']:
+            raise ValidationError("State must be 'open' or 'closed'")
+        
+        # In dry-run mode, return simulated data
+        if self.dry_run:
+            number = self.simulated_number_counter
+            self.simulated_number_counter += 1
+            return {
+                'number': number,
+                'title': title.strip(),
+                'state': state,
+                'description': description or '',
+                'due_on': due_on,
+                'html_url': f"https://github.com/{self.owner}/{self.repo}/milestone/{number}"
+            }
+        
+        payload = {
+            'title': title.strip(),
+            'state': state
+        }
+        
+        if description is not None:
+            payload['description'] = description
+        if due_on is not None:
+            payload['due_on'] = due_on
+        
+        try:
+            response = self._make_request_with_retry(
+                'POST',
+                f"{self.base_url}/milestones",
+                json=payload
+            )
+            response.raise_for_status()
+            return response.json()
+        
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                raise AuthenticationError("GitHub authentication failed. Please check your token.")
+            elif e.response.status_code == 404:
+                raise APIError(f"Repository not found: {self.owner}/{self.repo}", status_code=404)
+            elif e.response.status_code == 422:
+                # Parse error message for more context
+                try:
+                    error_data = e.response.json()
+                    error_message = error_data.get('message', str(e))
+                    raise ValidationError(f"Invalid milestone data: {error_message}")
+                except (ValueError, AttributeError):
+                    raise ValidationError(f"Invalid milestone data: {e}")
+            elif e.response.status_code == 403:
+                raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
+            else:
+                raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
+        except requests.exceptions.RequestException as e:
+            raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except Exception as e:
+            raise APIError(f"Unexpected error creating GitHub milestone: {e}")
 
     def check_branch_exists(self, branch_name: str) -> bool:
         """
@@ -843,6 +1199,10 @@ class GitHubClient:
             AuthenticationError: If authentication fails
             NetworkError: If there's a network connectivity issue
         """
+        # In dry-run mode, always return True
+        if self.dry_run:
+            return True
+        
         # Read operations are allowed in dry-run mode
         try:
             # Try to fetch repository info as a basic connection test

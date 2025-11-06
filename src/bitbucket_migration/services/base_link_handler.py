@@ -4,7 +4,7 @@ import re
 import logging
 from urllib.parse import quote
 
-logger = logging.getLogger('bitbucket_migration')
+from ..core.migration_context import MigrationEnvironment, MigrationState
 
 class BaseLinkHandler(ABC):
     """
@@ -20,9 +20,22 @@ class BaseLinkHandler(ABC):
     
     PATTERN: Optional[Pattern] = None
 
-    def __init__(self, priority: int = 100, template_config: Optional['LinkRewritingConfig'] = None):
+    def __init__(self, environment: MigrationEnvironment, state: MigrationState, priority: int = 100):
+        """
+        Initialize the BaseLinkHandler.
+
+        Args:
+            priority: Priority for handler ordering (lower = higher priority)
+            template_config: Configuration for link rewriting templates
+        """
+        
+        self.environment = environment
+        self.state = state
+
+        self.logger = environment.logger
+        
         self.priority = priority
-        self.template_config = template_config
+        self.template_config = self.environment.config.link_rewriting_config
 
     def can_handle(self, url: str) -> bool:
         """
@@ -83,7 +96,7 @@ class BaseLinkHandler(ABC):
         try:
             return template.format(**kwargs)
         except (KeyError, ValueError) as e:
-            logger.warning("Template formatting error: %s", e)
+            self.logger.warning("Template formatting error: %s", e)
             return self.template_config.get_template('default') if self.template_config else ''
 
     @staticmethod
