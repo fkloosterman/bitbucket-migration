@@ -12,14 +12,16 @@ The migration process requires multiple authentication methods depending on whic
 |------|----------------|------------|------------|---------|
 | `migrate_bitbucket_to_github test-auth` | ✅ Required | ✅ Required | ❌ Optional | Test authentication |
 | `migrate_bitbucket_to_github audit` | ✅ Required | ❌ Not needed | ❌ Not needed | Audit repository content |
-| `migrate_bitbucket_to_github dry-run` | ✅ Required | ✅ Required | ❌ Optional | Dr-run migrate issues/PRs |
+| `migrate_bitbucket_to_github migrate --dry-run` | ✅ Required | ✅ Required | ❌ Optional | Dry-run migrate issues/PRs |
 | `migrate_bitbucket_to_github migrate` | ✅ Required | ✅ Required | ❌ Optional | Migrate issues/PRs |
 | `migrate_bitbucket_to_github migrate --use-gh-cli` | ✅ Required | ✅ Required | ✅ Required | Auto-upload attachments |
+| `migrate_bitbucket_to_github cross-link` | ✅ Required | ✅ Required | ❌ Optional | Post-migration link updates |
 
 **Choose your path:**
 
 - **Basic Migration:** Bitbucket API Token + GitHub PAT
 - **Advanced Migration:** All three authentication methods (for automatic attachment uploads)
+- **Post-Migration:** Bitbucket API Token + GitHub PAT (for cross-repository link updates)
 
 ---
 
@@ -55,6 +57,7 @@ The migration process requires multiple authentication methods depending on whic
 
 ```json
 "bitbucket": {
+  "workspace": "your-workspace",
   "email": "you@example.com",
   "token": "SET_BITBUCKET_TOKEN_ENV_VAR"
 }
@@ -175,6 +178,7 @@ migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --
 | Issue migration | Read access | Repo access | Not needed |
 | PR migration | Read access | Repo access | Not needed |
 | Attachment upload | Read access | Repo access | Authenticated |
+| Cross-repo link updates | Read access | Repo access | Not needed |
 
 ---
 
@@ -185,7 +189,7 @@ migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --
 Use the provided test script to verify your Bitbucket token:
 
 ```bash
-migrate_bitbucket_to_github test-auth --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com --token ATAT1234...
+migrate_bitbucket_to_github test-auth --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com --gh-owner YOUR_GITHUB_OWNER --gh-repo YOUR_GITHUB_REPO
 ```
 
 **Expected output:**
@@ -201,13 +205,13 @@ Verify your GitHub PAT works correctly:
 
 ```bash
 # Test basic authentication
-curl -H "Authorization: token ghp_abcd123..." https://api.github.com/user
+curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user
 
 # Test repository access
-curl -H "Authorization: token ghp_abcd123..." https://api.github.com/repos/YOUR_ORG/YOUR_REPO
+curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/YOUR_ORG/YOUR_REPO
 
 # Test issue creation (dry run)
-curl -X POST -H "Authorization: token ghp_abcd123..." \
+curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
   https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues \
   -d '{"title":"Test Issue","body":"Testing authentication"}'
 ```
@@ -224,6 +228,8 @@ gh repo view YOUR_ORG/YOUR_REPO
 # Test issue creation (dry run)
 gh issue create --title "Test Issue" --body "Testing CLI auth" --repo YOUR_ORG/YOUR_REPO
 ```
+
+**Note:** GitHub CLI authentication is tested automatically during `test-auth` command.
 
 ---
 
@@ -331,28 +337,18 @@ gh auth login
 
 1. **Set environment variables:**
     ```bash
+    export BITBUCKET_TOKEN="ATAT123..."
     export GITHUB_TOKEN="ghp_123..."
     ```
 
-2. **Test GitHub PAT:**
+2. **Test authentication:**
     ```bash
-    curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user
+    migrate_bitbucket_to_github test-auth --workspace YOUR_WORKSPACE --repo YOUR_REPO --email you@example.com --gh-owner YOUR_ORG --gh-repo YOUR_REPO
     ```
 
-3. **Test repository access:**
+3. **Run dry-run migration:**
     ```bash
-    curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/YOUR_ORG/YOUR_REPO
-    ```
-
-4. **Test GitHub CLI (if using --use-gh-cli):**
-    ```bash
-    gh auth status
-    gh repo view YOUR_ORG/YOUR_REPO
-    ```
-
-5. **Run dry-run migration:**
-    ```bash
-    migrate_bitbucket_to_github dry-run --config config.json
+    migrate_bitbucket_to_github migrate --config config.json --dry-run
     ```
 
 ### After Authentication Issues
@@ -373,17 +369,17 @@ gh auth login
 export BITBUCKET_TOKEN="ATAT123..."
 export GITHUB_TOKEN="ghp_456..."
 
-# 2. Test Bitbucket token
-migrate_bitbucket_to_github test-auth --workspace myteam --repo myrepo --email me@company.com
+# 2. Test authentication
+migrate_bitbucket_to_github test-auth --workspace myteam --repo myrepo --email me@company.com --gh-owner myorg --gh-repo myrepo
 
 # 3. Run audit
-migrate_bitbucket_to_github audit --workspace myteam --repo myrepo --email me@company.com
+migrate_bitbucket_to_github audit --workspace myteam --repo myrepo --email me@company.com --gh-owner myorg
 
-# 4. Test GitHub PAT
-curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user
+# 4. Run migration dry-run
+migrate_bitbucket_to_github migrate --config config.json --dry-run
 
-# 5. Run migration dry-run
-migrate_bitbucket_to_github dry-run --config config.json
+# 5. Run full migration
+migrate_bitbucket_to_github migrate --config config.json
 ```
 
 ### Advanced Setup (With Auto-Upload)
@@ -396,6 +392,9 @@ gh auth status
 
 # 3. Run migration with auto-upload
 migrate_bitbucket_to_github migrate --config config.json --use-gh-cli
+
+# 4. Update cross-repository links (post-migration)
+migrate_bitbucket_to_github cross-link --config config.json
 ```
 
 ---
@@ -408,6 +407,7 @@ migrate_bitbucket_to_github migrate --config config.json --use-gh-cli
 | Issue migration | ✅ User-level, read access | ✅ `repo` scope | ❌ |
 | PR migration | ✅ User-level, read access | ✅ `repo` scope | ❌ |
 | Attachment upload | ✅ User-level, read access | ✅ `repo` scope | ✅ Authenticated |
+| Cross-repo link updates | ✅ User-level, read access | ✅ `repo` scope | ❌ |
 | User mapping | ✅ User-level, read access | ✅ `repo`, `user:email` | ❌ |
 
 **Key Points:**

@@ -10,7 +10,7 @@ hide:
 
 **Intelligent • Safe • Comprehensive**
 
-Migrate your Bitbucket Cloud repositories to GitHub with confidence using our smart migration platform that preserves everything while making intelligent decisions about PRs, branches, and metadata.
+Migrate your Bitbucket Cloud repositories to GitHub with confidence using our comprehensive migration platform that preserves metadata, comments, attachments, and cross-references while making intelligent decisions about PRs, branches, and user attribution. Supports both single and multi-repository migrations with unified configuration management.
 
 **[🚀 Get Started](#quick-start) • [📖 Full Guide](migration_guide.md)**
 
@@ -27,29 +27,47 @@ Migrate your Bitbucket Cloud repositories to GitHub with confidence using our sm
 <div class="grid cards" style="text-align: center;" markdown="1">
 
 -   **🧠 Smart PR Migration**
-    
+
     ---
-    
-    Open PRs become GitHub PRs, closed PRs become Issues with full metadata preservation. No more broken references or lost context.
-    
+
+    Open PRs with existing branches become GitHub PRs, closed PRs become Issues with full metadata preservation. No more broken references or lost context.
+
 
 -   **🛡️ Safe by Design**
-    
+
     ---
-    
+
     Conservative approach prevents re-merging closed PRs. Comprehensive dry-run validation ensures successful migrations.
 
 -   **🔍 Pre-Migration Audit**
-    
+
     ---
-    
+
     See exactly what will migrate before you start. Get user mapping recommendations and gap analysis automatically.
 
 -   **🔗 Automatic Link Rewriting**
-    
+
     ---
-    
+
     Cross-references between issues and PRs are automatically updated to point to GitHub while preserving original context.
+
+-   **👥 Intelligent User Mapping**
+
+    ---
+
+    Maps Bitbucket users to GitHub accounts with support for display names, usernames, and account IDs. Handles @mentions and attribution correctly.
+
+-   **📎 Advanced Attachment Handling**
+
+    ---
+
+    Downloads all attachments and inline images with GitHub CLI upload support for automated processing.
+
+-   **🏗️ Multi-Repository Support**
+
+    ---
+
+    Migrate multiple interconnected repositories with automatic cross-repository link rewriting and unified configuration management.
 
 </div>
 
@@ -64,8 +82,8 @@ pipx install bitbucket-migration
 
 **Example Usage:**
 ```bash
-migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO
-migrate_bitbucket_to_github dry-run --config migration_config.json
+migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --email YOUR_EMAIL
+migrate_bitbucket_to_github migrate --config migration_config.json --dry-run
 ```
 
 ---

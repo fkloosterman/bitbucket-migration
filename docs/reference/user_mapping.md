@@ -64,6 +64,8 @@ Provides complete mapping information including both display names and Bitbucket
 - Account ID mentions need proper resolution
 - Display names appear in comments and need mapping to GitHub users
 
+**Note:** The `display_name` field is optional in the enhanced format. If omitted, the key itself is used as the display name for matching purposes.
+
 ### Format 3: Direct Username Mapping
 
 Maps Bitbucket usernames directly to GitHub usernames. Useful for @mention-only scenarios.
@@ -80,6 +82,8 @@ Maps Bitbucket usernames directly to GitHub usernames. Useful for @mention-only 
 - You only need to fix @mentions
 - Display names are handled separately
 - Quick mapping for specific users
+
+**Note:** This format maps Bitbucket usernames directly. It does not handle display name mapping in comments. Use enhanced format for complete coverage.
 
 ### Format 4: Mixed Format
 
@@ -102,6 +106,8 @@ Combines multiple formats for maximum flexibility.
 - Different users require different mapping approaches
 - Complex organizational structures
 - Gradual migration of mapping strategies
+
+**Note:** Mixed format allows combining simple string mappings with enhanced object mappings. The system automatically detects the format for each user entry.
 
 ---
 ## 🔍 Account ID Resolution
@@ -130,16 +136,19 @@ Bitbucket uses internal account IDs that appear in content and API responses. Th
 
 1. **Collection Phase**: Migration tool scans all Bitbucket data to build account ID mappings
 2. **API Data Extraction**: Extracts `account_id` → `username` relationships from:
-    - Issue reporters and assignees
-    - PR authors and participants
-    - Comment authors
-    - Commit authors
+     - Issue reporters and assignees
+     - PR authors and participants
+     - Comment authors
+     - Commit authors
 
-3. **Runtime Resolution**: During migration:
-    - Account IDs in content are identified
-    - Resolved to Bitbucket usernames using collected mappings
-    - Usernames are then mapped to GitHub usernames
-    - Unresolvable IDs are handled gracefully
+3. **Comment Scanning**: Additionally scans all issue and PR comments for account IDs not captured in metadata
+4. **API Lookup**: For unresolved account IDs found in comments, performs API lookups to resolve them
+
+5. **Runtime Resolution**: During migration:
+     - Account IDs in content are identified
+     - Resolved to Bitbucket usernames using collected mappings
+     - Usernames are then mapped to GitHub usernames
+     - Unresolvable IDs are handled gracefully
 
 ### Resolution Example
 
@@ -166,25 +175,29 @@ The migration tool processes @mentions in all content and rewrites them to GitHu
 ### Processing Strategy
 
 1. **Pattern Detection**: Uses regex to find @mentions in:
-    - Issue descriptions
-    - PR descriptions
-    - Comments (issues and PRs)
-    - Any markdown content
+     - Issue descriptions
+     - PR descriptions
+     - Comments (issues and PRs)
+     - Any markdown content
 
 2. **Format Handling**: Processes multiple @mention formats:
-    - `@username` (standard)
-    - `@{user name}` (with braces for special characters)
-    - `@557058:c250d1e9-...` (account IDs)
+     - `@username` (standard)
+     - `@{user name}` (with braces for special characters)
+     - `@557058:c250d1e9-...` (account IDs)
 
 3. **Mapping Application**: For each mention found:
-    - Extract the Bitbucket identifier
-    - Apply user mapping configuration
-    - Generate appropriate GitHub mention or fallback
+     - Extract the Bitbucket identifier
+     - Apply user mapping configuration
+     - Generate appropriate GitHub mention or fallback
 
 4. **Display Name Mapping**: When display names appear in comments (not as @mentions):
-    - Extract display names from comment text
-    - Map them to GitHub usernames using configured display_name mappings
-    - Convert to @mentions for proper GitHub attribution
+     - Extract display names from comment text
+     - Map them to GitHub usernames using configured display_name mappings
+     - Convert to @mentions for proper GitHub attribution
+
+5. **Fallback Handling**: For unmapped mentions:
+     - Account IDs with known display names: `**Display Name** *(Bitbucket user, no GitHub account)*
+     - Usernames without display names: `@username *(Bitbucket user, needs GitHub mapping)*
 
 ### @Mention Patterns
 
@@ -295,15 +308,17 @@ migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --
 ```
 
 2. **Review Generated Files:**
-    - `bitbucket_audit_report.json` - Complete audit data
-    - `audit_report.md` - Human-readable analysis
-    - `user_mapping_template.txt` - Mapping template with activity counts
+     - `bitbucket_audit_report.json` - Complete audit data
+     - `audit_report.md` - Human-readable analysis
+     - `user_mapping_template.txt` - Mapping template with activity counts
 
 3. **Analyze User Activity:** The audit provides:
-    - Complete list of all users found in repository
-    - Activity breakdown (issues, PRs, comments, commits)
-    - Bitbucket usernames for each user
-    - Account ID mentions and their contexts
+     - Complete list of all users found in repository
+     - Activity breakdown (issues, PRs, comments, commits)
+     - Bitbucket usernames for each user
+     - Account ID mentions and their contexts
+     - Account ID to username mappings discovered from API data
+     - Additional account ID resolutions from comment scanning
 
 ### Using Audit Results
 
@@ -326,6 +341,8 @@ migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --
 - Lists specific issues/PRs with account IDs
 - Shows types of account IDs found
 - Provides context for investigation
+- Builds account ID to username/display name mappings from API data
+- Performs additional API lookups for account IDs found in comments
 
 ### Configuration Generation
 
@@ -339,6 +356,17 @@ migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --
 
 - `migration_config.json` - Complete configuration template
 - `user_mapping_template.txt` - Detailed mapping reference
+
+**Configuration Generation:**
+
+The audit command can generate complete migration configurations with:
+
+```bash
+migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --email YOUR_EMAIL \
+  --gh-owner YOUR_GITHUB_USER --gh-repo YOUR_REPO
+```
+
+This creates a unified configuration file that includes user mappings, repository settings, and all discovered account ID mappings.
 
 ---
 ## 🔧 Setup and Configuration

@@ -82,7 +82,7 @@ Understanding what is preserved vs. not preserved has important implications for
 
 ### Manual Work Required
 - **Attachments**: Must be uploaded manually unless using `--use-gh-cli`
-- **Inline Images**: May need manual integration into comments
+- **Inline Images**: May need manual integration into comments (see [Images Migration](migration_images.md))
 - **Unhandled Links**: Some Bitbucket links require manual updates post-migration
 - **Unmapped Users**: Users without GitHub accounts should be mapped if they later join
 

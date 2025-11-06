@@ -1,0 +1,50 @@
+{
+  "format_version": "2.0",
+  "base_dir": "./test_migration",
+
+  "bitbucket": {
+    "workspace": "testworkspace",
+    "email": "test@example.com",
+    "token": "${BITBUCKET_TOKEN}"
+  },
+
+  "github": {
+    "owner": "testorg",
+    "token": "${GITHUB_TOKEN}"
+  },
+
+  "repositories": [
+    {
+      "bitbucket_repo": "testrepo",
+      "github_repo": "testrepo"
+    }
+  ],
+
+  "options": {
+    "skip_issues": false,
+    "skip_prs": false,
+    "skip_pr_as_issue": false,
+    "use_gh_cli": false
+  },
+
+  "user_mapping": {
+    "Test User": {
+      "github": "testuser",
+      "bitbucket_username": "testuser",
+      "display_name": "Test User"
+    }
+  },
+
+  "issue_type_mapping": {
+    "bug": "Bug",
+    "task": "Task"
+  },
+
+  "link_rewriting_config": {
+    "enabled": true,
+    "enable_notes": true,
+    "enable_markdown_context_awareness": true
+  },
+
+  "cross_repo_mappings_file": "cross_repo_mappings.json"
+}

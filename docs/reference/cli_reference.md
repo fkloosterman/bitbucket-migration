@@ -10,10 +10,9 @@ This comprehensive guide covers the command-line interface for the unified migra
 |------------|---------|-------------|
 | test-auth | Authentication testing | Before audit to verify API access |
 | audit | Repository analysis | Before migration to understand scope |
-| dry-run | Simulate migration | To validate setup without making changes |
 | migrate | Data migration | After audit and preparation |
+| cross-link | Post-migration link processing | After migration to update cross-repository links |
 | clean | Remove output files | After migration to clean up generated files |
-
 
 ---
 
@@ -131,8 +130,12 @@ migrate_bitbucket_to_github audit --workspace WORKSPACE --repo REPO --email EMAI
 | `--no-config` | Do not generate migration configuration template (default is to generate) | |
 | `--gh-owner` | GitHub username/org for config template | `myusername` |
 | `--gh-repo` | GitHub repository name for config template | `myproject` |
-| `--output-dir` | Output directory for audit files (reports, data files). Defaults to <workspace>_<repo> folder in current directory. | `myworkspace_myrepo` |
+| `--base-dir` | Base directory for migration workspace (v2.0 format only) | `./migration_workspace` |
 | `--debug` | Enable debug logging | |
+
+**New in v2.0:**
+- `--base-dir`: Specifies base directory for unified configuration format
+- Audit outputs organized in standardized subdirectories under base directory
 
 **Note:** Missing required arguments will be prompted for interactively.
 
@@ -264,48 +267,62 @@ Report saved to: bitbucket_audit_report.json
 
 ---
 
-## 🔄 Dry Run: `dry-run` Subcommand
+## 🔄 Dry Run Mode
 
-Simulates the migration process without making any changes to GitHub. This is the recommended first step after audit to validate your configuration and setup.
+Dry-run mode is available on both `migrate` and `cross-link` subcommands to simulate operations without making changes to GitHub. This is the recommended first step after audit to validate your configuration and setup.
 
-### Basic Syntax
+### Using Dry Run with Migrate
+
+#### Basic Syntax
 ```bash
-migrate_bitbucket_to_github dry-run --config CONFIG_FILE [OPTIONS]
+migrate_bitbucket_to_github migrate --config CONFIG_FILE --dry-run [OPTIONS]
 ```
 
-### Required Arguments
+#### Required Arguments
 | Argument | Description | Example |
 |----------|-------------|---------|
 | `--config` | Path to configuration JSON file | `migration_config.json` |
+| `--dry-run` | Enable dry-run mode (no changes made to GitHub) | |
 
-### Optional Arguments
+#### Optional Arguments
 
 **Note:** Missing required arguments will be prompted for interactively.
 
 | Argument | Description | Example |
 |----------|-------------|---------|
 | `--skip-issues` | Skip issue migration phase |
+| `--open-issues-only` | Only migrate open issues |
 | `--skip-prs` | Skip pull request migration phase |
+| `--open-prs-only` | Only migrate open PRs |
 | `--skip-pr-as-issue` | Skip migrating closed PRs as issues |
+| `--skip-milestones` | Skip milestone migration phase |
+| `--open-milestones-only` | Only migrate open milestones |
 | `--use-gh-cli` | Auto-upload attachments using GitHub CLI |
+| `--repo` / `--repos` | Migrate specific repository(es) (unified config only) | `--repo frontend` |
+| `--all` | Explicitly migrate all repositories (default for unified config) | |
 
 ### Examples
 
 #### Basic Dry Run (Recommended First Step)
 ```bash
-migrate_bitbucket_to_github dry-run --config migration_config.json
+migrate_bitbucket_to_github migrate --config migration_config.json --dry-run
 ```
 
 #### Dry Run with Selective Options
 ```bash
-migrate_bitbucket_to_github dry-run --config migration_config.json \
+migrate_bitbucket_to_github migrate --config migration_config.json --dry-run \
   --skip-pr-as-issue \
   --use-gh-cli
 ```
 
 #### Dry Run for Issues Only
 ```bash
-migrate_bitbucket_to_github dry-run --config migration_config.json --skip-prs
+migrate_bitbucket_to_github migrate --config migration_config.json --dry-run --skip-prs
+```
+
+#### Dry Run for Specific Repository (Unified Config)
+```bash
+migrate_bitbucket_to_github migrate --config migration_config.json --dry-run --repo frontend
 ```
 
 ### What It Does
@@ -371,12 +388,78 @@ Use this to verify:
   • PR migration strategy (which become PRs vs issues)
   • Exact GitHub issue/PR numbers that will be created
 
-After successful dry-run, use migrate subcommand to perform actual migration
+After successful dry-run, use migrate subcommand (without --dry-run) to perform actual migration
 ```
 
 ---
 
-## 🚀 Data Migration: `migrate` Subcommand
+## �� Cross-Link Processing: `cross-link` Subcommand
+
+Updates cross-repository links after migration for unified multi-repository configurations.
+
+### Basic Syntax
+```bash
+migrate_bitbucket_to_github cross-link --config CONFIG_FILE [OPTIONS]
+```
+
+### Required Arguments
+| Argument | Description | Example |
+|----------|-------------|---------|
+| `--config` | Path to configuration JSON file | `migration_config.json` |
+
+### Optional Arguments
+
+**Note:** Missing required arguments will be prompted for interactively.
+
+| Argument | Description | Example |
+|----------|-------------|---------|
+| `--repo` / `--repos` | Process specific repository(es) (unified config only) | `--repo frontend` |
+| `--all` | Explicitly process all repositories (default for unified config) | |
+| `--dry-run` | Enable dry-run mode (no changes made to GitHub) | |
+| `--debug` | Enable debug logging | |
+
+### Examples
+
+#### Basic Cross-Link Processing
+```bash
+migrate_bitbucket_to_github cross-link --config migration_config.json
+```
+
+#### Dry Run Cross-Link Processing
+```bash
+migrate_bitbucket_to_github cross-link --config migration_config.json --dry-run
+```
+
+#### Cross-Link Specific Repository
+```bash
+migrate_bitbucket_to_github cross-link --config migration_config.json --repo frontend
+```
+
+### What It Does
+
+- ✅ Updates cross-repository issue/PR references in migrated content
+- ✅ Rewrites Bitbucket links to point to corresponding GitHub issues/PRs
+- ✅ Processes comments, issue descriptions, and PR descriptions
+- ✅ Generates comprehensive cross-link processing report
+
+### What It Doesn't Do
+
+- ✗ No new issues or PRs created
+- ✗ No attachments uploaded
+- ✗ No user mappings changed
+
+### Generated Files
+
+#### `cross_link_report.md`
+Comprehensive markdown report with:
+- Cross-link processing statistics
+- Updated link mappings
+- Unhandled links and unmapped references
+- Troubleshooting recommendations
+
+---
+
+##  Data Migration: `migrate` Subcommand
 
 Migrates repository data from Bitbucket to GitHub with intelligent handling of different content types.
 
@@ -397,46 +480,56 @@ migrate_bitbucket_to_github migrate --config CONFIG_FILE [OPTIONS]
 | Argument | Description | Example |
 |----------|-------------|---------|
 | `--skip-issues` | Skip issue migration phase |
+| `--open-issues-only` | Only migrate open issues |
 | `--skip-prs` | Skip pull request migration phase |
+| `--open-prs-only` | Only migrate open PRs |
 | `--skip-pr-as-issue` | Skip migrating closed PRs as issues |
+| `--skip-milestones` | Skip milestone migration phase |
+| `--open-milestones-only` | Only migrate open milestones |
 | `--use-gh-cli` | Auto-upload attachments using GitHub CLI |
-| `--output-dir` | Directory for migration output files (logs, reports, attachments). Defaults to <workspace>_<repo> folder in current directory | `myworkspace_myrepo` |
-| `--cross-repo-mappings` | Path to shared cross-repository mappings file (JSON). Used for rewriting cross-repo links. | `cross_repo_mappings.json` |
-| `--update-links-only` | Phase 2 mode: Update cross-repository links only (assumes migration already complete) | |
+| `--repo` / `--repos` | Migrate specific repository(es) (unified config only) | `--repo frontend` |
+| `--all` | Explicitly migrate all repositories (default for unified config) | |
 | `--debug` | Enable debug logging | |
-| `--output-dir` | Directory for migration output files (logs, reports, attachments). Defaults to <workspace>_<repo> folder in current directory | `myworkspace_myrepo` |
-| `--cross-repo-mappings` | Path to shared cross-repository mappings file (JSON). Used for rewriting cross-repo links. | `cross_repo_mappings.json` |
-| `--update-links-only` | Phase 2 mode: Update cross-repository links only (assumes migration already complete) | |
-| `--debug` | Enable debug logging | |
+
+**New in v2.0:**
+- `--repo` and `--repos`: Repository selection for unified configuration migrations
+- `--all`: Explicit flag for migrating all repositories in unified config
+- Directory management handled automatically via base directory in config
+- Additional filtering options for issues, PRs, and milestones
 
 ### Examples
 
 #### Full Migration (Basic)
 ```bash
-migrate_bitbucket_to_github --config migration_config.json
+migrate_bitbucket_to_github migrate --config migration_config.json
 ```
 
 #### Issues Only Migration
 ```bash
-migrate_bitbucket_to_github --config migration_config.json --skip-prs
+migrate_bitbucket_to_github migrate --config migration_config.json --skip-prs
 ```
 
 #### Pull Requests Only Migration
 ```bash
-migrate_bitbucket_to_github --config migration_config.json --skip-issues
+migrate_bitbucket_to_github migrate --config migration_config.json --skip-issues
 ```
 
 #### Migration with Automatic Attachment Upload
 ```bash
 # Requires GitHub CLI installed and authenticated
-migrate_bitbucket_to_github --config migration_config.json --use-gh-cli
+migrate_bitbucket_to_github migrate --config migration_config.json --use-gh-cli
 ```
 
 #### Advanced Migration with Selective Options
 ```bash
-migrate_bitbucket_to_github --config migration_config.json \
+migrate_bitbucket_to_github migrate --config migration_config.json \
   --skip-pr-as-issue \
   --use-gh-cli
+```
+
+#### Migrate Specific Repository (Unified Config)
+```bash
+migrate_bitbucket_to_github migrate --config migration_config.json --repo frontend
 ```
 
 #### Batch Migration Script
@@ -535,10 +628,19 @@ migrate_bitbucket_to_github clean [OPTIONS]
 ### Optional Arguments
 | Argument | Description | Example |
 |----------|-------------|---------|
-| `--all` | Remove all outputs including the configuration file | |
-| `--output-dir` | Clean specific output directory (default: current directory). Use this to clean outputs from a specific repository migration. | `myworkspace_myrepo` |
-| `--workspace` | Bitbucket workspace name - used to find default output directory | `myworkspace` |
-| `--repo` | Repository name - used to find default output directory | `myrepo` |
+| `--config` | Path to migration config file to determine base directory | `migration_config.json` |
+| `--base-dir` | Base directory to clean (default: current directory) | `./migration_workspace` |
+| `--subcommand` | Clean output of select commands (audit, migrate, cross-link) | `--subcommand audit migrate` |
+| `--reset` | Clean everything including config, cross-repo mappings, and file registry | |
+| `--workspace` | Filter by workspace name(s) (requires file tracking) | `--workspace myworkspace` |
+| `--repo` / `--repos` | Filter by repository name(s) (requires file tracking) | `--repo frontend` |
+| `--dry-run` | Preview what would be deleted without actually deleting | |
+
+**New in v2.0:**
+- `--subcommand`: Selective cleaning by subcommand
+- `--reset`: Complete base directory reset for unified configuration migrations
+- `--workspace`, `--repo`, `--repos`: File tracking filters for granular cleanup
+- `--dry-run`: Preview mode for safe cleanup operations
 
 ### Examples
 
@@ -554,6 +656,27 @@ migrate_bitbucket_to_github clean
 migrate_bitbucket_to_github clean --all
 ```
 
+#### Selective Cleaning (v2.0)
+```bash
+# Clean only audit outputs
+migrate_bitbucket_to_github clean --subcommand audit
+
+# Clean only migration outputs
+migrate_bitbucket_to_github clean --subcommand migrate
+
+# Clean multiple subcommands
+migrate_bitbucket_to_github clean --subcommand audit migrate cross-link
+
+# Reset base directory for unified config
+migrate_bitbucket_to_github clean --reset
+
+# Preview cleanup without deleting
+migrate_bitbucket_to_github clean --dry-run
+
+# Clean specific repository files (with file tracking)
+migrate_bitbucket_to_github clean --workspace myworkspace --repo frontend
+```
+
 #### Cleanup After Migration
 ```bash
 # After successful migration and verification
@@ -565,22 +688,20 @@ migrate_bitbucket_to_github clean --all
 
 ### What It Removes
 
-#### Default Mode (without `--all`)
-- `bitbucket_audit_report.json`
-- `bitbucket_audit_report.md`
-- `bitbucket_issues_detail.json`
-- `bitbucket_prs_detail.json`
-- `migration_log.txt`
-- `migration_dry_run_log.txt`
-- `migration_mapping.json`
-- `migration_report.md`
-- `migration_report_dry_run.md`
-- `migration_mapping_partial.json`
-- `attachments_temp/` (directory)
+#### Default Mode (without flags)
+- All generated files except configuration
+- Audit reports, migration logs, temporary directories
 
-#### With `--all` Flag
-- All of the above **plus**:
-- `migration_config.json`
+#### Selective Cleaning (v2.0)
+- `--subcommand audit`: Audit reports and outputs only
+- `--subcommand migrate`: Migration reports and outputs only
+- `--subcommand cross-link`: Cross-link reports and outputs only
+- `--reset`: Complete base directory reset for unified config (includes config and mappings)
+
+#### With File Tracking Filters
+- `--workspace`: Filter by Bitbucket workspace name
+- `--repo` / `--repos`: Filter by repository name(s)
+- `--dry-run`: Preview mode (no files deleted)
 
 ### Expected Output
 ```
@@ -619,7 +740,7 @@ vim user_mapping_template.txt
 ### Phase 2: Pre-Migration Validation
 ```bash
 # 5. Test migration setup (dry run)
-migrate_bitbucket_to_github dry-run --config migration_config.json
+migrate_bitbucket_to_github migrate --config migration_config.json --dry-run
 
 # 6. Review dry-run results
 cat migration_report_dry_run.md
@@ -633,7 +754,7 @@ cat migration_report_dry_run.md
 ### Phase 3: Actual Migration
 ```bash
 # 8. Run the migration
-migrate_bitbucket_to_github --config migration_config.json
+migrate_bitbucket_to_github migrate --config migration_config.json
 
 # 9. Review migration results
 cat migration_report.md
@@ -664,18 +785,21 @@ migrate_bitbucket_to_github clean
 # For straightforward migrations with minimal attachments
 migrate_bitbucket_to_github test-auth --workspace myteam --repo myproject --email user@example.com --gh-owner myuser --gh-repo myproject
 migrate_bitbucket_to_github audit --workspace myteam --repo myproject --email user@example.com --gh-owner myuser --gh-repo myproject
-migrate_bitbucket_to_github dry-run --config migration_config.json
+migrate_bitbucket_to_github migrate --config migration_config.json --dry-run
 migrate_bitbucket_to_github migrate --config migration_config.json
 ```
-
 ### Use Case 2: Large Repository with Many Attachments
 ```bash
 # For repositories with many/large attachments
 migrate_bitbucket_to_github test-auth --workspace myteam --repo large-repo --email user@example.com --gh-owner myuser --gh-repo large-repo
+
 migrate_bitbucket_to_github audit --workspace myteam --repo large-repo --email user@example.com --gh-owner myuser --gh-repo large-repo
 
 # Install and setup GitHub CLI for auto-upload
 gh auth login
+
+# Run dry-run first to validate setup
+migrate_bitbucket_to_github migrate --config migration_config.json --dry-run --use-gh-cli
 
 # Run migration with auto-upload
 migrate_bitbucket_to_github migrate --config migration_config.json --use-gh-cli
@@ -686,11 +810,13 @@ migrate_bitbucket_to_github migrate --config migration_config.json --use-gh-cli
 # When you only want to migrate issues, not PRs
 migrate_bitbucket_to_github test-auth --workspace myteam --repo issues-only --email user@example.com --gh-owner myuser --gh-repo issues-only
 migrate_bitbucket_to_github audit --workspace myteam --repo issues-only --email user@example.com --gh-owner myuser --gh-repo issues-only
+migrate_bitbucket_to_github migrate --config migration_config.json --dry-run --skip-prs
 migrate_bitbucket_to_github migrate --config migration_config.json --skip-prs
 ```
 
 ### Use Case 4: Enterprise Migration with Multiple Repositories
 ```bash
+# For legacy per-repo configurations
 #!/bin/bash
 # enterprise_migration.sh
 
@@ -709,11 +835,43 @@ for repo in $(cat repo_list.txt); do
   # Edit configuration with enterprise settings
   # ... manual step: edit migration_config.json ...
 
+  # Dry run first
+  migrate_bitbucket_to_github migrate --config migration_config.json --dry-run --use-gh-cli
+
   # Migrate
   migrate_bitbucket_to_github migrate --config migration_config.json --use-gh-cli
 
   echo "Completed migration for $repo"
 done
+```
+
+### Use Case 5: Unified Configuration Multi-Repository Migration (v2.0)
+```bash
+#!/bin/bash
+# unified_multi_repo_migration.sh
+
+# Phase 0: Audit and create unified config
+migrate_bitbucket_to_github audit \
+  --workspace myworkspace \
+  --repo repo-a --repo repo-b --repo repo-c \
+  --email user@example.com \
+  --gh-owner myorg \
+  --base-dir ./migration_workspace
+
+# Edit the generated migration_config.json to fix user mappings
+# ... manual step ...
+
+# Phase 1: Dry run all repositories
+migrate_bitbucket_to_github migrate --config migration_config.json --dry-run
+
+# Phase 1: Migrate all repositories
+migrate_bitbucket_to_github migrate --config migration_config.json
+
+# Phase 2: Update cross-repository links
+migrate_bitbucket_to_github cross-link --config migration_config.json
+
+# Clean up
+migrate_bitbucket_to_github clean --reset
 ```
 
 ---
@@ -750,7 +908,7 @@ migrate_bitbucket_to_github migrate --config config.json --skip-issues  # PRs on
 ```bash
 # The scripts handle rate limiting automatically, but for very slow connections:
 # - Run during off-peak hours
-# - Use dry-run subcommand first to estimate timing
+# - Use migrate --dry-run first to estimate timing
 # - Consider running audit and migration separately
 ```
 
@@ -770,7 +928,7 @@ migrate_bitbucket_to_github migrate --config config.json --skip-issues  # PRs on
 ## 💡 Tips and Best Practices
 
 ### CLI Efficiency
-- Use `dry-run` subcommand first to validate your setup
+- Use `migrate --dry-run` first to validate your setup
 - Run scripts during off-peak hours for large repositories
 - Use `--use-gh-cli` for repositories with many attachments
 - Keep the `attachments_temp/` directory until migration is verified

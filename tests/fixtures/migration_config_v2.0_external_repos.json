@@ -1,0 +1,47 @@
+{
+  "format_version": "2.0",
+  "base_dir": "./test_migration",
+
+  "repositories": [
+    {
+      "bitbucket_repo": "repo1",
+      "github_repo": "repo1"
+    }
+  ],
+
+  "external_repositories": [
+    {
+      "bitbucket_workspace": "external_workspace",
+      "bitbucket_repo": "external_repo",
+      "github_owner": "external_org",
+      "github_repo": "external_repo"
+    }
+  ],
+
+  "bitbucket": {
+    "workspace": "testworkspace",
+    "email": "test@example.com",
+    "token": "${BITBUCKET_TOKEN}"
+  },
+
+  "github": {
+    "owner": "testorg",
+    "token": "${GITHUB_TOKEN}"
+  },
+
+  "options": {
+    "skip_issues": false,
+    "skip_prs": false,
+    "skip_pr_as_issue": false,
+    "use_gh_cli": false
+  },
+
+  "user_mapping": {
+    "Test User": "testuser"
+  },
+
+  "link_rewriting": {
+    "enabled": true,
+    "cross_repo_links": true
+  }
+}

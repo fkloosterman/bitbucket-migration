@@ -4,6 +4,7 @@
 - **@Mentions**: Mapped to GitHub usernames using `user_mapping`.
 - **Account IDs**: Automatically resolved by cross-referencing with issue/PR participants, or via Bitbucket API lookup.
 - **Display Names**: Used when Bitbucket username is not available.
+- **Enhanced User Mapping**: Supports detailed mapping configurations with bitbucket_username, display_name, and github fields.
 
 ## Formats Supported
 The script handles multiple @mention formats:
@@ -32,6 +33,8 @@ The script handles multiple @mention formats:
    - Bitbucket API lookup (fallback if not found)
    - Display name only (if username unavailable)
 3. Map username/display name to GitHub via `user_mapping`
-4. If mapped: Replace with GitHub @mention
-5. If not mapped but have display name: Use readable format
-6. If not mapped and no display name: Preserve with note
+4. Support enhanced mapping formats with bitbucket_username, display_name, and github fields
+5. If mapped: Replace with GitHub @mention
+6. If not mapped but have display name: Use readable format
+7. If not mapped and no display name: Preserve with note
+8. Handle null mappings (users with no GitHub account)

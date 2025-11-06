@@ -1,0 +1,32 @@
+{
+  "base_dir": "./test_migration",
+
+  "bitbucket": {
+    "workspace": "testworkspace",
+    "email": "test@example.com",
+    "token": "${BITBUCKET_TOKEN}"
+  },
+
+  "github": {
+    "owner": "testorg",
+    "token": "${GITHUB_TOKEN}"
+  },
+
+  "repositories": [
+    {
+      "bitbucket_repo": "testrepo",
+      "github_repo": "testrepo"
+    }
+  ],
+
+  "options": {
+    "skip_issues": false,
+    "skip_prs": false,
+    "skip_pr_as_issue": false,
+    "use_gh_cli": false
+  },
+
+  "user_mapping": {
+    "Test User": "testuser"
+  }
+}

@@ -20,9 +20,9 @@ Comments are added to issues/PRs with attribution:
 ## What Is NOT Preserved
 - ❌ **Comment Author**: Shows as migration account.
 - ❌ **Comment Date**: Shows as migration date.
-- ❌ **Comment Edit History**: Only final version migrated.
+- ❌ **Comment Edit History**: Only final version migrated. Content changes are noted in the comment body but edit history is not preserved.
 - ❌ **Threaded Replies**: For PRs migrated as issues, replies are flattened with notes. For PRs migrated as PRs, inline review comments support threading.
-- ❌ **Inline Code Comments**: PR code review comments are not migrated (except for threaded support in PRs).
+- ❌ **Inline Code Comments**: PR code review comments are migrated as regular comments with code context information when inline attachment fails.
 - ❌ **Resolved/Unresolved Status**: Comment resolution status not preserved.
 
 ## Special Handling

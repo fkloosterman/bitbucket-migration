@@ -4,21 +4,65 @@ This file defines how the migration tool connects to Bitbucket and GitHub, and h
 
 ---
 
-## 🔧 File Overview
+## 🔧 Configuration Format
 
-`migration_config.json` is generated automatically when you run the audit script. You can edit it before running the actual migration.
+The migration tool uses a unified configuration format (v2.0) that supports both single and multiple repository migrations.
+
+**Key Features:**
+- Single configuration format for all migration scenarios
+- Required `"format_version": "2.0"` field
+- Base directory management with standard subdirectories
+- Options grouped in `options` object
+- Template variable support (`{workspace}`, `{repo}`)
+
+---
+
+## 🔧 Configuration File
+
+The configuration file is typically named `config.json` and lives at the root of your migration workspace.
 
 ```json
 {
+  "format_version": "2.0",
+  "base_dir": "./migration_workspace",
+
   "bitbucket": {
     "workspace": "myworkspace",
-    "repo": "myrepo",
-    "email": "you@example.com"
+    "email": "user@example.com",
+    "token": "${BITBUCKET_TOKEN}"
   },
+
   "github": {
-    "owner": "your-github-username",
-    "repo": "myrepo"
+    "owner": "myorg",
+    "token": "${GITHUB_TOKEN}"
   },
+
+  "repositories": [
+    {
+      "bitbucket_repo": "repo1",
+      "github_repo": "repo1"
+    },
+    {
+      "bitbucket_repo": "repo2",
+      "github_repo": "repo2-renamed"
+    }
+  ],
+
+  "external_repositories": [
+    {
+      "bitbucket_repo": "shared-lib",
+      "github_repo": "shared-lib",
+      "github_owner": "other-org"
+    }
+  ],
+
+  "options": {
+    "skip_issues": false,
+    "skip_prs": false,
+    "skip_pr_as_issue": false,
+    "use_gh_cli": false
+  },
+
   "user_mapping": {
     "Alice Smith": {
       "github": "alice-smith-gh",
@@ -32,15 +76,13 @@ This file defines how the migration tool connects to Bitbucket and GitHub, and h
     },
     "Unknown (deleted user)": null
   },
+
   "issue_type_mapping": {
     "bug": "Bug",
     "task": "Task",
     "enhancement": "Feature Request"
   },
-  "skip_issues": false,
-  "skip_prs": false,
-  "skip_pr_as_issue": false,
-  "use_gh_cli": false,
+
   "link_rewriting_config": {
     "enabled": true,
     "enable_notes": true,
@@ -59,33 +101,121 @@ This file defines how the migration tool connects to Bitbucket and GitHub, and h
       "default": " *(migrated link)*"
     }
   },
-  "output_dir": ".",
+
   "cross_repo_mappings_file": "cross_repo_mappings.json"
 }
 ```
 
 ---
 
-## 🔊 Key Fields
+## 🔧 Configuration Fields
 
-| Section               | Key                  | Description                                            |
-| --------------------- | -------------------- | ------------------------------------------------------ |
-| `bitbucket.workspace` | Workspace name       | Bitbucket Cloud workspace containing the repo          |
-| `bitbucket.repo`      | Repository name      | Name of the Bitbucket repo                             |
-| `bitbucket.email`     | Your Atlassian email | Required for API authentication                        |
-| `bitbucket.token`     | API token            | Set via BITBUCKET_TOKEN env var or .env file; see [API Tokens](api_tokens.md) |
-| `github.owner`        | GitHub user/org name | Destination owner for repository                       |
-| `github.repo`         | Repository name      | Destination repo name (must exist and be empty)        |
-| `github.token`        | GitHub PAT           | Set in config or via GITHUB_TOKEN env var; must include `repo` scope |
-| `user_mapping`        | Mapping table        | Links Bitbucket display names/usernames to GitHub usernames (enhanced format) |
-| `issue_type_mapping`  | Issue type mapping   | Maps Bitbucket issue types to GitHub issue types       |
-| `skip_issues`         | Skip issues          | Skip migrating issues if true                          |
-| `skip_prs`            | Skip PRs             | Skip migrating pull requests if true                   |
-| `skip_pr_as_issue`    | Skip PR→issue        | Skip migrating closed PRs as issues if true            |
-| `use_gh_cli`          | Use GitHub CLI       | Use GitHub CLI for attachment uploads if true          |
-| `link_rewriting_config` | Link rewriting       | Configuration for link rewriting behavior and templates |
-| `output_dir`          | Output directory     | Directory for migration logs, reports, and attachments |
-| `cross_repo_mappings_file` | Cross-repo mappings | Path to shared mappings file for multi-repo migrations |
+### Required Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `format_version` | string | **Must be "2.0"** - identifies the configuration format |
+| `bitbucket.workspace` | string | Bitbucket Cloud workspace name |
+| `bitbucket.email` | string | Your Atlassian email for API authentication |
+| `github.owner` | string | GitHub user/org name for destination repositories |
+| `repositories` | array | List of repositories to migrate |
+
+### Optional Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `base_dir` | string | `"."` | Base directory for migration workspace |
+| `bitbucket.token` | string | - | Bitbucket API token (or use BITBUCKET_TOKEN env var) |
+| `github.token` | string | - | GitHub PAT (or use GITHUB_TOKEN env var) |
+| `external_repositories` | array | `[]` | Repositories referenced but not migrated |
+| `options` | object | `{}` | Migration control options |
+| `user_mapping` | object | `{}` | Bitbucket to GitHub user mapping |
+| `issue_type_mapping` | object | `{}` | Bitbucket issue types to GitHub issue types |
+| `link_rewriting_config` | object | `{}` | Link rewriting behavior and templates |
+| `cross_repo_mappings_file` | string | `"cross_repo_mappings.json"` | Path to shared mappings file |
+
+### Repository Configuration
+
+Each repository in the `repositories` array:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `bitbucket_repo` | string | Yes | Name of the Bitbucket repository |
+| `github_repo` | string | Yes | Name of the destination GitHub repository |
+
+### External Repository Configuration
+
+External repositories are referenced in links but not migrated:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `bitbucket_repo` | string | Yes | Name of the Bitbucket repository |
+| `github_repo` | string | No | Name of the GitHub repository (if null, links are preserved) |
+| `github_owner` | string | No | GitHub owner/org (defaults to main config) |
+
+### Options Configuration
+
+Migration control options grouped in the `options` object:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `skip_issues` | boolean | `false` | Skip migrating issues |
+| `skip_prs` | boolean | `false` | Skip migrating pull requests |
+| `skip_pr_as_issue` | boolean | `false` | Skip migrating closed PRs as issues |
+| `use_gh_cli` | boolean | `false` | Use GitHub CLI for attachment uploads |
+
+---
+
+## 📁 Directory Structure
+
+The migration tool uses a standardized directory structure based on the `base_dir` setting:
+
+```
+{base_dir}/                    # Base directory (defaults to ".")
+├── config.json                # Configuration file
+├── cross_repo_mappings.json   # Shared cross-repository mappings
+├── audit/                     # Audit command outputs
+│   └── {workspace}_{repo}/    # Per-repository audit results
+├── dry-run/                   # Dry-run command outputs
+│   └── {workspace}_{repo}/    # Per-repository dry-run results
+└── migrate/                   # Migration command outputs
+    └── {workspace}_{repo}/    # Per-repository migration results
+```
+
+**Key Points:**
+- Config file lives at `{base_dir}/config.json`
+- Each subcommand creates its own subdirectory
+- Outputs are organized by workspace and repository
+- Cross-repository mappings file is shared at the base level
+
+---
+
+## 🔧 Configuration Validation
+
+The tool validates configurations and provides clear error messages:
+
+### Format Version Validation
+```bash
+Error: Unsupported config format. Expected version 2.0, got 1.0.
+See docs/reference/migration_config.md for current format.
+```
+
+### Required Fields Validation
+```bash
+Error: Config must have 'repositories' array.
+See docs/reference/migration_config.md for format.
+```
+
+### Legacy Format Detection
+```bash
+Error: Invalid config: 'repo' field not allowed in bitbucket/github sections.
+Use 'repositories' array instead.
+```
+
+### Troubleshooting
+- **"format_version must be 2.0"**: Update your config to use the v2.0 format
+- **"'repositories' array required"**: Convert from per-repo format to unified format
+- **"'repo' field not allowed"**: Remove `repo` fields from `bitbucket`/`github` sections
 
 ---
 
@@ -222,7 +352,7 @@ This file contains mappings from Bitbucket repositories to their migrated GitHub
 - **Phase 1**: Migrate repositories and save mappings to the shared file
 - **Phase 2**: Update cross-repository links using the complete mappings
 
-Use the `--update-links-only` flag for Phase 2 operations.
+Use the `cross-link` subcommand for Phase 2 operations.
 
 ---
 
@@ -274,25 +404,45 @@ These boolean flags control various aspects of the migration process:
 - `skip_pr_as_issue`: Skip migrating closed/merged PRs as issues
 - `use_gh_cli`: Use GitHub CLI for attachment uploads instead of API
 
-## Output Directory
+## 📋 Migration Workflow
 
-Specify where migration outputs (logs, reports, attachments) are stored:
+### Phase 0: Setup and Audit
 
-```json
-"output_dir": "myworkspace_myrepo"
-```
+1. **Create unified config** with `format_version: "2.0"`
+2. **Run audit** to analyze repositories and generate user mappings
+3. **Review and edit** the config file with correct user mappings
 
-- Defaults to `{workspace}_{repo}` format
-- Created automatically if it doesn't exist
-- Can be overridden with `--output-dir` CLI flag
+### Phase 1: Migrate Repositories
+
+1. **Migrate repositories** one by one or all at once
+2. **Cross-repo mappings** are automatically saved to `cross_repo_mappings.json`
+3. **Links within migrated repos** are rewritten immediately
+
+### Phase 2: Update Cross-Repository Links
+
+1. **Run `migrate_bitbucket_to_github cross-link`** to rewrite deferred cross-repo links
+2. **All repositories** use the complete mappings file for accurate link rewriting
+
+### Directory Organization
+
+The tool automatically organizes outputs in standardized subdirectories:
+
+- **Audit outputs**: `{base_dir}/audit/{workspace}_{repo}/`
+- **Dry-run outputs**: `{base_dir}/dry-run/{workspace}_{repo}/`
+- **Migration outputs**: `{base_dir}/migrate/{workspace}_{repo}/`
+
+No manual `output_dir` configuration needed - the tool handles this automatically.
 
 ## 💡 Tips
 
-* Use the audit report (`audit_report.md`) to find active users.
-* Focus mapping on high-activity users.
-* If unsure, set to `null` — the tool will still credit them by name in issue text.
-* For multi-repo migrations, use the same `cross_repo_mappings_file` across all repositories.
+* Use the audit report (`audit_report.md`) to find active users and issue types.
+* Focus mapping on high-activity users first.
+* If unsure about a user mapping, set to `null` — the tool will still credit them by name.
+* For multi-repo migrations, the `cross_repo_mappings_file` is automatically managed.
 * Customize `note_templates` to match your organization's style preferences.
+* The `format_version: "2.0"` field is required for all new configurations.
+* Use environment variables for tokens instead of storing them in the config file.
+* External repositories help with accurate cross-repo link rewriting.
 
 ---
 

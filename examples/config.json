@@ -1,0 +1,82 @@
+{
+  "format_version": "2.0",
+  "base_dir": "./migration_workspace",
+
+  "bitbucket": {
+    "workspace": "myworkspace",
+    "email": "user@example.com",
+    "token": "${BITBUCKET_TOKEN}"
+  },
+
+  "github": {
+    "owner": "myorg",
+    "token": "${GITHUB_TOKEN}"
+  },
+
+  "repositories": [
+    {
+      "bitbucket_repo": "frontend",
+      "github_repo": "frontend"
+    },
+    {
+      "bitbucket_repo": "backend",
+      "github_repo": "backend-api"
+    }
+  ],
+
+  "external_repositories": [
+    {
+      "_comment": "Shared library already migrated",
+      "bitbucket_repo": "shared-lib",
+      "github_repo": "shared-lib"
+    }
+  ],
+
+  "options": {
+    "skip_issues": false,
+    "skip_prs": false,
+    "skip_pr_as_issue": false,
+    "use_gh_cli": false
+  },
+
+  "user_mapping": {
+    "Alice Smith": {
+      "github": "alice-smith-gh",
+      "bitbucket_username": "asmith",
+      "display_name": "Alice Smith"
+    },
+    "Bob Jones": {
+      "github": "bjones",
+      "bitbucket_username": "bjones", 
+      "display_name": "Bob Jones"
+    },
+    "Unknown (deleted user)": null
+  },
+
+  "issue_type_mapping": {
+    "bug": "Bug",
+    "task": "Task",
+    "enhancement": "Feature Request"
+  },
+
+  "link_rewriting_config": {
+    "enabled": true,
+    "enable_notes": true,
+    "enable_markdown_context_awareness": true,
+    "note_templates": {
+      "issue_link": " *(was [BB #{bb_num}]({bb_url}))*",
+      "pr_link": " *(was [BB PR #{bb_num}]({bb_url}))*",
+      "commit_link": " *(was [Bitbucket]({bb_url}))*",
+      "branch_link": " *(was [Bitbucket]({bb_url}))*",
+      "compare_link": " *(was [Bitbucket]({bb_url}))*",
+      "repo_home_link": "",
+      "cross_repo_link": " *(was [Bitbucket]({bb_url}))*",
+      "short_issue_ref": " *(was BB `#{bb_num}`)*",
+      "pr_ref": " *(was BB PR `#{bb_num}`)*",
+      "mention": "",
+      "default": " *(migrated link)*"
+    }
+  },
+
+  "cross_repo_mappings_file": "cross_repo_mappings.json"
+}

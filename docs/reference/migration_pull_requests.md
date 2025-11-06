@@ -57,6 +57,11 @@ GitHub displays:
 - ✅ **Commit Count**: Noted in description.
 - ✅ **Participant Count**: Noted in description.
 - ✅ **All Comments**: General comments, inline code comments, and PR updates are migrated as GitHub comments, preserving the timeline.
+- ✅ **Inline Code Comments**: Migrated as regular comments with code context information when inline attachment fails.
+- ✅ **PR Activity**: Status changes, approvals, and updates are migrated as comments.
+- ✅ **Reviewers**: Listed in PR description but not set as official reviewers.
+- ✅ **Attachments**: Downloaded and uploaded to GitHub.
+- ✅ **Inline Images**: Extracted and uploaded to GitHub.
 
 ## What Is NOT Preserved
 - ❌ **PR Numbers**: PRs share GitHub's issue numbering sequence, so numbers may change.
@@ -65,6 +70,8 @@ GitHub displays:
 - ❌ **Reviewers**: Cannot be set via API during creation (noted in description).
 - ❌ **Approval Status**: PR reviews cannot be migrated (noted in description).
 - ❌ **Diff View**: For PRs migrated as issues, no interactive diff available.
+- ❌ **Inline Review Comments**: Migrated as regular comments with code context when inline attachment fails.
+- ❌ **PR Review Threads**: Not preserved as GitHub review threads.
 
 ## Handling Non-Migratable Information
 - **Merged/Declined PRs**: Migrated as closed issues to preserve metadata without risking re-merge.

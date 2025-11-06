@@ -1,0 +1,84 @@
+{
+  "format_version": "2.0",
+  "base_dir": "./multi_repo_migration",
+
+  "bitbucket": {
+    "workspace": "testworkspace",
+    "email": "test@example.com",
+    "token": "${BITBUCKET_TOKEN}"
+  },
+
+  "github": {
+    "owner": "testorg",
+    "token": "${GITHUB_TOKEN}"
+  },
+
+  "repositories": [
+    {
+      "bitbucket_repo": "frontend",
+      "github_repo": "frontend-app"
+    },
+    {
+      "bitbucket_repo": "backend",
+      "github_repo": "backend-api"
+    },
+    {
+      "bitbucket_repo": "shared-lib",
+      "github_repo": "shared-library"
+    }
+  ],
+
+  "external_repositories": [
+    {
+      "_comment": "Already migrated in previous run",
+      "bitbucket_repo": "legacy-code",
+      "github_repo": "legacy-code",
+      "github_owner": "legacy-org"
+    }
+  ],
+
+  "options": {
+    "skip_issues": false,
+    "skip_prs": false,
+    "skip_pr_as_issue": false,
+    "use_gh_cli": false
+  },
+
+  "user_mapping": {
+    "Alice Developer": {
+      "github": "alice-dev",
+      "bitbucket_username": "alice",
+      "display_name": "Alice Developer"
+    },
+    "Bob Engineer": {
+      "github": "bob-eng",
+      "bitbucket_username": "bob",
+      "display_name": "Bob Engineer"
+    },
+    "Charlie Tester": {
+      "github": "charlie-test",
+      "bitbucket_username": "charlie",
+      "display_name": "Charlie Tester"
+    }
+  },
+
+  "issue_type_mapping": {
+    "bug": "Bug",
+    "enhancement": "Enhancement",
+    "task": "Task",
+    "story": "Feature"
+  },
+
+  "link_rewriting_config": {
+    "enabled": true,
+    "enable_notes": true,
+    "enable_markdown_context_awareness": true,
+    "note_templates": {
+      "issue_link": " *(was [BB #{bb_num}]({bb_url}))*",
+      "pr_link": " *(was [BB PR #{bb_num}]({bb_url}))*",
+      "cross_repo_link": " *(was [Bitbucket]({bb_url}))*"
+    }
+  },
+
+  "cross_repo_mappings_file": "cross_repo_mappings.json"
+}

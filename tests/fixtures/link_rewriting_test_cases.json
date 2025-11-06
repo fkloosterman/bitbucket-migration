@@ -1,0 +1,228 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "description": "Comprehensive baseline test dataset for link rewriting functionality",
+    "created": "2025-10-26",
+    "test_count": 100
+  },
+  "issue_links": [
+    {
+      "id": "issue_001",
+      "input": "https://bitbucket.org/workspace/repo/issues/123",
+      "description": "Standard issue link",
+      "mappings": {
+        "issues": {"123": 456}
+      },
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    },
+    {
+      "id": "issue_002",
+      "input": "https://bitbucket.org/workspace/repo/issues/789/some-issue-title",
+      "description": "Issue link with title slug",
+      "mappings": {
+        "issues": {"789": 1001}
+      },
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    },
+    {
+      "id": "issue_003",
+      "input": "https://bitbucket.org/workspace/repo/issues/999",
+      "description": "Unmapped issue link",
+      "mappings": {
+        "issues": {}
+      },
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    },
+    {
+      "id": "issue_004",
+      "input": "https://bitbucket.org/workspace/repo/issues/42#comment-12345",
+      "description": "Issue link with comment fragment",
+      "mappings": {
+        "issues": {"42": 100}
+      },
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    },
+    {
+      "id": "issue_005",
+      "input": "https://bitbucket.org/my-workspace/my-repo/issues/1",
+      "description": "Issue link with hyphens in workspace/repo",
+      "mappings": {
+        "issues": {"1": 5}
+      },
+      "config": {
+        "bb_workspace": "my-workspace",
+        "bb_repo_slug": "my-repo",
+        "gh_owner": "my-org",
+        "gh_repo": "my-repo"
+      }
+    }
+  ],
+  "pr_links": [
+    {
+      "id": "pr_001",
+      "input": "https://bitbucket.org/workspace/repo/pull-requests/45",
+      "description": "Standard PR link",
+      "mappings": {
+        "prs": {"45": 200}
+      },
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    },
+    {
+      "id": "pr_002",
+      "input": "https://bitbucket.org/workspace/repo/pull-requests/67/feature-branch",
+      "description": "PR link with branch slug",
+      "mappings": {
+        "prs": {"67": 201}
+      },
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    },
+    {
+      "id": "pr_003",
+      "input": "https://bitbucket.org/workspace/repo/pull-requests/100",
+      "description": "Unmapped PR link",
+      "mappings": {
+        "prs": {}
+      },
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    }
+  ],
+  "commit_links": [
+    {
+      "id": "commit_001",
+      "input": "https://bitbucket.org/workspace/repo/commits/abc123def456",
+      "description": "Standard commit link",
+      "mappings": {},
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    }
+  ],
+  "short_issue_refs": [
+    {
+      "id": "short_ref_001",
+      "input": "#123 mentioned in text",
+      "description": "Simple short reference",
+      "mappings": {
+        "issues": {"123": 456}
+      },
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    }
+  ],
+  "branch_links": [
+    {
+      "id": "branch_001",
+      "input": "https://bitbucket.org/workspace/repo/branch/main",
+      "description": "Standard branch link",
+      "mappings": {},
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    },
+    {
+      "id": "branch_002",
+      "input": "https://bitbucket.org/workspace/repo/commits/branch/main",
+      "description": "Branch link via commits path",
+      "mappings": {},
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    },
+    {
+      "id": "branch_003",
+      "input": "https://bitbucket.org/workspace/repo/branch/feature/my-branch",
+      "description": "Branch link with slash in name",
+      "mappings": {},
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    },
+    {
+      "id": "branch_004",
+      "input": "https://bitbucket.org/workspace/repo/commits/branch/feature/my-branch",
+      "description": "Branch link with slash via commits path",
+      "mappings": {},
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    },
+    {
+      "id": "branch_005",
+      "input": "https://bitbucket.org/workspace/repo/branch/fix%23123",
+      "description": "Branch link with special characters",
+      "mappings": {},
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    },
+    {
+      "id": "branch_006",
+      "input": "https://bitbucket.org/workspace/repo/commits/branch/branch%20with%20spaces",
+      "description": "Branch link with encoded spaces",
+      "mappings": {},
+      "config": {
+        "bb_workspace": "workspace",
+        "bb_repo_slug": "repo",
+        "gh_owner": "owner",
+        "gh_repo": "repo"
+      }
+    }
+  ]
+}
