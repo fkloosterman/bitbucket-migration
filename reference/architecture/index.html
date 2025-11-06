@@ -923,6 +923,24 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#audit-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audit Components
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      Commands
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#configuration-and-utilities" class="md-nav__link">
     <span class="md-ellipsis">
       Configuration and Utilities
@@ -1055,6 +1073,24 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#audit-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audit Components
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      Commands
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#configuration-and-utilities" class="md-nav__link">
     <span class="md-ellipsis">
       Configuration and Utilities
@@ -1111,24 +1147,33 @@
 </ul>
 <h2 id="high-level-architecture">High-Level Architecture</h2>
 <pre class="mermaid"><code>graph TD
-    A[CLI Entry Point] --&gt; B[AuditOrchestrator]
-    A --&gt; C[MigrationOrchestrator]
-    B --&gt; D[BitbucketClient]
-    C --&gt; D
-    C --&gt; E[GitHubClient]
-    C --&gt; F[GitHubCliClient]
-    C --&gt; G[Services: UserMapper, LinkRewriter, AttachmentHandler]
-    C --&gt; H[Migrators: IssueMigrator, PullRequestMigrator]
-    C --&gt; I[Formatters: FormatterFactory]
-    C --&gt; J[ReportGenerator]
-    D --&gt; K[Bitbucket API]
-    E --&gt; L[GitHub API]
-    F --&gt; M[GitHub CLI]</code></pre>
+     A[CLI Entry Point] --&gt; B[AuditOrchestrator]
+     A --&gt; C[MigrationOrchestrator]
+     A --&gt; N[CrossLinkOrchestrator]
+     B --&gt; D[BitbucketClient]
+     C --&gt; D
+     C --&gt; E[GitHubClient]
+     C --&gt; F[GitHubCliClient]
+     C --&gt; G[Services: UserMapper, LinkRewriter, AttachmentHandler]
+     C --&gt; H[Migrators: IssueMigrator, PullRequestMigrator, MilestoneMigrator]
+     C --&gt; I[Formatters: FormatterFactory]
+     C --&gt; J[ReportGenerator]
+     C --&gt; O[RepoMigrator]
+     N --&gt; P[CrossLinkUpdater]
+     O --&gt; Q[BaseMigrator]
+     G --&gt; R[Link Handlers: IssueLinkHandler, PrLinkHandler, etc.]
+     D --&gt; K[Bitbucket API]
+     E --&gt; L[GitHub API]
+     F --&gt; M[GitHub CLI]
+     S[BaseDirManager] --&gt; T[FileRegistry]
+     U[MigrationContext] --&gt; V[ServiceLocator]</code></pre>
 <h2 id="main-components">Main Components</h2>
 <h3 id="core-orchestrators">Core Orchestrators</h3>
 <ul>
 <li><strong>MigrationOrchestrator</strong> (<code>src/bitbucket_migration/core/orchestrator.py</code>): Central coordinator for the migration process. Initializes components, fetches data, executes migrations, and generates reports.</li>
 <li><strong>AuditOrchestrator</strong> (<code>src/bitbucket_migration/audit/audit_orchestrator.py</code>): Handles pre-migration analysis, generating audit reports and configuration templates.</li>
+<li><strong>CrossLinkOrchestrator</strong> (<code>src/bitbucket_migration/core/orchestrator.py</code>): Manages cross-repository link updates after migration.</li>
+<li><strong>BaseOrchestrator</strong> (<code>src/bitbucket_migration/core/orchestrator.py</code>): Base class providing common functionality for all orchestrators.</li>
 </ul>
 <h3 id="api-clients">API Clients</h3>
 <ul>
@@ -1141,32 +1186,82 @@
 <li><strong>UserMapper</strong> (<code>src/bitbucket_migration/services/user_mapper.py</code>): Maps Bitbucket users to GitHub accounts, resolving account IDs.</li>
 <li><strong>LinkRewriter</strong> (<code>src/bitbucket_migration/services/link_rewriter.py</code>): Rewrites cross-references between issues and PRs to point to GitHub.</li>
 <li><strong>AttachmentHandler</strong> (<code>src/bitbucket_migration/services/attachment_handler.py</code>): Downloads attachments from Bitbucket and uploads to GitHub (via CLI or manual).</li>
+<li><strong>CrossRepoMappingStore</strong> (<code>src/bitbucket_migration/services/cross_repo_mapping_store.py</code>): Manages mappings between repositories for cross-repository link rewriting.</li>
+<li><strong>LinkDetector</strong> (<code>src/bitbucket_migration/services/link_detector.py</code>): Detects and extracts URLs from text content.</li>
+<li><strong>BaseLinkHandler</strong> (<code>src/bitbucket_migration/services/base_link_handler.py</code>): Base class for link handling with priority-based processing.</li>
+<li><strong>IssueLinkHandler</strong> (<code>src/bitbucket_migration/services/issue_link_handler.py</code>): Handles Bitbucket issue link rewriting.</li>
+<li><strong>PrLinkHandler</strong> (<code>src/bitbucket_migration/services/pr_link_handler.py</code>): Handles Bitbucket PR link rewriting.</li>
+<li><strong>BranchLinkHandler</strong> (<code>src/bitbucket_migration/services/branch_link_handler.py</code>): Handles Bitbucket branch link rewriting.</li>
+<li><strong>CommitLinkHandler</strong> (<code>src/bitbucket_migration/services/commit_link_handler.py</code>): Handles Bitbucket commit link rewriting.</li>
+<li><strong>CompareLinkHandler</strong> (<code>src/bitbucket_migration/services/compare_link_handler.py</code>): Handles Bitbucket compare link rewriting.</li>
+<li><strong>CrossRepoLinkHandler</strong> (<code>src/bitbucket_migration/services/cross_repo_link_handler.py</code>): Handles cross-repository link rewriting.</li>
+<li><strong>RepoHomeLinkHandler</strong> (<code>src/bitbucket_migration/services/repo_home_link_handler.py</code>): Handles repository home page link rewriting.</li>
+<li><strong>ShortIssueRefHandler</strong> (<code>src/bitbucket_migration/services/short_issue_ref_handler.py</code>): Handles short issue reference rewriting.</li>
 </ul>
 <h3 id="migrators">Migrators</h3>
 <ul>
 <li><strong>IssueMigrator</strong> (<code>src/bitbucket_migration/migration/issue_migrator.py</code>): Handles migration of issues, including comments and attachments.</li>
 <li><strong>PullRequestMigrator</strong> (<code>src/bitbucket_migration/migration/pr_migrator.py</code>): Migrates PRs, deciding whether to create GitHub PRs or issues based on branch existence and status.</li>
+<li><strong>MilestoneMigrator</strong> (<code>src/bitbucket_migration/migration/milestone_migrator.py</code>): Manages migration of milestones from Bitbucket to GitHub.</li>
+<li><strong>RepoMigrator</strong> (<code>src/bitbucket_migration/core/repo_migrator.py</code>): Orchestrates migration for individual repositories, coordinating all migrators.</li>
+<li><strong>BaseMigrator</strong> (<code>src/bitbucket_migration/core/repo_migrator.py</code>): Base class providing common migration functionality.</li>
+<li><strong>CrossLinkMigrator</strong> (<code>src/bitbucket_migration/core/repo_migrator.py</code>): Handles cross-repository link updates.</li>
 </ul>
 <h3 id="formatters-and-reports">Formatters and Reports</h3>
 <ul>
 <li><strong>FormatterFactory</strong> (<code>src/bitbucket_migration/formatters/formatter_factory.py</code>): Creates formatters for content (e.g., Markdown, HTML).</li>
 <li><strong>ReportGenerator</strong> (<code>src/bitbucket_migration/migration/report_generator.py</code>): Generates migration reports and mappings.</li>
+<li><strong>ContentFormatter</strong> (<code>src/bitbucket_migration/formatters/content_formatter.py</code>): Base class for content formatting.</li>
+<li><strong>IssueContentFormatter</strong> (<code>src/bitbucket_migration/formatters/content_formatter.py</code>): Formats issue content for GitHub.</li>
+<li><strong>PullRequestContentFormatter</strong> (<code>src/bitbucket_migration/formatters/content_formatter.py</code>): Formats PR content for GitHub.</li>
+<li><strong>CommentContentFormatter</strong> (<code>src/bitbucket_migration/formatters/content_formatter.py</code>): Formats comment content for GitHub.</li>
+</ul>
+<h3 id="audit-components">Audit Components</h3>
+<ul>
+<li><strong>Auditor</strong> (<code>src/bitbucket_migration/audit/auditor.py</code>): Performs detailed audit of repositories for migration planning.</li>
+<li><strong>AuditUtils</strong> (<code>src/bitbucket_migration/audit/audit_utils.py</code>): Utility functions for audit analysis and reporting.</li>
+</ul>
+<h3 id="commands">Commands</h3>
+<ul>
+<li><strong>MigrationCommand</strong> (<code>src/bitbucket_migration/commands/migration_command.py</code>): Handles migration command execution.</li>
+<li><strong>AuditCommand</strong> (<code>src/bitbucket_migration/commands/audit_command.py</code>): Handles audit command execution.</li>
+<li><strong>CleanCommand</strong> (<code>src/bitbucket_migration/commands/clean_command.py</code>): Handles cleanup command execution.</li>
+<li><strong>CrossLinkCommand</strong> (<code>src/bitbucket_migration/commands/cross_link_command.py</code>): Handles cross-link update command execution.</li>
+<li><strong>TestAuthCommand</strong> (<code>src/bitbucket_migration/commands/test_auth_command.py</code>): Handles authentication testing command execution.</li>
 </ul>
 <h3 id="configuration-and-utilities">Configuration and Utilities</h3>
 <ul>
 <li><strong>MigrationConfig</strong> (<code>src/bitbucket_migration/config/migration_config.py</code>): Data structures for configuration.</li>
 <li><strong>SecureConfigLoader</strong> (<code>src/bitbucket_migration/config/secure_config.py</code>): Loads configuration securely, supporting environment variables.</li>
+<li><strong>ConfigLoader</strong> (<code>src/bitbucket_migration/config/migration_config.py</code>): Handles loading and validation of configuration files.</li>
+<li><strong>ConfigValidator</strong> (<code>src/bitbucket_migration/config/migration_config.py</code>): Validates configuration data.</li>
+<li><strong>LinkRewritingConfig</strong> (<code>src/bitbucket_migration/config/migration_config.py</code>): Configuration for link rewriting templates.</li>
+<li><strong>MigrationContext</strong> (<code>src/bitbucket_migration/core/migration_context.py</code>): Provides context and service locator for migration operations.</li>
+<li><strong>ServiceLocator</strong> (<code>src/bitbucket_migration/core/migration_context.py</code>): Registry for services with attribute-like access.</li>
+<li><strong>MigrationEnvironment</strong> (<code>src/bitbucket_migration/core/migration_context.py</code>): Environment configuration and state.</li>
+<li><strong>MigrationMappings</strong> (<code>src/bitbucket_migration/core/migration_context.py</code>): Tracks mappings between Bitbucket and GitHub entities.</li>
+<li><strong>MigrationState</strong> (<code>src/bitbucket_migration/core/migration_context.py</code>): Current state of the migration process.</li>
+<li><strong>BaseDirManager</strong> (<code>src/bitbucket_migration/utils/base_dir_manager.py</code>): Manages base directory structure and file operations.</li>
+<li><strong>FileRegistry</strong> (<code>src/bitbucket_migration/utils/file_registry.py</code>): Tracks and manages migration-related files with locking.</li>
+<li><strong>MigrationLogger</strong> (<code>src/bitbucket_migration/utils/logging_config.py</code>): Custom logging configuration for migration operations.</li>
 <li><strong>Logging and Exceptions</strong>: Custom logging (<code>utils/logging_config.py</code>) and exceptions (<code>exceptions.py</code>) for error handling.</li>
 </ul>
 <h2 id="interactions-and-data-flow">Interactions and Data Flow</h2>
 <ol>
-<li><strong>CLI Invocation</strong>: User runs commands like <code>migrate</code> or <code>audit</code> via the main script.</li>
-<li><strong>Orchestrator Setup</strong>: MigrationOrchestrator initializes clients, services, and migrators based on config.</li>
-<li><strong>Data Fetching</strong>: BitbucketClient fetches issues, PRs, milestones from Bitbucket API.</li>
-<li><strong>Processing</strong>: UserMapper builds mappings, LinkRewriter updates references, AttachmentHandler downloads files.</li>
-<li><strong>Migration Execution</strong>: IssueMigrator and PullRequestMigrator create content on GitHub via GitHubClient.</li>
-<li><strong>Reporting</strong>: ReportGenerator produces summaries and mappings.</li>
-<li><strong>Attachment Handling</strong>: If enabled, GitHubCliClient uploads attachments.</li>
+<li><strong>CLI Invocation</strong>: User runs commands like <code>migrate</code>, <code>audit</code>, <code>cross-link</code>, or <code>clean</code> via the main script.</li>
+<li><strong>Orchestrator Setup</strong>: Appropriate orchestrator (MigrationOrchestrator, AuditOrchestrator, CrossLinkOrchestrator) initializes components based on config.</li>
+<li><strong>Configuration Loading</strong>: SecureConfigLoader loads and validates configuration, supporting environment variables.</li>
+<li><strong>Repository Setup</strong>: BaseDirManager and FileRegistry manage directory structure and file tracking.</li>
+<li><strong>Data Fetching</strong>: BitbucketClient fetches issues, PRs, milestones, comments, and attachments from Bitbucket API.</li>
+<li><strong>User Mapping</strong>: UserMapper builds account ID mappings from fetched data.</li>
+<li><strong>Milestone Migration</strong>: MilestoneMigrator creates corresponding milestones on GitHub.</li>
+<li><strong>Content Processing</strong>: Formatters convert Bitbucket content to GitHub-compatible format.</li>
+<li><strong>Link Rewriting</strong>: LinkRewriter processes content using various LinkHandlers to update references.</li>
+<li><strong>Migration Execution</strong>: RepoMigrator coordinates IssueMigrator and PullRequestMigrator to create content on GitHub.</li>
+<li><strong>Cross-Repository Linking</strong>: CrossRepoMappingStore and CrossRepoLinkHandler manage links between repositories.</li>
+<li><strong>Attachment Handling</strong>: AttachmentHandler downloads from Bitbucket and uploads via GitHubCliClient.</li>
+<li><strong>Reporting</strong>: ReportGenerator produces summaries, mappings, and audit reports.</li>
+<li><strong>Post-Migration Updates</strong>: CrossLinkUpdater can update links after all migrations are complete.</li>
 </ol>
 <p>The orchestrator ensures sequential execution, with error handling and partial saves on interruption.</p>
 

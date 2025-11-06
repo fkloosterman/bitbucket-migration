@@ -1027,10 +1027,10 @@
 <li><strong>Issues</strong>: <code>https://bitbucket.org/workspace/other-repo/issues/42</code> → <code>[other-repo #42](github_url)</code></li>
 <li><strong>Source Files</strong>: <code>https://bitbucket.org/workspace/other-repo/src/hash/file.cpp</code> → <code>[other-repo/file.cpp](github_url)</code></li>
 <li><strong>Commits</strong>: <code>https://bitbucket.org/workspace/other-repo/commits/abc123</code> → <code>[other-repo@abc123d](github_url)</code></li>
+<li><strong>Pull Requests</strong>: <code>https://bitbucket.org/workspace/other-repo/pull-requests/42</code> → <code>[other-repo #42](github_url)</code></li>
 </ul>
 <h2 id="what-is-not-rewritten">What Is NOT Rewritten</h2>
 <ul>
-<li><strong>Pull Requests</strong>: Cross-repo PR links (numbers are unpredictable)</li>
 <li><strong>Wiki Pages</strong>: <code>https://bitbucket.org/.../wiki/</code></li>
 <li><strong>Downloads</strong>: <code>https://bitbucket.org/.../downloads/</code></li>
 <li><strong>Branches/Tags</strong>: <code>https://bitbucket.org/.../branch/feature</code></li>
@@ -1041,11 +1041,11 @@
 <ul>
 <li><strong>Unhandled Links</strong>: Flagged in migration reports with context.</li>
 <li><strong>Current Repository Links</strong>: Automatically rewritten without needing repository_mapping.</li>
-<li><strong>Cross-Repo PR Links</strong>: Cannot be rewritten (PR numbers unpredictable).</li>
-<li><strong>Cross-Repo Issue Links</strong>: Can be rewritten if repository_mapping configured.</li>
+<li><strong>Cross-Repo Links</strong>: Can be rewritten if repository_mapping configured in cross_repo_mappings.json.</li>
 <li><strong>Original References</strong>: Preserved in italics for context (e.g., <em>(was <code>[BB #123](bitbucket_url)</code>)</em>).</li>
 <li><strong>Manual Attention</strong>: Unmapped cross-repo links or unsupported types require manual review post-migration.</li>
 <li><strong>Line Numbers</strong>: Bitbucket's <code>#lines-143</code> format converted to GitHub's <code>#L143</code>.</li>
+<li><strong>Deferred Links</strong>: Cross-repo links are processed in a second pass after all repositories are migrated.</li>
 </ul>
 
 

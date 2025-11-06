@@ -633,6 +633,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#migrated-metadata" class="md-nav__link">
     <span class="md-ellipsis">
       Migrated Metadata
@@ -648,12 +657,45 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What Gets Created">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#manual-upload-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manual Upload (Default)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#auto-upload-with-github-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      Auto-Upload with GitHub CLI
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
   <a href="#handling-non-migratable-information" class="md-nav__link">
     <span class="md-ellipsis">
       Handling Non-Migratable Information
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#difference-from-inline-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      Difference from Inline Images
     </span>
   </a>
   
@@ -916,6 +958,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#migrated-metadata" class="md-nav__link">
     <span class="md-ellipsis">
       Migrated Metadata
@@ -931,12 +982,45 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What Gets Created">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#manual-upload-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manual Upload (Default)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#auto-upload-with-github-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      Auto-Upload with GitHub CLI
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
   <a href="#handling-non-migratable-information" class="md-nav__link">
     <span class="md-ellipsis">
       Handling Non-Migratable Information
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#difference-from-inline-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      Difference from Inline Images
     </span>
   </a>
   
@@ -962,6 +1046,8 @@
 
 
 <h1 id="attachments-migration">Attachments Migration</h1>
+<h2 id="overview">Overview</h2>
+<p>Attachments are files that were explicitly attached to Bitbucket issues or pull requests. The migration tool handles both traditional attachments and inline images embedded in markdown content.</p>
 <h2 id="migrated-metadata">Migrated Metadata</h2>
 <ul>
 <li><strong>File Name and Size</strong>: Noted in GitHub comments.</li>
@@ -970,11 +1056,12 @@
 </ul>
 <h2 id="what-gets-created">What Gets Created</h2>
 <p>Comments are added to issues/PRs noting attachments:</p>
+<h3 id="manual-upload-default">Manual Upload (Default)</h3>
 <div class="highlight"><pre><span></span><code>📎 <span class="gs">**Attachment from Bitbucket**</span>: <span class="sb">`screenshot.png`</span> (2.5 MB)
 
 <span class="ge">*Note: This file was attached to the original Bitbucket issue. Please drag and drop this file from `attachments_temp/screenshot.png` to embed it in this issue.*</span>
 </code></pre></div>
-<p>Or with <code>--use-gh-cli</code>:</p>
+<h3 id="auto-upload-with-github-cli">Auto-Upload with GitHub CLI</h3>
 <p><div class="highlight"><pre><span></span><code>📎 <span class="gs">**Attachment from Bitbucket**</span>: <span class="sb">`screenshot.png`</span> (2.5 MB)
 </code></pre></div>
 (File automatically uploaded and embedded)</p>
@@ -983,8 +1070,13 @@
 <li><strong>Direct Upload</strong>: GitHub API does not support direct attachment upload; files are downloaded locally to <code>attachments_temp/</code>.</li>
 <li><strong>Manual Upload Required</strong>: Comments are created on GitHub issues with instructions to drag-and-drop files.</li>
 <li><strong>Auto-Upload Option</strong>: With <code>--use-gh-cli</code>, attachments are uploaded automatically using GitHub CLI.</li>
-<li><strong>Inline Images</strong>: Treated as attachments; extracted from markdown and downloaded separately.</li>
 <li><strong>Large Files</strong>: Files are downloaded regardless of size; GitHub has its own upload limits.</li>
+</ul>
+<h2 id="difference-from-inline-images">Difference from Inline Images</h2>
+<ul>
+<li><strong>Attachments</strong>: Explicitly attached files via Bitbucket's attachment interface</li>
+<li><strong>Inline Images</strong>: Images embedded in markdown content using <code>![alt](url)</code> syntax</li>
+<li><strong>Processing</strong>: Both are downloaded to <code>attachments_temp/</code>, but inline images are handled differently in content formatting (see <a href="../migration_images/">Images Migration</a>)</li>
 </ul>
 
 

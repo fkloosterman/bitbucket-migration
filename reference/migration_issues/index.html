@@ -1005,13 +1005,18 @@
 <li>✅ <strong>Title</strong>: Migrated as-is.</li>
 <li>✅ <strong>Description</strong>: Full content with markdown preserved.</li>
 <li>✅ <strong>Assignees</strong>: Set via API if user mapping exists.</li>
-<li>✅ <strong>Labels</strong>: Applied (e.g., 'migrated-from-bitbucket').</li>
+<li>✅ <strong>Labels</strong>: Applied (e.g., 'migrated-from-bitbucket', 'type: {kind}', 'priority: {priority}').</li>
 <li>✅ <strong>Milestones</strong>: Automatically created on GitHub and applied to issues.</li>
 <li>✅ <strong>State (open/closed)</strong>: Set based on original state.</li>
 <li>✅ <strong>Original Timestamps</strong>: Mentioned in description.</li>
 <li>✅ <strong>Original Authors</strong>: Mentioned and @tagged in description for notifications.</li>
 <li>✅ <strong>Votes</strong>: Noted in description.</li>
-<li>✅ <strong>Kind and Priority</strong>: Noted in description.</li>
+<li>✅ <strong>Kind and Priority</strong>: Noted in description and applied as labels.</li>
+<li>✅ <strong>Issue Types</strong>: Mapped to GitHub issue types if configured, otherwise fall back to labels.</li>
+<li>✅ <strong>Comments</strong>: All comments migrated with topological sorting for threaded replies.</li>
+<li>✅ <strong>Attachments</strong>: Downloaded and uploaded to GitHub.</li>
+<li>✅ <strong>Inline Images</strong>: Extracted and uploaded to GitHub.</li>
+<li>✅ <strong>Issue Changes</strong>: Status, assignee, and other changes are migrated as comments.</li>
 </ul>
 <h2 id="what-is-not-preserved">What Is NOT Preserved</h2>
 <ul>
@@ -1019,6 +1024,8 @@
 <li>❌ <strong>Original Creation Date</strong>: API limitation - shows migration date.</li>
 <li>❌ <strong>Watchers</strong>: No equivalent field in GitHub.</li>
 <li>❌ <strong>Custom Fields</strong>: Bitbucket custom fields are not migrated.</li>
+<li>❌ <strong>Issue Type Native Mapping</strong>: Falls back to labels if no GitHub issue type configured.</li>
+<li>❌ <strong>Comment Edit History</strong>: Only final version migrated, changes noted in comment body.</li>
 </ul>
 <h2 id="handling-non-migratable-information">Handling Non-Migratable Information</h2>
 <ul>

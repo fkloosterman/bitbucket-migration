@@ -1003,6 +1003,7 @@
 <li><strong>@Mentions</strong>: Mapped to GitHub usernames using <code>user_mapping</code>.</li>
 <li><strong>Account IDs</strong>: Automatically resolved by cross-referencing with issue/PR participants, or via Bitbucket API lookup.</li>
 <li><strong>Display Names</strong>: Used when Bitbucket username is not available.</li>
+<li><strong>Enhanced User Mapping</strong>: Supports detailed mapping configurations with bitbucket_username, display_name, and github fields.</li>
 </ul>
 <h2 id="formats-supported">Formats Supported</h2>
 <p>The script handles multiple @mention formats:</p>
@@ -1034,9 +1035,11 @@
 <li>Bitbucket API lookup (fallback if not found)</li>
 <li>Display name only (if username unavailable)</li>
 <li>Map username/display name to GitHub via <code>user_mapping</code></li>
+<li>Support enhanced mapping formats with bitbucket_username, display_name, and github fields</li>
 <li>If mapped: Replace with GitHub @mention</li>
 <li>If not mapped but have display name: Use readable format</li>
 <li>If not mapped and no display name: Preserve with note</li>
+<li>Handle null mappings (users with no GitHub account)</li>
 </ol>
 
 

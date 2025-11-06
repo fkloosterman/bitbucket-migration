@@ -1032,6 +1032,11 @@
 <li>✅ <strong>Commit Count</strong>: Noted in description.</li>
 <li>✅ <strong>Participant Count</strong>: Noted in description.</li>
 <li>✅ <strong>All Comments</strong>: General comments, inline code comments, and PR updates are migrated as GitHub comments, preserving the timeline.</li>
+<li>✅ <strong>Inline Code Comments</strong>: Migrated as regular comments with code context information when inline attachment fails.</li>
+<li>✅ <strong>PR Activity</strong>: Status changes, approvals, and updates are migrated as comments.</li>
+<li>✅ <strong>Reviewers</strong>: Listed in PR description but not set as official reviewers.</li>
+<li>✅ <strong>Attachments</strong>: Downloaded and uploaded to GitHub.</li>
+<li>✅ <strong>Inline Images</strong>: Extracted and uploaded to GitHub.</li>
 </ul>
 <h2 id="what-is-not-preserved">What Is NOT Preserved</h2>
 <ul>
@@ -1041,6 +1046,8 @@
 <li>❌ <strong>Reviewers</strong>: Cannot be set via API during creation (noted in description).</li>
 <li>❌ <strong>Approval Status</strong>: PR reviews cannot be migrated (noted in description).</li>
 <li>❌ <strong>Diff View</strong>: For PRs migrated as issues, no interactive diff available.</li>
+<li>❌ <strong>Inline Review Comments</strong>: Migrated as regular comments with code context when inline attachment fails.</li>
+<li>❌ <strong>PR Review Threads</strong>: Not preserved as GitHub review threads.</li>
 </ul>
 <h2 id="handling-non-migratable-information">Handling Non-Migratable Information</h2>
 <ul>

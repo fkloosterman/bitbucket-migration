@@ -963,7 +963,7 @@
 <div style="text-align: center;">
 <h1 id="bitbucket-github-migration-tools">Bitbucket → GitHub Migration Tools</h1>
 <p><strong>Intelligent • Safe • Comprehensive</strong></p>
-<p>Migrate your Bitbucket Cloud repositories to GitHub with confidence using our smart migration platform that preserves everything while making intelligent decisions about PRs, branches, and metadata.</p>
+<p>Migrate your Bitbucket Cloud repositories to GitHub with confidence using our comprehensive migration platform that preserves metadata, comments, attachments, and cross-references while making intelligent decisions about PRs, branches, and user attribution. Supports both single and multi-repository migrations with unified configuration management.</p>
 <p><strong><a href="#quick-start">🚀 Get Started</a> • <a href="migration_guide/">📖 Full Guide</a></strong></p>
 </div>
 <hr />
@@ -975,7 +975,7 @@
 <li>
 <p><strong>🧠 Smart PR Migration</strong></p>
 <hr />
-<p>Open PRs become GitHub PRs, closed PRs become Issues with full metadata preservation. No more broken references or lost context.</p>
+<p>Open PRs with existing branches become GitHub PRs, closed PRs become Issues with full metadata preservation. No more broken references or lost context.</p>
 </li>
 <li>
 <p><strong>🛡️ Safe by Design</strong></p>
@@ -992,6 +992,21 @@
 <hr />
 <p>Cross-references between issues and PRs are automatically updated to point to GitHub while preserving original context.</p>
 </li>
+<li>
+<p><strong>👥 Intelligent User Mapping</strong></p>
+<hr />
+<p>Maps Bitbucket users to GitHub accounts with support for display names, usernames, and account IDs. Handles @mentions and attribution correctly.</p>
+</li>
+<li>
+<p><strong>📎 Advanced Attachment Handling</strong></p>
+<hr />
+<p>Downloads all attachments and inline images with GitHub CLI upload support for automated processing.</p>
+</li>
+<li>
+<p><strong>🏗️ Multi-Repository Support</strong></p>
+<hr />
+<p>Migrate multiple interconnected repositories with automatic cross-repository link rewriting and unified configuration management.</p>
+</li>
 </ul>
 </div>
 <hr />
@@ -1000,8 +1015,8 @@
 <div class="highlight"><pre><span></span><code>pipx<span class="w"> </span>install<span class="w"> </span>bitbucket-migration
 </code></pre></div></p>
 <p><strong>Example Usage:</strong>
-<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO
-migrate_bitbucket_to_github<span class="w"> </span>dry-run<span class="w"> </span>--config<span class="w"> </span>migration_config.json
+<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>YOUR_EMAIL
+migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--dry-run
 </code></pre></div></p>
 <hr />
 <h2 id="documentation">📚 Documentation</h2>

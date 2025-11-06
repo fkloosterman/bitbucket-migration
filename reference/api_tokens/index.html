@@ -1640,11 +1640,11 @@
 <td>Audit repository content</td>
 </tr>
 <tr>
-<td><code>migrate_bitbucket_to_github dry-run</code></td>
+<td><code>migrate_bitbucket_to_github migrate --dry-run</code></td>
 <td>✅ Required</td>
 <td>✅ Required</td>
 <td>❌ Optional</td>
-<td>Dr-run migrate issues/PRs</td>
+<td>Dry-run migrate issues/PRs</td>
 </tr>
 <tr>
 <td><code>migrate_bitbucket_to_github migrate</code></td>
@@ -1660,12 +1660,20 @@
 <td>✅ Required</td>
 <td>Auto-upload attachments</td>
 </tr>
+<tr>
+<td><code>migrate_bitbucket_to_github cross-link</code></td>
+<td>✅ Required</td>
+<td>✅ Required</td>
+<td>❌ Optional</td>
+<td>Post-migration link updates</td>
+</tr>
 </tbody>
 </table>
 <p><strong>Choose your path:</strong></p>
 <ul>
 <li><strong>Basic Migration:</strong> Bitbucket API Token + GitHub PAT</li>
 <li><strong>Advanced Migration:</strong> All three authentication methods (for automatic attachment uploads)</li>
+<li><strong>Post-Migration:</strong> Bitbucket API Token + GitHub PAT (for cross-repository link updates)</li>
 </ul>
 <hr />
 <h2 id="bitbucket-cloud-api-token">🔑 Bitbucket Cloud API Token</h2>
@@ -1692,6 +1700,7 @@
 <p><strong>Note:</strong> User-level API tokens (not Repository Access Tokens) are required for issue and PR access.</p>
 <h3 id="usage-in-configuration">Usage in Configuration</h3>
 <div class="highlight"><pre><span></span><code><span class="nt">&quot;bitbucket&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;workspace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your-workspace&quot;</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">&quot;email&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;you@example.com&quot;</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">&quot;token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;SET_BITBUCKET_TOKEN_ENV_VAR&quot;</span>
 <span class="p">}</span>
@@ -1839,13 +1848,19 @@ migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>
 <td>Repo access</td>
 <td>Authenticated</td>
 </tr>
+<tr>
+<td>Cross-repo link updates</td>
+<td>Read access</td>
+<td>Repo access</td>
+<td>Not needed</td>
+</tr>
 </tbody>
 </table>
 <hr />
 <h2 id="authentication-testing">✅ Authentication Testing</h2>
 <h3 id="test-bitbucket-authentication">Test Bitbucket Authentication</h3>
 <p>Use the provided test script to verify your Bitbucket token:</p>
-<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>test-auth<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com<span class="w"> </span>--token<span class="w"> </span>ATAT1234...
+<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>test-auth<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com<span class="w"> </span>--gh-owner<span class="w"> </span>YOUR_GITHUB_OWNER<span class="w"> </span>--gh-repo<span class="w"> </span>YOUR_GITHUB_REPO
 </code></pre></div>
 <p><strong>Expected output:</strong>
 <div class="highlight"><pre><span></span><code>✅ All tests passed! Your API Token is working correctly.
@@ -1854,13 +1869,13 @@ migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>
 <h3 id="test-github-authentication">Test GitHub Authentication</h3>
 <p>Verify your GitHub PAT works correctly:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Test basic authentication</span>
-curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token ghp_abcd123...&quot;</span><span class="w"> </span>https://api.github.com/user
+curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$GITHUB_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span>https://api.github.com/user
 
 <span class="c1"># Test repository access</span>
-curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token ghp_abcd123...&quot;</span><span class="w"> </span>https://api.github.com/repos/YOUR_ORG/YOUR_REPO
+curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$GITHUB_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span>https://api.github.com/repos/YOUR_ORG/YOUR_REPO
 
 <span class="c1"># Test issue creation (dry run)</span>
-curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token ghp_abcd123...&quot;</span><span class="w"> </span><span class="se">\</span>
+curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$GITHUB_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;title&quot;:&quot;Test Issue&quot;,&quot;body&quot;:&quot;Testing authentication&quot;}&#39;</span>
 </code></pre></div>
@@ -1874,6 +1889,7 @@ gh<span class="w"> </span>repo<span class="w"> </span>view<span class="w"> </spa
 <span class="c1"># Test issue creation (dry run)</span>
 gh<span class="w"> </span>issue<span class="w"> </span>create<span class="w"> </span>--title<span class="w"> </span><span class="s2">&quot;Test Issue&quot;</span><span class="w"> </span>--body<span class="w"> </span><span class="s2">&quot;Testing CLI auth&quot;</span><span class="w"> </span>--repo<span class="w"> </span>YOUR_ORG/YOUR_REPO
 </code></pre></div>
+<p><strong>Note:</strong> GitHub CLI authentication is tested automatically during <code>test-auth</code> command.</p>
 <hr />
 <h2 id="troubleshooting-authentication-issues">🔍 Troubleshooting Authentication Issues</h2>
 <h3 id="bitbucket-token-problems">Bitbucket Token Problems</h3>
@@ -1971,28 +1987,18 @@ gh<span class="w"> </span>issue<span class="w"> </span>create<span class="w"> </
 <ol>
 <li>
 <p><strong>Set environment variables:</strong>
-    <div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">GITHUB_TOKEN</span><span class="o">=</span><span class="s2">&quot;ghp_123...&quot;</span>
+    <div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">BITBUCKET_TOKEN</span><span class="o">=</span><span class="s2">&quot;ATAT123...&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">GITHUB_TOKEN</span><span class="o">=</span><span class="s2">&quot;ghp_123...&quot;</span>
 </code></pre></div></p>
 </li>
 <li>
-<p><strong>Test GitHub PAT:</strong>
-    <div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$GITHUB_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span>https://api.github.com/user
-</code></pre></div></p>
-</li>
-<li>
-<p><strong>Test repository access:</strong>
-    <div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$GITHUB_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span>https://api.github.com/repos/YOUR_ORG/YOUR_REPO
-</code></pre></div></p>
-</li>
-<li>
-<p><strong>Test GitHub CLI (if using --use-gh-cli):</strong>
-    <div class="highlight"><pre><span></span><code>gh<span class="w"> </span>auth<span class="w"> </span>status
-gh<span class="w"> </span>repo<span class="w"> </span>view<span class="w"> </span>YOUR_ORG/YOUR_REPO
+<p><strong>Test authentication:</strong>
+    <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>test-auth<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>you@example.com<span class="w"> </span>--gh-owner<span class="w"> </span>YOUR_ORG<span class="w"> </span>--gh-repo<span class="w"> </span>YOUR_REPO
 </code></pre></div></p>
 </li>
 <li>
 <p><strong>Run dry-run migration:</strong>
-    <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>dry-run<span class="w"> </span>--config<span class="w"> </span>config.json
+    <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>config.json<span class="w"> </span>--dry-run
 </code></pre></div></p>
 </li>
 </ol>
@@ -2011,17 +2017,17 @@ gh<span class="w"> </span>repo<span class="w"> </span>view<span class="w"> </spa
 <span class="nb">export</span><span class="w"> </span><span class="nv">BITBUCKET_TOKEN</span><span class="o">=</span><span class="s2">&quot;ATAT123...&quot;</span>
 <span class="nb">export</span><span class="w"> </span><span class="nv">GITHUB_TOKEN</span><span class="o">=</span><span class="s2">&quot;ghp_456...&quot;</span>
 
-<span class="c1"># 2. Test Bitbucket token</span>
-migrate_bitbucket_to_github<span class="w"> </span>test-auth<span class="w"> </span>--workspace<span class="w"> </span>myteam<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>me@company.com
+<span class="c1"># 2. Test authentication</span>
+migrate_bitbucket_to_github<span class="w"> </span>test-auth<span class="w"> </span>--workspace<span class="w"> </span>myteam<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>me@company.com<span class="w"> </span>--gh-owner<span class="w"> </span>myorg<span class="w"> </span>--gh-repo<span class="w"> </span>myrepo
 
 <span class="c1"># 3. Run audit</span>
-migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>myteam<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>me@company.com
+migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>myteam<span class="w"> </span>--repo<span class="w"> </span>myrepo<span class="w"> </span>--email<span class="w"> </span>me@company.com<span class="w"> </span>--gh-owner<span class="w"> </span>myorg
 
-<span class="c1"># 4. Test GitHub PAT</span>
-curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$GITHUB_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span>https://api.github.com/user
+<span class="c1"># 4. Run migration dry-run</span>
+migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>config.json<span class="w"> </span>--dry-run
 
-<span class="c1"># 5. Run migration dry-run</span>
-migrate_bitbucket_to_github<span class="w"> </span>dry-run<span class="w"> </span>--config<span class="w"> </span>config.json
+<span class="c1"># 5. Run full migration</span>
+migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>config.json
 </code></pre></div>
 <h3 id="advanced-setup-with-auto-upload">Advanced Setup (With Auto-Upload)</h3>
 <div class="highlight"><pre><span></span><code><span class="c1"># 1. Install and setup GitHub CLI</span>
@@ -2032,6 +2038,9 @@ gh<span class="w"> </span>auth<span class="w"> </span>status
 
 <span class="c1"># 3. Run migration with auto-upload</span>
 migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>config.json<span class="w"> </span>--use-gh-cli
+
+<span class="c1"># 4. Update cross-repository links (post-migration)</span>
+migrate_bitbucket_to_github<span class="w"> </span>cross-link<span class="w"> </span>--config<span class="w"> </span>config.json
 </code></pre></div>
 <hr />
 <h2 id="token-requirements-summary">📋 Token Requirements Summary</h2>
@@ -2068,6 +2077,12 @@ migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </spa
 <td>✅ User-level, read access</td>
 <td>✅ <code>repo</code> scope</td>
 <td>✅ Authenticated</td>
+</tr>
+<tr>
+<td>Cross-repo link updates</td>
+<td>✅ User-level, read access</td>
+<td>✅ <code>repo</code> scope</td>
+<td>❌</td>
 </tr>
 <tr>
 <td>User mapping</td>

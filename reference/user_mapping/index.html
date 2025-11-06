@@ -1876,11 +1876,13 @@
 <div class="highlight"><pre><span></span><code><span class="nt">&quot;user_mapping&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;Alice Smith&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">&quot;github&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alice-github&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;bitbucket_username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;asmith&quot;</span>
+<span class="w">    </span><span class="nt">&quot;bitbucket_username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;asmith&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;display_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Alice Smith&quot;</span>
 <span class="w">  </span><span class="p">},</span>
 <span class="w">  </span><span class="nt">&quot;Bob Jones&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">&quot;github&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bobjones&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;bitbucket_username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bjones&quot;</span>
+<span class="w">    </span><span class="nt">&quot;bitbucket_username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bjones&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;display_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Bob Jones&quot;</span>
 <span class="w">  </span><span class="p">},</span>
 <span class="w">  </span><span class="nt">&quot;Charlie Brown&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">&quot;External Contractor&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
@@ -1889,7 +1891,9 @@
 <p><strong>Use when:</strong>
 - Team uses @mentions frequently
 - Maximum compatibility required
-- Account ID mentions need proper resolution</p>
+- Account ID mentions need proper resolution
+- Display names appear in comments and need mapping to GitHub users</p>
+<p><strong>Note:</strong> The <code>display_name</code> field is optional in the enhanced format. If omitted, the key itself is used as the display name for matching purposes.</p>
 <h3 id="format-3-direct-username-mapping">Format 3: Direct Username Mapping</h3>
 <p>Maps Bitbucket usernames directly to GitHub usernames. Useful for @mention-only scenarios.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">&quot;user_mapping&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -1902,6 +1906,7 @@
 - You only need to fix @mentions
 - Display names are handled separately
 - Quick mapping for specific users</p>
+<p><strong>Note:</strong> This format maps Bitbucket usernames directly. It does not handle display name mapping in comments. Use enhanced format for complete coverage.</p>
 <h3 id="format-4-mixed-format">Format 4: Mixed Format</h3>
 <p>Combines multiple formats for maximum flexibility.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">&quot;user_mapping&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -1919,6 +1924,7 @@
 - Different users require different mapping approaches
 - Complex organizational structures
 - Gradual migration of mapping strategies</p>
+<p><strong>Note:</strong> Mixed format allows combining simple string mappings with enhanced object mappings. The system automatically detects the format for each user entry.</p>
 <hr />
 <h2 id="account-id-resolution">🔍 Account ID Resolution</h2>
 <p>Bitbucket uses internal account IDs that appear in content and API responses. The migration tool automatically resolves these to usernames.</p>
@@ -1948,6 +1954,12 @@
 </ul>
 </li>
 <li>
+<p><strong>Comment Scanning</strong>: Additionally scans all issue and PR comments for account IDs not captured in metadata</p>
+</li>
+<li>
+<p><strong>API Lookup</strong>: For unresolved account IDs found in comments, performs API lookups to resolve them</p>
+</li>
+<li>
 <p><strong>Runtime Resolution</strong>: During migration:</p>
 <ul>
 <li>Account IDs in content are identified</li>
@@ -1966,6 +1978,10 @@
 <span class="c1">// 2. &quot;asmith&quot; maps to display name &quot;Alice Smith&quot;</span>
 <span class="c1">// 3. &quot;Alice Smith&quot; maps to GitHub username &quot;alice-github&quot;</span>
 <span class="c1">// 4. Final result: &quot;@alice-github&quot;</span>
+
+<span class="c1">// Display names in comments are also mapped:</span>
+<span class="c1">// Original comment: &quot;Alice Smith mentioned this issue&quot;</span>
+<span class="c1">// Becomes: &quot;@alice-github mentioned this issue&quot;</span>
 </code></pre></div>
 <hr />
 <h2 id="mention-processing">💬 @Mention Processing</h2>
@@ -1995,6 +2011,21 @@
 <li>Extract the Bitbucket identifier</li>
 <li>Apply user mapping configuration</li>
 <li>Generate appropriate GitHub mention or fallback</li>
+</ul>
+</li>
+<li>
+<p><strong>Display Name Mapping</strong>: When display names appear in comments (not as @mentions):</p>
+<ul>
+<li>Extract display names from comment text</li>
+<li>Map them to GitHub usernames using configured display_name mappings</li>
+<li>Convert to @mentions for proper GitHub attribution</li>
+</ul>
+</li>
+<li>
+<p><strong>Fallback Handling</strong>: For unmapped mentions:</p>
+<ul>
+<li>Account IDs with known display names: `<strong>Display Name</strong> <em>(Bitbucket user, no GitHub account)</em></li>
+<li>Usernames without display names: `@username <em>(Bitbucket user, needs GitHub mapping)</em></li>
 </ul>
 </li>
 </ol>
@@ -2099,6 +2130,8 @@ Becomes: <span class="ni">@unknown</span>-user <span class="ge">*(Bitbucket user
 <li>Activity breakdown (issues, PRs, comments, commits)</li>
 <li>Bitbucket usernames for each user</li>
 <li>Account ID mentions and their contexts</li>
+<li>Account ID to username mappings discovered from API data</li>
+<li>Additional account ID resolutions from comment scanning</li>
 </ul>
 </li>
 </ol>
@@ -2120,6 +2153,8 @@ Becomes: <span class="ni">@unknown</span>-user <span class="ge">*(Bitbucket user
 <li>Lists specific issues/PRs with account IDs</li>
 <li>Shows types of account IDs found</li>
 <li>Provides context for investigation</li>
+<li>Builds account ID to username/display name mappings from API data</li>
+<li>Performs additional API lookups for account IDs found in comments</li>
 </ul>
 <h3 id="configuration-generation">Configuration Generation</h3>
 <p><strong>Generate Complete Configuration:</strong>
@@ -2131,6 +2166,12 @@ Becomes: <span class="ni">@unknown</span>-user <span class="ge">*(Bitbucket user
 <li><code>migration_config.json</code> - Complete configuration template</li>
 <li><code>user_mapping_template.txt</code> - Detailed mapping reference</li>
 </ul>
+<p><strong>Configuration Generation:</strong></p>
+<p>The audit command can generate complete migration configurations with:</p>
+<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>YOUR_WORKSPACE<span class="w"> </span>--repo<span class="w"> </span>YOUR_REPO<span class="w"> </span>--email<span class="w"> </span>YOUR_EMAIL<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--gh-owner<span class="w"> </span>YOUR_GITHUB_USER<span class="w"> </span>--gh-repo<span class="w"> </span>YOUR_REPO
+</code></pre></div>
+<p>This creates a unified configuration file that includes user mappings, repository settings, and all discovered account ID mappings.</p>
 <hr />
 <h2 id="setup-and-configuration">🔧 Setup and Configuration</h2>
 <h3 id="step-1-run-audit-for-user-discovery">Step 1: Run Audit for User Discovery</h3>
@@ -2148,11 +2189,13 @@ Becomes: <span class="ni">@unknown</span>-user <span class="ge">*(Bitbucket user
 <div class="highlight"><pre><span></span><code><span class="nt">&quot;user_mapping&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;Alice Smith&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">&quot;github&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alice-github&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;bitbucket_username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;asmith&quot;</span>
+<span class="w">    </span><span class="nt">&quot;bitbucket_username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;asmith&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;display_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Alice Smith&quot;</span>
 <span class="w">  </span><span class="p">},</span>
 <span class="w">  </span><span class="nt">&quot;Bob Jones&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">&quot;github&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bobjones&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;bitbucket_username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bjones&quot;</span>
+<span class="w">    </span><span class="nt">&quot;bitbucket_username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bjones&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;display_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Bob Jones&quot;</span>
 <span class="w">  </span><span class="p">},</span>
 <span class="w">  </span><span class="nt">&quot;External User&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
 <span class="p">}</span>
