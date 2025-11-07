@@ -93,6 +93,7 @@ class OptionsConfig:
     open_milestones_only: bool = False
     use_gh_cli: bool = False
     dry_run: bool = False
+    rewrite_cross_repo_links: bool = False
 
 
 @dataclass
@@ -511,15 +512,16 @@ class ConfigLoader:
             ],
             'issue_type_mapping': config.issue_type_mapping,
             'options': {
-                'skip_issues': config.options.skip_issues,
-                'open_issues_only': config.options.open_issues_only,
-                'skip_prs': config.options.skip_prs,
-                'open_prs_only': config.options.open_prs_only,
-                'skip_pr_as_issue': config.options.skip_pr_as_issue,
-                'skip_milestones': config.options.skip_milestones,
-                'open_milestones_only': config.options.open_milestones_only,
-                'use_gh_cli': config.options.use_gh_cli
-            },
+                            'skip_issues': config.options.skip_issues,
+                            'open_issues_only': config.options.open_issues_only,
+                            'skip_prs': config.options.skip_prs,
+                            'open_prs_only': config.options.open_prs_only,
+                            'skip_pr_as_issue': config.options.skip_pr_as_issue,
+                            'skip_milestones': config.options.skip_milestones,
+                            'open_milestones_only': config.options.open_milestones_only,
+                            'use_gh_cli': config.options.use_gh_cli,
+                            'rewrite_cross_repo_links': config.options.rewrite_cross_repo_links
+                        },
             # 'cross_repo_mappings_file': config.cross_repo_mappings_file,
             'link_rewriting_config': {
                 'enabled': config.link_rewriting_config.enabled,

@@ -11,9 +11,9 @@ class RepoHomeLinkHandler(BaseLinkHandler):
     """
     Handler for Bitbucket repository home links.
 
-    Handles repository root URLs that don't match more specific patterns
-    like issues, PRs, commits, etc. Has lowest priority to avoid interfering
-    with more specific link handlers.
+    Rewrites Bitbucket repository home URLs to their corresponding GitHub repository URLs.
+    This handler should have higher priority than CrossRepoLinkHandler to ensure
+    same-repository home links are handled correctly.
     """
 
     def __init__(self, environment: MigrationEnvironment, state: MigrationState):
@@ -24,18 +24,22 @@ class RepoHomeLinkHandler(BaseLinkHandler):
             environment: Migration environment containing config and clients
             state: Migration state for storing link data
         """
-        # Pre-compile pattern at initialization
+        super().__init__(environment, state, priority=5)  # Higher than CrossRepoLinkHandler (6)
+
+        self.bb_workspace = self.environment.config.bitbucket.workspace
+        self.bb_repo = self.environment.config.bitbucket.repo
+        self.gh_owner = self.environment.config.github.owner
+        self.gh_repo = self.environment.config.github.repo
+
+        # Pre-compile pattern for same-repository home links only
         self.PATTERN = re.compile(
-            rf'https://bitbucket\.org/{re.escape(environment.config.bitbucket.workspace)}/{re.escape(environment.config.bitbucket.repo)}(?=\s|\)|"|\'|>|$|$)'
+            rf'https://bitbucket\.org/{re.escape(self.bb_workspace)}/{re.escape(self.bb_repo)}/?$'
         )
-        super().__init__(environment, state, priority=10)  # Low priority
 
         self.logger.debug(
             "RepoHomeLinkHandler initialized for {0}/{1} -> {2}/{3}".format(
-                self.environment.config.bitbucket.workspace,
-                self.environment.config.bitbucket.repo,
-                self.environment.config.github.owner,
-                self.environment.config.github.repo
+                self.bb_workspace, self.bb_repo,
+                self.gh_owner, self.gh_repo
             )
         )
 
@@ -48,70 +52,38 @@ class RepoHomeLinkHandler(BaseLinkHandler):
             context: Context information including item details and markdown context
 
         Returns:
-            Rewritten GitHub repository URL or None if URL doesn't match
+            Rewritten GitHub URL or None if URL doesn't match
         """
-        # Initialize with default values
-        gh_owner = self.environment.config.github.owner
-        gh_repo = self.environment.config.github.repo
+        match = self.PATTERN.match(url)
+        if not match:
+            self.logger.debug(f"URL did not match repository home pattern: {url}")
+            return None
 
-        workspace, repo = self.environment.config.bitbucket.workspace, self.environment.config.bitbucket.repo
-        if workspace == self.environment.config.bitbucket.workspace and repo == self.environment.config.bitbucket.repo:
-            gh_url = f"https://github.com/{gh_owner}/{gh_repo}"
+        gh_url = f"https://github.com/{self.gh_owner}/{self.gh_repo}"
 
-            markdown_context = context.get('markdown_context', None)
+        markdown_context = context.get('markdown_context', None)
 
-            # If in markdown target context, return URL only (no note)
-            if markdown_context == 'target':
-                rewritten = gh_url  # Just the URL
-            else:
-                # Normal context - return formatted link with note
-                note = self.format_note(
-                    'repo_home_link',
-                    bb_url=url,
-                    gh_url=gh_url,
-                    gh_repo=gh_repo
-                )
-                if note:
-                    rewritten = f"[repository]({gh_url}){note}"
-                else:
-                    rewritten = f"[repository]({gh_url})"
+        # If in markdown target context, return URL only (no note)
+        if markdown_context == 'target':
+            rewritten = gh_url  # Just the URL
         else:
-            repo_key = f"{workspace}/{repo}"
-            repo_mapping = self.environment.services.get('cross_repo_mapping_store').get_repository_mapping()
-            if repo_key in repo_mapping:
-                gh_repo_full = repo_mapping[repo_key]
-                if '/' in gh_repo_full:
-                    gh_owner, gh_repo = gh_repo_full.split('/', 1)
-                else:
-                    gh_owner = self.environment.config.github.owner
-                    gh_repo = gh_repo_full
-                gh_url = f"https://github.com/{gh_owner}/{gh_repo}"
-
-                markdown_context = context.get('markdown_context')
-
-                # If in markdown target context, return URL only (no note)
-                if markdown_context == 'target':
-                    rewritten = gh_url  # Just the URL
-                else:
-                    # Normal context - return formatted link with note
-                    note = self.format_note(
-                        'repo_home_link',
-                        bb_url=url,
-                        gh_url=gh_url,
-                        gh_repo=gh_repo
-                    )
-                    if note:
-                        rewritten = f"[{gh_repo}]({gh_url}){note}"
-                    else:
-                        rewritten = f"[{gh_repo}]({gh_url})"
+            # Normal context - return formatted link with note
+            note = self.format_note(
+                'repo_home_link',
+                bb_url=url,
+                gh_url=gh_url,
+                gh_repo=self.gh_repo
+            )
+            if note:
+                rewritten = f"[{self.gh_repo}]({gh_url}){note}"
             else:
-                rewritten = url
+                rewritten = f"[{self.gh_repo}]({gh_url})"
 
         context['details'].append({
             'original': url,
             'rewritten': rewritten,
             'type': 'repo_home_link',
-            'reason': 'mapped' if rewritten != url else 'unmapped',
+            'reason': 'mapped',
             'item_type': context.get('item_type'),
             'item_number': context.get('item_number'),
             'comment_seq': context.get('comment_seq'),

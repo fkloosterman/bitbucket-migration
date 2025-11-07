@@ -94,7 +94,9 @@ class LinkRewriter:
 
         # Initialize handlers
         if handlers is None:
-            handlers = [IssueLinkHandler, PrLinkHandler, CommitLinkHandler, BranchLinkHandler, CompareLinkHandler, CrossRepoLinkHandler]
+            from .source_file_link_handler import SourceFileLinkHandler
+            from .repo_home_link_handler import RepoHomeLinkHandler
+            handlers = [IssueLinkHandler, PrLinkHandler, CommitLinkHandler, SourceFileLinkHandler, RepoHomeLinkHandler, BranchLinkHandler, CompareLinkHandler, CrossRepoLinkHandler]
 
         handlers = set(handlers)
 

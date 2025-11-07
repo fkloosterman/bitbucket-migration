@@ -28,18 +28,26 @@ class CrossRepoLinkHandler(BaseLinkHandler):
             environment: Migration environment containing config and clients
             state: Migration state for storing link data
         """
+        super().__init__(environment, state, priority=6)  # After specific repo handlers
+        
         # Pre-compile pattern at initialization
         self.PATTERN = re.compile(
-            r'https://bitbucket\.org/([^/]+)/([^/]+)(?:/(issues|src|raw|commits|pull-requests)(/[^\s\)"\'>]+))?'
+            r'https://bitbucket\.org/([^/]+)/([^/]+)(?:/(issues|src|raw|commits|pull-requests)(/[^\s\)"\'>]+)?)?'
         )
-        super().__init__(environment, state, priority=6)  # After specific repo handlers
+        
+        # Read detection_only mode from config
+        options = getattr(self.environment.config, 'options', None)
+        self.detection_only = not getattr(
+            options, 'rewrite_cross_repo_links', False
+        ) if options else False
 
         self.logger.debug(
-                "CrossRepoLinkHandler initialized for {0}/{1} -> {2}/{3}".format(
+                "CrossRepoLinkHandler initialized for {0}/{1} -> {2}/{3} (detection_only={4})".format(
                 self.environment.config.bitbucket.workspace,
                 self.environment.config.bitbucket.repo,
                 self.environment.config.github.owner,
-                self.environment.config.github.repo
+                self.environment.config.github.repo,
+                self.detection_only
                 )
         )
 
@@ -54,14 +62,19 @@ class CrossRepoLinkHandler(BaseLinkHandler):
         Returns:
             Rewritten GitHub URL or None if URL doesn't match
         """
-        # Initialize with default values
-        gh_owner = self.environment.config.github.owner
-        gh_repo = self.environment.config.github.repo
-
         match = self.PATTERN.match(url)  # Use pre-compiled pattern
         if not match:
             self.logger.debug(f"URL did not match cross-repo pattern: {url}")
             return None
+        # Check if this is a same-repository link - if so, let higher priority handlers handle it
+        workspace = match.group(1)
+        repo = match.group(2)
+        if workspace == self.environment.config.bitbucket.workspace and repo == self.environment.config.bitbucket.repo:
+            self.logger.debug(f"Same-repository link, letting higher priority handlers handle: {url}")
+            return None
+
+        resource_type = match.group(3)
+        resource_path = match.group(4)[1:] if match.group(4) else ""
 
         # Check if URL is an image/attachment that should be ignored
         if self._should_ignore_url(url):
@@ -72,6 +85,41 @@ class CrossRepoLinkHandler(BaseLinkHandler):
         repo = match.group(2)
         resource_type = match.group(3)
         resource_path = match.group(4)[1:] if match.group(4) else ""
+
+        # In detection-only mode, track the link but keep URL unchanged
+        if self.detection_only:
+            rewritten = url
+            repo_key = f"{workspace}/{repo}"
+            
+            # Determine resource type for tracking
+            if resource_type == 'issues':
+                resource_type_key = 'issue'
+            elif resource_type == 'pull-requests':
+                resource_type_key = 'pr'
+            elif resource_type == 'commits':
+                resource_type_key = 'commit'
+            elif resource_type == 'src':
+                resource_type_key = 'src'
+            elif resource_type == 'raw':
+                resource_type_key = 'raw'
+            else:
+                resource_type_key = 'repo_home'
+            
+            # Track as detected cross-repo link
+            self._add_to_details(context, url, rewritten, 'cross_repo_link', 'detected')
+            
+            # Add metadata for reporting
+            context['details'][-1]['repo_key'] = repo_key
+            context['details'][-1]['resource_type'] = resource_type_key
+            context['details'][-1]['detection_only'] = True
+            
+            self.logger.debug(f"Detected cross-repo {resource_type_key} link to {repo_key} (detection-only mode)")
+            return rewritten
+
+        # Normal rewriting mode (not detection-only)
+        # Initialize with default values
+        gh_owner = self.environment.config.github.owner
+        gh_repo = self.environment.config.github.repo
 
         # Determine mapped repos
         if workspace == self.environment.config.bitbucket.workspace and repo == self.environment.config.bitbucket.repo:
