@@ -292,13 +292,11 @@ def run_test_auth(args, parser=None):
         print("✅ All authentication tests passed!")
         if gh_cli_available:
             print("✅ GitHub CLI is ready for automatic attachment uploads")
+            print("   (but note that not all attachments can be uploaded automatically)")
         else:
             print("⚠️  GitHub CLI not available - attachments will need manual upload")
             print("   Install GitHub CLI for automatic attachment uploads: https://cli.github.com/")
-        print("\nYou can now proceed with the migration using:")
-        print(f"   python migrate_bitbucket_to_github.py migrate --config migration_config.json")
-        if not gh_cli_available:
-            print(f"   python migrate_bitbucket_to_github.py migrate --config migration_config.json --use-gh-cli")
+        print("\nYou can now proceed with the repository audit\n")
     else:
         print("❌ Some authentication tests failed:")
         if not bb_success:

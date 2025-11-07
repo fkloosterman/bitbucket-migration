@@ -170,7 +170,7 @@ class CrossRepoMappingStore:
         self.base_dir_manager.create_file(
             self.mapping_file.name,
             data,
-            subcommand='migrate',
+            subcommand='system',
             category='cross-repo-mapping'
         )
         

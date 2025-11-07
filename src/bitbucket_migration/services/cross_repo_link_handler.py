@@ -12,11 +12,12 @@ from .services_data import LinkWriterData
 
 class CrossRepoLinkHandler(BaseLinkHandler):
     """
-    Handler for cross-repository links (issues, src, commits, pull-requests).
+    Handler for cross-repository links (issues, src, commits, pull-requests, repository home).
 
     Handles links that reference other Bitbucket repositories, delegating to
     appropriate handlers with mapped GitHub repositories. Supports deferred
-    processing for repositories that haven't been migrated yet.
+    processing for repositories that haven't been migrated yet. Also handles
+    repository home URLs for cross-repository links.
     """
 
     def __init__(self, environment: MigrationEnvironment, state: MigrationState):
@@ -29,7 +30,7 @@ class CrossRepoLinkHandler(BaseLinkHandler):
         """
         # Pre-compile pattern at initialization
         self.PATTERN = re.compile(
-            r'https://bitbucket\.org/([^/]+)/([^/]+)/(issues|src|raw|commits|pull-requests)(/[^\s\)"\'>]+)'
+            r'https://bitbucket\.org/([^/]+)/([^/]+)(?:/(issues|src|raw|commits|pull-requests)(/[^\s\)"\'>]+))?'
         )
         super().__init__(environment, state, priority=6)  # After specific repo handlers
 
@@ -62,17 +63,22 @@ class CrossRepoLinkHandler(BaseLinkHandler):
             self.logger.debug(f"URL did not match cross-repo pattern: {url}")
             return None
 
+        # Check if URL is an image/attachment that should be ignored
+        if self._should_ignore_url(url):
+            self.logger.debug(f"URL is an image/attachment, ignoring: {url}")
+            return None
+
         workspace = match.group(1)
         repo = match.group(2)
         resource_type = match.group(3)
-        resource_path = match.group(4)[1:]
+        resource_path = match.group(4)[1:] if match.group(4) else ""
 
         # Determine mapped repos
         if workspace == self.environment.config.bitbucket.workspace and repo == self.environment.config.bitbucket.repo:
             # Already set to self.environment.config.github.owner, self.environment.config.github.repo
             pass
         else:
-            gh_owner, gh_repo = self.environment.services.get('cross_repo_mapping_store').get_mapped_repo(workspace, repo)
+            gh_owner, gh_repo = self.environment.services.get('cross_repo_mapping_store').get_mapped_repository(workspace, repo)
             if not gh_repo:
                 rewritten = url
                 self._add_to_details(context, url, rewritten, 'cross_repo_link', 'unmapped')
@@ -80,8 +86,11 @@ class CrossRepoLinkHandler(BaseLinkHandler):
             if not gh_owner:
                 gh_owner = self.environment.config.github.owner
 
+        # Handle repository home URLs (no resource_type)
+        if resource_type is None:
+            rewritten = self._rewrite_repo_home(url, workspace, repo, gh_owner, gh_repo, context)
         # Delegate to appropriate handler or handle directly
-        if resource_type == 'issues':
+        elif resource_type == 'issues':
             
             handler = None
             # Determine which mapping to use
@@ -143,6 +152,44 @@ class CrossRepoLinkHandler(BaseLinkHandler):
             rewritten = url
             self._add_to_details(context, url, rewritten, 'cross_repo_link', 'unmapped')
 
+        return rewritten
+
+    def _rewrite_repo_home(self, url: str, workspace: str, repo: str, gh_owner: str, gh_repo: str, context: Dict[str, Any]) -> str:
+        """
+        Rewrite Bitbucket repository home URLs to GitHub repository URLs.
+
+        Args:
+            url: Original Bitbucket repository home URL
+            workspace: Bitbucket workspace
+            repo: Bitbucket repository
+            gh_owner: GitHub owner
+            gh_repo: GitHub repository
+            context: Context information
+
+        Returns:
+            Rewritten GitHub repository URL
+        """
+        gh_url = f"https://github.com/{gh_owner}/{gh_repo}"
+
+        markdown_context = context.get('markdown_context', None)
+
+        # If in markdown target context, return URL only (no note)
+        if markdown_context == 'target':
+            rewritten = gh_url  # Just the URL
+        else:
+            # Normal context - return formatted link with note
+            note = self.format_note(
+                'cross_repo_link',
+                bb_url=url,
+                gh_url=gh_url,
+                gh_repo=gh_repo
+            )
+            if note:
+                rewritten = f"[{gh_repo}]({gh_url}){note}"
+            else:
+                rewritten = f"[{gh_repo}]({gh_url})"
+
+        self._add_to_details(context, url, rewritten, 'cross_repo_link', 'mapped')
         return rewritten
 
     def _rewrite_src(self, url: str, workspace: str, repo: str, resource_path: str, gh_owner: str, gh_repo: str, context: Dict[str, Any]) -> str:
@@ -393,3 +440,28 @@ class CrossRepoLinkHandler(BaseLinkHandler):
             'comment_seq': context.get('comment_seq'),
             'comment_id': context.get('comment_id'),
         })
+
+    def _should_ignore_url(self, url: str) -> bool:
+        """
+        Check if URL should be ignored (contains image/attachment paths).
+        
+        These URLs should be preserved as-is since they don't represent
+        repository content that needs to be migrated to GitHub.
+        
+        Args:
+            url: The URL to check
+            
+        Returns:
+            True if URL should be ignored, False otherwise
+        """
+        ignored_patterns = [
+            r'/images/',
+            r'/attachments/',
+            r'/thumbnails/',
+            r'/avatars/',
+        ]
+        
+        for pattern in ignored_patterns:
+            if re.search(pattern, url):
+                return True
+        return False

@@ -31,7 +31,7 @@ class CommitLinkHandler(BaseLinkHandler):
             self.bb_repo = repo
             self.bb_workspace = environment.config.bitbucket.workspace if not workspace else workspace
 
-            self.gh_owner, self.gh_repo = self.environment.services.get('cross_repo_mapping_store').get_mapped_repo(
+            self.gh_owner, self.gh_repo = self.environment.services.get('cross_repo_mapping_store').get_mapped_repository(
                 self.bb_workspace, self.bb_repo
             )
 

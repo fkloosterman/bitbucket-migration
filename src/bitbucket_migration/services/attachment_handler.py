@@ -99,7 +99,7 @@ class AttachmentHandler:
             Upload result or comment body
         """
         github_client = self.environment.clients.gh
-        gh_owner = self.environment.config.github.workspace
+        gh_owner = self.environment.config.github.owner
         gh_repo = self.environment.config.github.repo
 
         if self.use_gh_cli and self.gh_cli_client:

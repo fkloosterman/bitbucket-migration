@@ -9,7 +9,6 @@ from .link_detector import LinkDetector
 from .issue_link_handler import IssueLinkHandler
 from .pr_link_handler import PrLinkHandler
 from .commit_link_handler import CommitLinkHandler
-from .repo_home_link_handler import RepoHomeLinkHandler
 from .branch_link_handler import BranchLinkHandler
 from .compare_link_handler import CompareLinkHandler
 from .cross_repo_link_handler import CrossRepoLinkHandler
@@ -31,6 +30,7 @@ class LinkRewriter:
     - Ensures only full URLs are matched and rewritten to maintain link validity.
     - Deduplicates link details based on original URL and context to avoid report duplicates.
     - Handlers are pre-sorted by priority during initialization for optimal performance.
+    - Preserves content inside code blocks (fenced and inline) to prevent rewriting literal content.
     """
     # Class-level compiled patterns for markdown link detection
     MARKDOWN_LINK_PATTERN = re.compile(
@@ -40,6 +40,12 @@ class LinkRewriter:
     # Also add image link pattern
     IMAGE_LINK_PATTERN = re.compile(
         r'!\[(?P<alt>[^\]]*(?:\[[^\]]*\][^\]]*)*)\]\((?P<url>https?://[^\s)]+)\)'
+    )
+
+    # Code block detection pattern - matches both fenced and inline code
+    CODE_BLOCK_PATTERN = re.compile(
+        r'(```+[a-zA-Z0-9]*\n.*?\n```+|~~~+[a-zA-Z0-9]*\n.*?\n~~~+|```[^`\n]*```|`[^`]+`)',
+        re.DOTALL
     )
 
     # Valid GitHub URL patterns for validation
@@ -53,6 +59,7 @@ class LinkRewriter:
         'raw': re.compile(r'https://github\.com/[\w-]+/[\w.-]+/raw/.+'),
         'repo': re.compile(r'https://github\.com/[\w-]+/[\w.-]+/?$'),
     }
+    
     def __init__(self, environment: MigrationEnvironment, state: MigrationState, handlers: Optional[List[BaseLinkHandler]] = None):
         """
         Initialize the LinkRewriter.
@@ -87,7 +94,7 @@ class LinkRewriter:
 
         # Initialize handlers
         if handlers is None:
-            handlers = [IssueLinkHandler, PrLinkHandler, CommitLinkHandler, BranchLinkHandler, CompareLinkHandler, CrossRepoLinkHandler, RepoHomeLinkHandler]
+            handlers = [IssueLinkHandler, PrLinkHandler, CommitLinkHandler, BranchLinkHandler, CompareLinkHandler, CrossRepoLinkHandler]
 
         handlers = set(handlers)
 
@@ -145,6 +152,37 @@ class LinkRewriter:
 
         return repo_lookup
 
+    def _extract_code_blocks(self, text: str) -> List[Tuple[str, str]]:
+        """
+        Extract code blocks and text segments from the text.
+        
+        Args:
+            text: The text to process
+            
+        Returns:
+            List of tuples (content_type, content) where content_type is 'text' or 'code'
+        """
+        if not text:
+            return [('text', '')]
+        
+        blocks = []
+        last_end = 0
+        
+        for match in self.CODE_BLOCK_PATTERN.finditer(text):
+            if match.start() > last_end:
+                # Add the text before this code block
+                blocks.append(('text', text[last_end:match.start()]))
+            
+            # Add the code block
+            blocks.append(('code', match.group(0)))
+            last_end = match.end()
+        
+        # Add remaining text
+        if last_end < len(text):
+            blocks.append(('text', text[last_end:]))
+        
+        return blocks
+
     def validate_github_url(self, url: str, expected_type: Optional[str] = None) -> bool:
         """
         Validate that a GitHub URL is well-formed.
@@ -195,6 +233,9 @@ class LinkRewriter:
             self.logger.debug("Empty text provided to rewrite_links, returning early with empty results")
             return text, 0, [], 0, 0, [], []
 
+        # PHASE 0: Extract and preserve code blocks
+        blocks = self._extract_code_blocks(text)
+        
         # Set current context
         self.current_item_type = item_type
         self.current_item_number = item_number
@@ -202,41 +243,61 @@ class LinkRewriter:
         self.current_comment_id = comment_id
 
         links_found = 0
+        total_mentions_replaced = 0
+        total_mentions_unmapped = 0
+        total_unmapped_list = []
 
         self.processed_urls = set()
         # Clear validation failures for this processing session
         self.validation_failures = []
         self.validation_errors = 0
 
-        # PHASE 1: Process markdown links FIRST to prevent nesting
-        text, md_links = self._rewrite_markdown_links(text)
-        links_found += md_links
-        self.logger.info(f"Markdown links processed: {md_links}")
+        # Process each text block separately for deterministic behavior
+        processed_blocks = []
+        for block_type, content in blocks:
+            if block_type == 'code':
+                # Preserve code blocks as-is
+                processed_blocks.append(('code', content))
+            else:
+                # Process text blocks independently
+                processed_content = content
+                
+                # PHASE 1: Process markdown links FIRST to prevent nesting
+                processed_content, md_links = self._rewrite_markdown_links(processed_content)
+                links_found += md_links
 
-        # PHASE 1b: Process image links
-        text, img_links = self._rewrite_image_links(text)
-        links_found += img_links
-        self.logger.info(f"Image links processed: {img_links}")
+                # PHASE 1b: Process image links
+                processed_content, img_links = self._rewrite_image_links(processed_content)
+                links_found += img_links
 
-        # PHASE 2: Process remaining plain URLs
-        text, url_links = self._rewrite_urls_with_handlers(text)
-        links_found += url_links
-        self.logger.info(f"Plain URLs processed: {url_links}")
+                # PHASE 2: Process remaining plain URLs
+                processed_content, url_links = self._rewrite_urls_with_handlers(processed_content)
+                links_found += url_links
 
-        # PHASE 2.5: Escape non-URL angle brackets to prevent GitHub markdown misinterpretation
-        text = self._escape_non_url_angle_brackets(text)
-        self.logger.info("Non-URL angle brackets escaped")
+                # PHASE 2.5: Escape non-URL angle brackets to prevent GitHub markdown misinterpretation
+                processed_content = self._escape_non_url_angle_brackets(processed_content)
 
-        # PHASE 3: Rewrite mentions
-        text, mention_replaced, mention_unmapped, unmapped_list = self._rewrite_mentions(text)
+                # PHASE 3: Rewrite mentions
+                processed_content, mention_replaced, mention_unmapped, unmapped_list = self._rewrite_mentions(processed_content)
+                total_mentions_replaced += mention_replaced
+                total_mentions_unmapped += mention_unmapped
+                total_unmapped_list.extend(unmapped_list)
 
-        # PHASE 4: Rewrite short issue references
-        text, short_issue_links = self._rewrite_short_issue_refs(text)
-        links_found += short_issue_links
+                # PHASE 4: Rewrite short issue references
+                processed_content, short_issue_links = self._rewrite_short_issue_refs(processed_content)
+                links_found += short_issue_links
 
-        # PHASE 5: Rewrite PR references
-        text, pr_ref_links = self._rewrite_pr_refs(text)
-        links_found += pr_ref_links
+                # PHASE 5: Rewrite PR references
+                processed_content, pr_ref_links = self._rewrite_pr_refs(processed_content)
+                links_found += pr_ref_links
+                
+                processed_blocks.append(('text', processed_content))
+        
+        # Reassemble all processed blocks
+        final_text = ''.join(content for block_type, content in processed_blocks)
+        mention_replaced = total_mentions_replaced
+        mention_unmapped = total_mentions_unmapped
+        unmapped_list = total_unmapped_list
 
         # Deduplicate link details
         self._deduplicate_link_details()
@@ -249,7 +310,7 @@ class LinkRewriter:
 
         self.logger.info(f"Total links rewritten: {links_found}")
         self.logger.info(f"Validation errors: {self.validation_errors}")
-        return text, links_found, self.unhandled_bb_links, mention_replaced, mention_unmapped, unmapped_list, self.validation_failures
+        return final_text, links_found, self.unhandled_bb_links, mention_replaced, mention_unmapped, unmapped_list, self.validation_failures
 
     def _rewrite_markdown_links(self, text: str) -> Tuple[str, int]:
         """

@@ -50,7 +50,8 @@ class TestGitHubClientInitialization:
         )
         
         assert client.dry_run is True
-        assert client.simulated_number_counter == 1
+        assert client.simulated_issue_pr_counter == 1
+        assert client.simulated_milestone_counter == 1
     
     def test_init_empty_owner_raises_error(self):
         """Test that empty owner raises ValidationError."""

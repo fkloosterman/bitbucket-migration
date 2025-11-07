@@ -59,8 +59,10 @@ class GitHubClient:
         self.token = token
         self.dry_run = dry_run
 
-        # Simulated counter for dry-run mode
-        self.simulated_number_counter = 1
+        # Separate simulated counters for different types of GitHub objects in dry-run mode
+        # GitHub issues and PRs share the same numbering space, milestones have their own
+        self.simulated_issue_pr_counter = 1
+        self.simulated_milestone_counter = 1
 
         # Rate limiting state - track per resource type
         self.rate_limits = {
@@ -261,8 +263,8 @@ class GitHubClient:
 
         # In dry-run mode, return simulated data
         if self.dry_run:
-            number = self.simulated_number_counter
-            self.simulated_number_counter += 1
+            number = self.simulated_issue_pr_counter
+            self.simulated_issue_pr_counter += 1
             return {
                 'number': number,
                 'title': title.strip(),
@@ -342,8 +344,8 @@ class GitHubClient:
 
         # In dry-run mode, return simulated data
         if self.dry_run:
-            number = self.simulated_number_counter
-            self.simulated_number_counter += 1
+            number = self.simulated_issue_pr_counter
+            self.simulated_issue_pr_counter += 1
             return {
                 'number': number,
                 'title': title.strip(),
@@ -1058,8 +1060,8 @@ class GitHubClient:
         
         # In dry-run mode, return simulated data
         if self.dry_run:
-            number = self.simulated_number_counter
-            self.simulated_number_counter += 1
+            number = self.simulated_milestone_counter
+            self.simulated_milestone_counter += 1
             return {
                 'number': number,
                 'title': title.strip(),

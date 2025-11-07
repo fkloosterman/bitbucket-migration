@@ -393,8 +393,13 @@ class AuditOrchestrator:
         self.base_dir_manager.ensure_base_dir()
         config_file = self.base_dir_manager.get_config_path(filename)
 
-        with open(config_file, 'w') as f:
-            json.dump(config, f, indent=2)
+        # Use create_file to register the config file with 'system' subcommand
+        self.base_dir_manager.create_file(
+            config_file,
+            config,
+            subcommand='system',
+            category='config'
+        )
 
         self.logger.info(f"\n{'='*80}")
         self.logger.info(f"📋 Unified migration configuration saved: {config_file}")

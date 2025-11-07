@@ -700,20 +700,34 @@ class PullRequestMigrator:
 
         # Fetch all PR comments once to avoid repeated API calls
         all_comments = self._fetch_bb_pr_comments(pr_num)
-        comment_seq = 0
+        
+        # Sort comments topologically (parents before children)
+        sorted_comments = self._sort_comments_topologically(all_comments)
+        self.logger.info(f"Processing {len(sorted_comments)} comments for PR #{pr_num}")
+        
+        # Create a mapping from comment ID to activities for chronological ordering
+        # Use defaultdict(list) to handle multiple activities per comment
+        from collections import defaultdict
+        comment_activities = defaultdict(list)
         for activity in sorted_activities:
             if 'comment' in activity:
-                # Process as comment - fetch full comment data from API
                 comment_id = activity['comment']['id']
-                # Find the full comment data by ID from pre-fetched comments
-                full_comment = next((c for c in all_comments if c['id'] == comment_id), None)
-                if full_comment:
-                    comment = full_comment
-                else:
-                    # Fallback to activity data if not found
-                    comment = activity['comment']
-                activity_id = comment.get('id', 'unknown')
-
+                comment_activities[comment_id].append(activity)
+        
+        comment_seq = 0
+        for comment in sorted_comments:
+            # Find the corresponding activities for this comment
+            comment_id = comment.get('id')
+            activities = comment_activities.get(comment_id, [])
+            if not activities:
+                # Skip if no corresponding activities found
+                continue
+                
+            comment = comment  # Use the sorted comment directly
+            activity_id = comment.get('id', 'unknown')
+            
+            # Process the comment (typically one activity per comment, but handle multiple)
+            for activity in activities:
                 # Add logging to verify comment ID mapping
                 parent_id = comment.get('parent', {}).get('id') if comment.get('parent') else None
                 if parent_id:
@@ -872,8 +886,15 @@ class PullRequestMigrator:
                             raise
 
                 migrated_comments_count += 1
+                # Only process the first activity for this comment to avoid duplicate processing
+                break
 
-            elif 'update' in activity:
+        # Process non-comment activities (updates and approvals) separately to maintain chronological order
+        for activity in sorted_activities:
+            if 'comment' in activity:
+                continue  # Skip comments as they're already processed
+            
+            if 'update' in activity:
                 # Process as update
                 update = activity['update']
                 activity_id = 'unknown'  # Updates do not have IDs

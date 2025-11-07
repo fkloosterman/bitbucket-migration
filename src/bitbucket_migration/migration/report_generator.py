@@ -699,7 +699,7 @@ class ReportGenerator:
         self.base_dir_manager.create_file(
             output_path / filename,
             mapping,
-            subcommand='migrate',
+            subcommand=subcommand,
             workspace=self.environment.config.bitbucket.workspace,
             repo=self.environment.config.bitbucket.repo,
             category='mapping'

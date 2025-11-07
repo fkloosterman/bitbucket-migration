@@ -63,11 +63,15 @@ class BaseMigrator:
         )
         log_file = output_dir / self._get_log_filename()
         
+        # Create unique logger name for this repository and subcommand
+        logger_name = f"bitbucket_migration_{self.config.bitbucket.workspace}_{self.config.bitbucket.repo}_{subcommand}"
+        
         self.logger = MigrationLogger(
             log_level=self.log_level,
             log_file=str(log_file),
             dry_run=self.dry_run,
-            overwrite=True
+            overwrite=True,
+            logger_name=logger_name
         )
 
         # Register log file for tracking
@@ -296,14 +300,14 @@ class RepoMigrator(BaseMigrator):
             # Step 6: Perform migration (two-pass for link rewriting)
             if not self.config.options.skip_issues:
                 # First pass: create issues without link rewriting
-                issue_records, self.state.type_stats, self.state.type_fallbacks = self.issue_migrator.migrate_issues(bb_issues, self.config.options.open_issues_only, skip_link_rewriting=True)
+                issue_records, self.state.type_stats, self.state.type_fallbacks = self.issue_migrator.migrate_issues(bb_issues, self.config.options.open_issues_only)
             else:
                 issue_records = []
 
             if not self.config.options.skip_prs:
                 # First pass: create PRs without link rewriting
                 pr_records = self.pr_migrator.migrate_pull_requests(
-                    bb_prs, self.config.options.skip_pr_as_issue, self.config.options.open_prs_only, skip_link_rewriting=True
+                    bb_prs, self.config.options.skip_pr_as_issue, self.config.options.open_prs_only
                 )
 
 

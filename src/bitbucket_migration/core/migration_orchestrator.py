@@ -49,7 +49,8 @@ class BaseOrchestrator:
                 log_level=self.log_level,
                 log_file=str(log_file),
                 dry_run=self.dry_run,
-                overwrite=False
+                overwrite=False,
+                logger_name='bitbucket_migration_orchestrator'
             )
 
             # Register the orchestrator log file for tracking

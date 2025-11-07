@@ -524,20 +524,20 @@ class TestConfigSaving:
         
         with patch.object(orchestrator.base_dir_manager, 'ensure_base_dir'), \
              patch.object(orchestrator.base_dir_manager, 'get_config_path') as mock_get_path, \
-             patch('builtins.open', create=True) as mock_open, \
-             patch('json.dump') as mock_dump:
+             patch.object(orchestrator.base_dir_manager, 'create_file') as mock_create_file:
             
-            mock_path = Mock()
+            mock_path = Path('/fake/path/config.json')
             mock_get_path.return_value = mock_path
-            
-            mock_file = MagicMock()
-            mock_open.return_value.__enter__.return_value = mock_file
             
             orchestrator.save_config(config, filename="custom-config.json")
             
             mock_get_path.assert_called_once_with("custom-config.json")
-            mock_open.assert_called_once_with(mock_path, 'w')
-            mock_dump.assert_called_once_with(config, mock_file, indent=2)
+            mock_create_file.assert_called_once_with(
+                mock_path,
+                config,
+                subcommand='system',
+                category='config'
+            )
     
     def test_save_config_auto_generated_filename(self, orchestrator):
         """Test saving config with auto-generated filename."""
@@ -545,17 +545,17 @@ class TestConfigSaving:
         
         with patch.object(orchestrator.base_dir_manager, 'ensure_base_dir'), \
              patch.object(orchestrator.base_dir_manager, 'get_config_path') as mock_get_path, \
-             patch('builtins.open', create=True) as mock_open, \
-             patch('json.dump') as mock_dump:
+             patch.object(orchestrator.base_dir_manager, 'create_file') as mock_create_file:
             
-            mock_path = Mock()
+            mock_path = Path('/fake/path/config.json')
             mock_get_path.return_value = mock_path
-            
-            mock_file = MagicMock()
-            mock_open.return_value.__enter__.return_value = mock_file
             
             orchestrator.save_config(config)  # No filename provided
             
             mock_get_path.assert_called_once_with(None)  # Should pass None for auto-generation
-            mock_open.assert_called_once_with(mock_path, 'w')
-            mock_dump.assert_called_once_with(config, mock_file, indent=2)
+            mock_create_file.assert_called_once_with(
+                mock_path,
+                config,
+                subcommand='system',
+                category='config'
+            )
