@@ -27,13 +27,17 @@ class CrossRepoMappingStore:
         Initialize the cross-repo mapping store.
 
         Args:
-            base_dir_manager: BaseDirManager for file tracking
+            environment: Migration environment containing config and clients
+            state: Migration state for storing mapping data
         """
         self.environment = environment
         self.state = state
         
+        # Get dry_run from environment (with backward compatibility)
+        self.dry_run = getattr(environment, 'dry_run', False)
+        
         self.base_dir_manager = environment.base_dir_manager
-        self.mapping_file = self.base_dir_manager.get_mappings_path()
+        self.mapping_file = self.base_dir_manager.get_mappings_path(dry_run=self.dry_run)
         self.logger = environment.logger
         
         self._repositories: Dict[str, str] = {}
@@ -231,3 +235,65 @@ class CrossRepoMappingStore:
 
         repo_key = f"{bb_workspace}/{bb_repo}"
         return repo_key in self._mappings
+
+
+class CrossLinkMappingStore(CrossRepoMappingStore):
+    """
+    Specialized mapping store for cross-link processing that prioritizes
+    real migration mappings but falls back to dry-run mappings only when
+    cross-link processing is run in dry-run mode.
+    """
+    
+    def __init__(self, environment: MigrationEnvironment, state: MigrationState):
+        """
+        Initialize the cross-link mapping store with fallback logic.
+        
+        Args:
+            environment: Migration environment containing config and clients
+            state: Migration state for storing mapping data
+        """
+        # Call parent constructor to initialize environment, state, logger, etc.
+        super().__init__(environment, state)
+        
+        # Override the mapping file selection with fallback logic
+        self.mapping_file, self._fallback_used = self._select_mapping_file()
+    
+    def _select_mapping_file(self) -> Tuple[Path, bool]:
+        """
+        Select the appropriate mapping file with conditional fallback logic.
+        
+        Real mode (dry_run=False):
+        - Only use real migration mappings (cross_repo_mappings.json)
+        - Error if not available
+        
+        Dry-run mode (dry_run=True):
+        - Priority 1: Real migration mappings (cross_repo_mappings.json)
+        - Priority 2: Dry-run mappings (cross_repo_mappings_dry_run.json) with warning
+        
+        Returns:
+            Tuple of (selected_file_path, fallback_used)
+        """
+        real_mappings = self.base_dir_manager.get_mappings_path(dry_run=False)
+        dry_run_mappings = self.base_dir_manager.get_mappings_path(dry_run=True)
+        
+        if real_mappings.exists():
+            self.logger.info(f"Using real migration mappings: {real_mappings}")
+            return real_mappings, False
+        elif self.dry_run and dry_run_mappings.exists():
+            # Only fallback to dry-run mappings if cross-link is also in dry-run mode
+            self.logger.warning(f"Real migration mappings not found at {real_mappings}")
+            self.logger.warning(f"Falling back to dry-run mappings: {dry_run_mappings}")
+            self.logger.warning("Cross-link processing will use dry-run data. Consider running real migration first.")
+            return dry_run_mappings, True
+        else:
+            # No fallback - either not in dry-run mode or no dry-run mappings available
+            self.logger.error(f"No cross-repository mappings found!")
+            self.logger.error(f"  Real migration: {real_mappings}")
+            if self.dry_run:
+                self.logger.error(f"  Dry-run: {dry_run_mappings}")
+                self.logger.error("For dry-run cross-link processing, ensure at least one migration (real or dry-run) has been completed.")
+            else:
+                self.logger.error("For real cross-link processing, ensure real migration has been completed first.")
+                self.logger.error("Run 'migrate' command before 'cross-link' command.")
+            # Return the real mappings path even if it doesn't exist, for error reporting
+            return real_mappings, False

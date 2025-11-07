@@ -616,7 +616,7 @@ class RepoMigrator(BaseMigrator):
 
     def _save_cross_repo_mappings(self) -> None:
         """Save cross-repository mappings for future migrations."""
-        cross_repo_mappings_file = self.base_dir_manager.get_mappings_path()
+        cross_repo_mappings_file = self.base_dir_manager.get_mappings_path(dry_run=self.dry_run)
 
         try:
             mapping_store = self.environment.services.get('cross_repo_mapping_store')
@@ -661,10 +661,12 @@ class CrossLinkMigrator(BaseMigrator):
         # self.services = ServiceLocator()
         self.state = MigrationState()
 
-        # Initialize cross-repo mapping store
+        # Initialize cross-repo mapping store for cross-link processing
+        # Use specialized store that automatically gets dry_run from environment
+        from ..services.cross_repo_mapping_store import CrossLinkMappingStore
         self.environment.services.register(
             'cross_repo_mapping_store',
-            CrossRepoMappingStore(self.environment, self.state)
+            CrossLinkMappingStore(self.environment, self.state)
         )
 
         self.environment.clients.gh = GitHubClient(

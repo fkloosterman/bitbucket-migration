@@ -64,14 +64,21 @@ class BaseDirManager:
 
         return self.base_dir / filename
 
-    def get_mappings_path(self) -> Path:
+    def get_mappings_path(self, dry_run: bool = False) -> Path:
         """
         Get path to the cross-repository mappings file.
 
+        Args:
+            dry_run: If True, return dry-run specific mappings file path.
+                    If False, return the main mappings file path.
+
         Returns:
-            Path to cross_repo_mappings.json in the base directory
+            Path to cross_repo_mappings.json (or cross_repo_mappings_dry_run.json if dry_run=True)
         """
-        return self.base_dir / "cross_repo_mappings.json"
+        if dry_run:
+            return self.base_dir / "cross_repo_mappings_dry_run.json"
+        else:
+            return self.base_dir / "cross_repo_mappings.json"
 
     def ensure_subcommand_dir(self, subcommand: str, workspace: str, repo: str) -> Path:
         """
