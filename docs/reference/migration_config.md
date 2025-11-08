@@ -59,8 +59,7 @@ The configuration file is typically named `config.json` and lives at the root of
   "options": {
     "skip_issues": false,
     "skip_prs": false,
-    "skip_pr_as_issue": false,
-    "use_gh_cli": false
+    "skip_pr_as_issue": false
   },
 
   "user_mapping": {
@@ -162,7 +161,6 @@ Migration control options grouped in the `options` object:
 | `skip_issues` | boolean | `false` | Skip migrating issues |
 | `skip_prs` | boolean | `false` | Skip migrating pull requests |
 | `skip_pr_as_issue` | boolean | `false` | Skip migrating closed PRs as issues |
-| `use_gh_cli` | boolean | `false` | Use GitHub CLI for attachment uploads |
 
 ---
 
@@ -394,15 +392,13 @@ These boolean flags control various aspects of the migration process:
 {
   "skip_issues": false,
   "skip_prs": false,
-  "skip_pr_as_issue": false,
-  "use_gh_cli": false
+  "skip_pr_as_issue": false
 }
 ```
 
 - `skip_issues`: Skip migrating issues entirely
 - `skip_prs`: Skip migrating pull requests as PRs (but may still migrate as issues if `skip_pr_as_issue` is false)
 - `skip_pr_as_issue`: Skip migrating closed/merged PRs as issues
-- `use_gh_cli`: Use GitHub CLI for attachment uploads instead of API
 
 ## 📋 Migration Workflow
 

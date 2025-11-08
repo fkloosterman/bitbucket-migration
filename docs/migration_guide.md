@@ -294,7 +294,6 @@ migrate_bitbucket_to_github cross-link --config migration_config.json
 
 ??? "Advanced Options"
 
-    - Use `--use-gh-cli` for automatic attachment upload.
     - Use `--skip-issues` or `--skip-prs` to migrate selectively.
     - For **Phase 2 cross-repo link updates**: Use separate `cross-link` subcommand.
     - See [CLI Reference](reference/cli_reference.md) for all options.
@@ -303,26 +302,9 @@ migrate_bitbucket_to_github cross-link --config migration_config.json
 
 ### Step 6 — Upload Attachments
 
-Attachments are downloaded locally because GitHub’s API doesn’t support direct upload. Use the `--use-gh-cli` option in the migration script for automated upload, or follow the manual steps below.
+Attachments are downloaded locally because GitHub's API doesn't support direct upload. The migration tool creates informative comments on each issue/PR indicating which attachments need to be uploaded.
 
-#### Automated Upload (Recommended)
-
-Add `--use-gh-cli` to the migration command for automatic attachment upload:
-
-```bash
-migrate_bitbucket_to_github migrate --config migration_config.json --use-gh-cli
-```
-
-This requires GitHub CLI installed and authenticated.
-
-**For multi-repository migrations:**
-```bash
-# For each repository
-migrate_bitbucket_to_github migrate --config migration_config.json --use-gh-cli
-# Repeat for each repository...
-```
-
-#### Manual Upload
+#### Attachment Upload Process
 
 1. **Locate Files**
     ```bash
@@ -348,17 +330,6 @@ migrate_bitbucket_to_github migrate --config migration_config.json --use-gh-cli
 ??? "Advanced Options"
     For bulk uploads or prioritization:
 
-    **Bulk Upload with GitHub CLI**
-
-    ```bash
-    gh auth login
-    cd attachments_temp
-    while IFS=',' read -r file issue_num; do
-      gh issue comment "$issue_num" --repo OWNER/REPO --body "**Attachment:** $file" --attach "$file"
-      sleep 2
-    done < attachment_mapping.csv
-    ```
-
     **Prioritization**
 
     | Priority | Files | Action |
@@ -383,7 +354,7 @@ Confirm migration success and finalize the process.
 - Verify Git history: branches, tags, and commits match Bitbucket.
 - Check issue/PR counts and content against audit report.
 - Spot-check user mentions, comments, and timestamps.
-- Confirm attachments are uploaded (if not using --use-gh-cli).
+- Confirm attachments are uploaded.
 
 **Clean-Up Operations:**
 

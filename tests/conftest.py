@@ -94,15 +94,15 @@ def mock_environment():
     
     # Mock clients
     env.clients = MagicMock()
-    env.clients.gh_cli = None
     env.clients.gh = MagicMock()
     env.clients.bitbucket = MagicMock()
     
     # Mock cross repo mapping store
     mock_mapping_store = MagicMock()
-    mock_mapping_store.get_mapped_repo = MagicMock(return_value=(None, None))
+    mock_mapping_store.get_mapped_repository = MagicMock(return_value=(None, None))
     mock_mapping_store.get_issue_mapping = MagicMock(return_value={})
     mock_mapping_store.get_pr_mapping = MagicMock(return_value={})
+    mock_mapping_store.has_repository = MagicMock(return_value=False)
     
     env.services.get = MagicMock(return_value=mock_mapping_store)
     

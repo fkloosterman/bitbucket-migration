@@ -3,7 +3,7 @@
 Test authentication command for Bitbucket to GitHub migration.
 
 This module contains the run_test_auth function that handles testing
-authentication for both Bitbucket and GitHub APIs plus GitHub CLI.
+authentication for both Bitbucket and GitHub APIs.
 """
 
 import sys
@@ -12,7 +12,6 @@ import os
 from dotenv import load_dotenv
 from bitbucket_migration.clients.bitbucket_client import BitbucketClient
 from bitbucket_migration.clients.github_client import GitHubClient
-from bitbucket_migration.clients.github_cli_client import GitHubCliClient
 from bitbucket_migration.exceptions import (
     MigrationError,
     APIError,
@@ -22,110 +21,11 @@ from bitbucket_migration.exceptions import (
 )
 
 
-def _check_gh_cli_available(gh_token: str):
-    """Check if GitHub CLI is available and authenticated.
-
-    Verifies the installation and authentication status of the GitHub CLI tool,
-    which is required for automatic attachment uploads during migration.
-
-    Parameters
-    ----------
-    gh_token : str
-        GitHub personal access token for authentication checks.
-
-    Returns
-    -------
-    dict
-        Dictionary containing check results with the following keys:
-        - 'available' (bool): Whether GitHub CLI is installed
-        - 'authenticated' (bool): Whether GitHub CLI is authenticated
-        - 'details' (str): Human-readable description of the status
-        - 'version' (str): GitHub CLI version if available, empty string otherwise
-
-    Notes
-    -----
-    This is a private helper function used by authentication testing.
-    Uses GitHubCliClient for checks.
-    """
-    
-    result = {
-        'available': False,
-        'authenticated': False,
-        'details': '',
-        'version': ''
-    }
-
-    try:
-        # Create CLI client for checks
-        cli_client = GitHubCliClient(gh_token)
-
-        if cli_client.is_available():
-            result['available'] = True
-            result['version'] = cli_client.get_version() or 'unknown'
-            result['details'] = f"GitHub CLI {result['version']} is installed"
-
-            if cli_client.is_authenticated():
-                result['authenticated'] = True
-                result['details'] += " and authenticated"
-            else:
-                result['details'] += " but not authenticated"
-        else:
-            result['details'] = "GitHub CLI not installed"
-
-    except Exception as e:
-        result['details'] = f"Error checking GitHub CLI: {e}"
-
-    return result
-
-
-def _authenticate_gh_cli(token: str):
-    """Authenticate GitHub CLI using the provided personal access token.
-
-    Attempts to authenticate the GitHub CLI tool using the provided token.
-    This enables automatic attachment uploads during the migration process.
-
-    Parameters
-    ----------
-    token : str
-        GitHub personal access token with repository permissions.
-
-    Returns
-    -------
-    dict
-        Dictionary containing authentication results with keys:
-        - 'success' (bool): Whether authentication was successful
-        - 'error' (str): Error message if authentication failed, empty if successful
-
-    Notes
-    -----
-    This is a private helper function used by authentication testing.
-    Uses GitHubCliClient for authentication.
-    """
-    
-    result = {
-        'success': False,
-        'error': ''
-    }
-
-    try:
-        # Create CLI client and attempt authentication
-        cli_client = GitHubCliClient(token)
-        if cli_client.authenticate():
-            result['success'] = True
-        else:
-            result['error'] = "Authentication failed"
-
-    except Exception as e:
-        result['error'] = f"Authentication error: {e}"
-
-    return result
-
-
 def run_test_auth(args, parser=None):
-    """Test authentication for both Bitbucket and GitHub APIs plus GitHub CLI.
+    """Test authentication for both Bitbucket and GitHub APIs.
 
     Performs comprehensive authentication testing for all services required during
-    migration: Bitbucket API, GitHub API, and GitHub CLI. Provides detailed feedback
+    migration: Bitbucket API and GitHub API. Provides detailed feedback
     and troubleshooting guidance for any failures. Prompts for missing arguments.
 
     Parameters
@@ -140,7 +40,6 @@ def run_test_auth(args, parser=None):
     ------------
     - Prompts user for missing authentication parameters
     - Makes API calls to Bitbucket and GitHub
-    - Checks and potentially modifies GitHub CLI authentication state
     - Prints detailed status and troubleshooting information to stdout
     - May exit the program with error code 1 if authentication fails
 
@@ -163,8 +62,7 @@ def run_test_auth(args, parser=None):
     # Track test results
     results = {
         'bitbucket': {'success': False, 'error': None, 'details': ''},
-        'github': {'success': False, 'error': None, 'details': ''},
-        'gh_cli': {'available': False, 'authenticated': False, 'error': None, 'details': ''}
+        'github': {'success': False, 'error': None, 'details': ''}
     }
 
     print("🔍 Testing API connections...")
@@ -245,57 +143,15 @@ def run_test_auth(args, parser=None):
         print(f"❌ GitHub unexpected error: {e}")
 
     print()
-
-    # Test GitHub CLI availability and authentication
-    print("Testing GitHub CLI...")
-    try:
-        gh_cli_result = _check_gh_cli_available(args.gh_token)
-        results['gh_cli']['available'] = gh_cli_result['available']
-        results['gh_cli']['authenticated'] = gh_cli_result['authenticated']
-        results['gh_cli']['details'] = gh_cli_result['details']
-
-        if gh_cli_result['available']:
-            print("✅ GitHub CLI is installed")
-            if gh_cli_result['authenticated']:
-                print("✅ GitHub CLI is authenticated")
-            else:
-                print("❌ GitHub CLI is not authenticated")
-                # Try to authenticate automatically
-                print("Attempting automatic GitHub CLI authentication...")
-                auth_result = _authenticate_gh_cli(args.gh_token)
-                if auth_result['success']:
-                    print("✅ GitHub CLI authentication successful")
-                    results['gh_cli']['authenticated'] = True
-                    results['gh_cli']['details'] = "Authenticated automatically"
-                else:
-                    print(f"❌ GitHub CLI authentication failed: {auth_result['error']}")
-                    results['gh_cli']['details'] = auth_result['error']
-        else:
-            print("❌ GitHub CLI is not installed")
-            print("GitHub CLI is required for automatic attachment uploads.")
-            print("Install from: https://cli.github.com/")
-
-    except Exception as e:
-        results['gh_cli']['error'] = 'unexpected'
-        results['gh_cli']['details'] = str(e)
-        print(f"❌ GitHub CLI check failed: {e}")
-
-    print()
     print("=" * 50)
 
     # Summary
     bb_success = results['bitbucket']['success']
     gh_success = results['github']['success']
-    gh_cli_available = results['gh_cli']['available']
 
     if bb_success and gh_success:
         print("✅ All authentication tests passed!")
-        if gh_cli_available:
-            print("✅ GitHub CLI is ready for automatic attachment uploads")
-            print("   (but note that not all attachments can be uploaded automatically)")
-        else:
-            print("⚠️  GitHub CLI not available - attachments will need manual upload")
-            print("   Install GitHub CLI for automatic attachment uploads: https://cli.github.com/")
+        print("\nNote: Attachments will need manual upload via drag-and-drop in GitHub issues")
         print("\nYou can now proceed with the repository audit\n")
     else:
         print("❌ Some authentication tests failed:")
@@ -303,8 +159,6 @@ def run_test_auth(args, parser=None):
             print(f"   Bitbucket: {results['bitbucket']['details']}")
         if not gh_success:
             print(f"   GitHub: {results['github']['details']}")
-        if not gh_cli_available:
-            print(f"   GitHub CLI: {results['gh_cli']['details']}")
 
         # Provide specific guidance based on error types
         if results['bitbucket']['error'] == 'validation':
@@ -337,12 +191,6 @@ def run_test_auth(args, parser=None):
             print(f"  - Verify the repository exists: https://github.com/{args.gh_owner}/{args.gh_repo}")
             print("  - Ensure you have access to the repository")
             print("  - Check if the owner and repository names are correct")
-
-        if not gh_cli_available:
-            print("\nFor GitHub CLI:")
-            print("  - Install GitHub CLI for automatic attachment uploads")
-            print("  - Visit: https://cli.github.com/")
-            print("  - After installation, run: gh auth login")
 
         sys.exit(1)
 

@@ -35,7 +35,6 @@ class TestMigrationCommand:
             skip_pr_as_issue='false',
             skip_milestones='false',
             open_milestones_only='false',
-            use_gh_cli='false',
             dry_run='true',
             debug=False
         )
@@ -53,7 +52,6 @@ class TestMigrationCommand:
         config.options.skip_pr_as_issue = False
         config.options.skip_milestones = False
         config.options.open_milestones_only = False
-        config.options.use_gh_cli = False
         return config
     
     @patch('bitbucket_migration.commands.migration_command.SecureConfigLoader')
@@ -251,22 +249,6 @@ class TestMigrationCommand:
         
         # Verify override was applied
         assert mock_config.options.open_milestones_only is True
-        mock_orchestrator.run_migration.assert_called_once()
-    
-    @patch('bitbucket_migration.commands.migration_command.SecureConfigLoader')
-    @patch('bitbucket_migration.commands.migration_command.MigrationOrchestrator')
-    def test_run_migration_use_gh_cli_override(self, mock_orchestrator_class, mock_config_loader, mock_args, mock_config):
-        """Test migration with use_gh_cli override."""
-        mock_args.use_gh_cli = 'true'
-        mock_config_loader.load_from_file.return_value = mock_config
-        
-        mock_orchestrator = Mock()
-        mock_orchestrator_class.return_value = mock_orchestrator
-        
-        run_migration(mock_args)
-        
-        # Verify override was applied
-        assert mock_config.options.use_gh_cli is True
         mock_orchestrator.run_migration.assert_called_once()
     
     @patch('bitbucket_migration.commands.migration_command.SecureConfigLoader')

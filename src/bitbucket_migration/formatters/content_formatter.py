@@ -109,7 +109,7 @@ class IssueContentFormatter(ContentFormatter):
             content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(content, 'issue', issue['id'], comment_seq=None, comment_id=None)
 
         # Extract and download inline images
-        content, inline_images = self.attachment_handler.extract_and_download_inline_images(content, kwargs.get('use_gh_cli', False), item_type='issue', item_number=issue['id'])
+        content, inline_images = self.attachment_handler.extract_and_download_inline_images(content, item_type='issue', item_number=issue['id'])
 
         formatted_created = self._format_date(created)
         body = f"""**Migrated from Bitbucket**
@@ -182,7 +182,7 @@ class PullRequestContentFormatter(ContentFormatter):
             description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(description, 'pr', pr['id'], comment_seq=None, comment_id=None)
 
         # Extract and download inline images
-        description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, kwargs.get('use_gh_cli', False), item_type='pr', item_number=pr['id'])
+        description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, item_type='pr', item_number=pr['id'])
 
         formatted_created = self._format_date(created)
         formatted_updated = self._format_date(updated)
@@ -239,7 +239,7 @@ class PullRequestContentFormatter(ContentFormatter):
             description, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(description, 'pr', pr['id'], comment_seq=None, comment_id=None)
 
         # Extract and download inline images
-        description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, kwargs.get('use_gh_cli', False), item_type='pr', item_number=pr['id'])
+        description, inline_images = self.attachment_handler.extract_and_download_inline_images(description, item_type='pr', item_number=pr['id'])
 
         formatted_created = self._format_date(created)
         body = f"""**Migrated from Bitbucket**
@@ -300,7 +300,7 @@ class CommentContentFormatter(ContentFormatter):
             content, links_count, unhandled_links, mentions_replaced, mentions_unmapped, unmapped_list, validation_failures = self.link_rewriter.rewrite_links(content, item_type, item_number, comment_seq=comment_seq, comment_id=comment_id)
 
         # Extract and download inline images
-        content, inline_images = self.attachment_handler.extract_and_download_inline_images(content, kwargs.get('use_gh_cli', False), item_type=item_type, item_number=item_number, comment_seq=comment_seq)
+        content, inline_images = self.attachment_handler.extract_and_download_inline_images(content, item_type=item_type, item_number=item_number, comment_seq=comment_seq)
 
         # Check if this is an inline code comment (for PR comments)
         inline_data = comment.get('inline')

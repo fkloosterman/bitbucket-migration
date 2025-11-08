@@ -47,8 +47,7 @@ class TestConfigValidation:
             "options": {
                 "skip_issues": False,
                 "skip_prs": False,
-                "skip_pr_as_issue": False,
-                "use_gh_cli": False
+                "skip_pr_as_issue": False
             },
             "user_mapping": {
                 "Test User": "testuser"
@@ -96,8 +95,7 @@ class TestConfigValidation:
             "options": {
                 "skip_issues": False,
                 "skip_prs": False,
-                "skip_pr_as_issue": False,
-                "use_gh_cli": False
+                "skip_pr_as_issue": False
             },
             "user_mapping": {
                 "Test User": "testuser"
@@ -141,8 +139,7 @@ class TestConfigValidation:
             "options": {
                 "skip_issues": False,
                 "skip_prs": False,
-                "skip_pr_as_issue": False,
-                "use_gh_cli": False
+                "skip_pr_as_issue": False
             },
             "user_mapping": {
                 "Test User": "testuser"

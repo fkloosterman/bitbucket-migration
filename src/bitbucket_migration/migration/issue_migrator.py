@@ -496,7 +496,7 @@ class IssueMigrator:
 
         # Format and update issue body
         formatter = self.formatter_factory.get_issue_formatter()
-        body, links_in_body, inline_images_body = formatter.format(bb_issue, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli)
+        body, links_in_body, inline_images_body = formatter.format(bb_issue, skip_link_rewriting=False)
 
         # Inline images are already tracked by the formatter, no need to duplicate
 
@@ -598,7 +598,7 @@ class IssueMigrator:
 
             # Format comment
             formatter = self.formatter_factory.get_comment_formatter()
-            comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='issue', item_number=issue_num, comment_seq=comment_seq, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli, changes=comment_changes[comment['id']])
+            comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='issue', item_number=issue_num, comment_seq=comment_seq, skip_link_rewriting=False, changes=comment_changes[comment['id']])
             links_in_comments += comment_links
 
             # Add annotation for pending

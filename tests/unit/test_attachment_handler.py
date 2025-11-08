@@ -3,7 +3,7 @@ Tests for AttachmentHandler.
 
 Tests the attachment download and upload functionality including:
 - Downloading from Bitbucket
-- Uploading to GitHub (CLI and manual)
+- Uploading to GitHub (manual)
 - Inline image extraction from markdown
 - Error handling for network failures
 - Dry-run mode behavior
@@ -40,7 +40,6 @@ class TestAttachmentHandler:
         mock_environment.dry_run = True
         mock_environment.config.bitbucket.workspace = 'test_workspace'
         mock_environment.config.bitbucket.repo = 'test_repo'
-        mock_environment.clients.gh_cli = None
         
         # Mock the subcommand directory to return a path with 'dry-run' in it
         mock_subcommand_dir = MagicMock()
@@ -56,33 +55,11 @@ class TestAttachmentHandler:
         assert handler.dry_run is True
         assert 'dry-run' in str(handler.data.attachment_dir)
 
-    def test_init_with_gh_cli(self, mock_environment, mock_state):
-        """Test initialization with GitHub CLI available."""
-        mock_cli = MagicMock()
-        mock_environment.clients.gh_cli = mock_cli
-        mock_environment.dry_run = False
-        
-        handler = AttachmentHandler(mock_environment, mock_state)
-        
-        assert handler.use_gh_cli is True
-        assert handler.gh_cli_client == mock_cli
-
-    def test_init_without_gh_cli(self, mock_environment, mock_state):
-        """Test initialization without GitHub CLI."""
-        mock_environment.clients.gh_cli = None
-        mock_environment.dry_run = False
-        
-        handler = AttachmentHandler(mock_environment, mock_state)
-        
-        assert handler.use_gh_cli is False
-        assert handler.gh_cli_client is None
-
     def test_attachment_directory_creation(self, mock_environment, mock_state):
         """Test that attachment directory is created."""
         mock_environment.dry_run = False
         mock_environment.config.bitbucket.workspace = 'test_workspace'
         mock_environment.config.bitbucket.repo = 'test_repo'
-        mock_environment.clients.gh_cli = None
         
         # Mock the returned path object to have a mkdir method
         mock_path = MagicMock()
@@ -180,7 +157,6 @@ class TestAttachmentDownload:
         mock_environment.dry_run = True
         mock_environment.config.bitbucket.workspace = 'test_workspace'
         mock_environment.config.bitbucket.repo = 'test_repo'
-        mock_environment.clients.gh_cli = None
         
         # Mock the subcommand directory
         mock_subcommand_dir = MagicMock()
@@ -290,58 +266,9 @@ class TestGitHubUpload:
         """Create an AttachmentHandler for testing."""
         return AttachmentHandler(mock_environment, mock_state)
 
-    def test_upload_with_gh_cli_success(self, mock_environment, mock_state):
-        """Test successful upload via GitHub CLI."""
-        # Setup for CLI upload
-        mock_cli = MagicMock()
-        mock_cli.upload_attachment.return_value = "Upload successful"
-        mock_environment.clients.gh_cli = mock_cli
-        mock_environment.clients.gh = MagicMock()
-        mock_environment.config.github.workspace = 'test_owner'
-        mock_environment.config.github.repo = 'test_repo'
-        mock_environment.dry_run = False
-        
-        handler = AttachmentHandler(mock_environment, mock_state)
-        
-        # Mock filepath instead of using real path
-        filepath = MagicMock()
-        filepath.__str__ = MagicMock(return_value='/tmp/test_file.png')
-        issue_number = 123
-        
-        result = handler.upload_to_github(filepath, issue_number)
-        
-        # Should use CLI client
-        mock_cli.upload_attachment.assert_called_once_with(
-            filepath, issue_number, 'test_owner', 'test_repo'
-        )
-        assert result == "Upload successful"
-
-    def test_upload_with_gh_cli_failure(self, mock_environment, mock_state):
-        """Test GitHub CLI upload failure."""
-        # Setup for CLI upload
-        mock_cli = MagicMock()
-        mock_cli.upload_attachment.side_effect = Exception("CLI error")
-        mock_environment.clients.gh_cli = mock_cli
-        mock_environment.clients.gh = MagicMock()
-        mock_environment.config.github.workspace = 'test_owner'
-        mock_environment.config.github.repo = 'test_repo'
-        mock_environment.dry_run = False
-        
-        handler = AttachmentHandler(mock_environment, mock_state)
-        
-        # Mock filepath instead of using real path
-        filepath = MagicMock()
-        filepath.__str__ = MagicMock(return_value='/tmp/test_file.png')
-        issue_number = 123
-        
-        # Should raise the exception
-        with pytest.raises(Exception, match="CLI error"):
-            handler.upload_to_github(filepath, issue_number)
-
     def test_upload_manual_creates_comment(self, mock_environment, mock_state):
         """Test manual upload creates GitHub comment."""
-        # Setup for manual upload (no CLI)
-        mock_environment.clients.gh_cli = None
+        # Setup for manual upload
         mock_environment.clients.gh = MagicMock()
         mock_environment.config.github.workspace = 'test_owner'
         mock_environment.config.github.repo = 'test_repo'
@@ -376,7 +303,6 @@ class TestGitHubUpload:
         mock_environment.dry_run = True
         mock_environment.config.github.workspace = 'test_owner'
         mock_environment.config.github.repo = 'test_repo'
-        mock_environment.clients.gh_cli = None
         mock_environment.clients.gh = MagicMock()
         
         handler = AttachmentHandler(mock_environment, mock_state)
@@ -398,7 +324,6 @@ class TestGitHubUpload:
         mock_environment.clients.gh = MagicMock()
         mock_environment.config.github.workspace = 'test_owner'
         mock_environment.config.github.repo = 'test_repo'
-        mock_environment.clients.gh_cli = None
         mock_environment.dry_run = False
         
         handler = AttachmentHandler(mock_environment, mock_state)
@@ -437,7 +362,6 @@ class TestGitHubUpload:
         mock_environment.clients.gh = MagicMock()
         mock_environment.config.github.workspace = 'test_owner'
         mock_environment.config.github.repo = 'test_repo'
-        mock_environment.clients.gh_cli = None
         mock_environment.dry_run = False
         
         handler = AttachmentHandler(mock_environment, mock_state)
@@ -494,9 +418,9 @@ class TestInlineImageExtraction:
         with patch('requests.get', return_value=mock_response), \
              patch('builtins.open', mock_open()), \
              patch('pathlib.Path.mkdir'):
-            result_text, downloaded_images = mock_handler.extract_and_download_inline_images(
-                text, use_gh_cli=False, item_type='issue', item_number=123
-            )
+           result_text, downloaded_images = mock_handler.extract_and_download_inline_images(
+               text, item_type='issue', item_number=123
+           )
         
         # Should download the image
         assert len(downloaded_images) == 1
@@ -511,7 +435,7 @@ class TestInlineImageExtraction:
         text = '![GitHub](https://github.com/user/repo/image.png) and ![External](https://example.com/img.png)'
         
         result_text, downloaded_images = mock_handler.extract_and_download_inline_images(
-            text, use_gh_cli=False
+            text
         )
         
         # Should not download any images
@@ -558,38 +482,11 @@ class TestInlineImageExtraction:
         # Check for the actual text pattern
         assert 'drag-and-drop here' in result_text
 
-    def test_extract_images_with_gh_cli(self, mock_handler):
-        """Test image extraction with GitHub CLI enabled."""
-        text = '![screenshot](https://bitbucket.org/test/screen.png)'
-        
-        # Mock the attachment directory path
-        mock_path = MagicMock()
-        mock_path.__str__ = MagicMock(return_value='/tmp/attachments')
-        mock_path.__truediv__ = MagicMock(return_value=mock_path)
-        mock_handler.data.attachment_dir = mock_path
-        
-        # Mock successful download
-        mock_response = Mock()
-        mock_response.iter_content.return_value = [b'fake']
-        mock_response.raise_for_status = MagicMock()
-        
-        with patch('requests.get', return_value=mock_response), \
-             patch('builtins.open', mock_open()), \
-             patch('pathlib.Path.mkdir'):
-            result_text, downloaded_images = mock_handler.extract_and_download_inline_images(
-                text, use_gh_cli=True, item_type='issue', item_number=456
-            )
-        
-        # Should use different note format for CLI
-        assert 'will be uploaded via gh CLI' in result_text
-        assert 'drag and drop' not in result_text
-
     def test_extract_images_dry_run(self, mock_environment, mock_state):
         """Test image extraction in dry-run mode."""
         mock_environment.dry_run = True
         mock_environment.config.bitbucket.workspace = 'test_workspace'
         mock_environment.config.bitbucket.repo = 'test_repo'
-        mock_environment.clients.gh_cli = None
         
         # Mock the subcommand directory
         mock_subcommand_dir = MagicMock()
@@ -769,16 +666,7 @@ class TestInlineImageExtraction:
         with patch('requests.get', return_value=mock_response), \
              patch('builtins.open', mock_open()), \
              patch('pathlib.Path.mkdir'):
-            # Test with CLI
-            result_with_cli, _ = mock_handler.extract_and_download_inline_images(
-                text, use_gh_cli=True
-            )
-            # Test without CLI
-            result_without_cli, _ = mock_handler.extract_and_download_inline_images(
-                text, use_gh_cli=False
-            )
+            result_text, _ = mock_handler.extract_and_download_inline_images(text)
         
-        # Both should have notes but different ones
-        assert '📷' in result_with_cli
-        assert '📷' in result_without_cli
-        assert result_with_cli != result_without_cli
+        # Should have note
+        assert '📷' in result_text

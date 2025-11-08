@@ -29,7 +29,6 @@ graph TD
      B --> D[BitbucketClient]
      C --> D
      C --> E[GitHubClient]
-     C --> F[GitHubCliClient]
      C --> G[Services: UserMapper, LinkRewriter, AttachmentHandler]
      C --> H[Migrators: IssueMigrator, PullRequestMigrator, MilestoneMigrator]
      C --> I[Formatters: FormatterFactory]
@@ -40,7 +39,6 @@ graph TD
      G --> R[Link Handlers: IssueLinkHandler, PrLinkHandler, etc.]
      D --> K[Bitbucket API]
      E --> L[GitHub API]
-     F --> M[GitHub CLI]
      S[BaseDirManager] --> T[FileRegistry]
      U[MigrationContext] --> V[ServiceLocator]
 ```
@@ -56,12 +54,11 @@ graph TD
 ### API Clients
 - **BitbucketClient** (`src/bitbucket_migration/clients/bitbucket_client.py`): Interfaces with Bitbucket API for fetching issues, PRs, milestones, etc.
 - **GitHubClient** (`src/bitbucket_migration/clients/github_client.py`): Interfaces with GitHub API for creating issues, PRs, comments, etc.
-- **GitHubCliClient** (`src/bitbucket_migration/clients/github_cli_client.py`): Wraps GitHub CLI for attachment uploads and authentication checks.
 
 ### Services
 - **UserMapper** (`src/bitbucket_migration/services/user_mapper.py`): Maps Bitbucket users to GitHub accounts, resolving account IDs.
 - **LinkRewriter** (`src/bitbucket_migration/services/link_rewriter.py`): Rewrites cross-references between issues and PRs to point to GitHub.
-- **AttachmentHandler** (`src/bitbucket_migration/services/attachment_handler.py`): Downloads attachments from Bitbucket and uploads to GitHub (via CLI or manual).
+- **AttachmentHandler** (`src/bitbucket_migration/services/attachment_handler.py`): Downloads attachments from Bitbucket and creates informative comments for manual upload.
 - **CrossRepoMappingStore** (`src/bitbucket_migration/services/cross_repo_mapping_store.py`): Manages mappings between repositories for cross-repository link rewriting.
 - **LinkDetector** (`src/bitbucket_migration/services/link_detector.py`): Detects and extracts URLs from text content.
 - **BaseLinkHandler** (`src/bitbucket_migration/services/base_link_handler.py`): Base class for link handling with priority-based processing.
@@ -130,7 +127,7 @@ graph TD
 9. **Link Rewriting**: LinkRewriter processes content using various LinkHandlers to update references.
 10. **Migration Execution**: RepoMigrator coordinates IssueMigrator and PullRequestMigrator to create content on GitHub.
 11. **Cross-Repository Linking**: CrossRepoMappingStore and CrossRepoLinkHandler manage links between repositories.
-12. **Attachment Handling**: AttachmentHandler downloads from Bitbucket and uploads via GitHubCliClient.
+12. **Attachment Handling**: AttachmentHandler downloads from Bitbucket and creates informative comments for manual upload.
 13. **Reporting**: ReportGenerator produces summaries, mappings, and audit reports.
 14. **Post-Migration Updates**: CrossLinkUpdater can update links after all migrations are complete.
 

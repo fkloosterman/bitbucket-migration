@@ -28,7 +28,7 @@ The tools follow a conservative migration strategy (e.g., closed PRs become issu
 * **📊 Comprehensive Analysis**: Repository structure, user activity, migration estimates, and gap detection
 * **🔄 Intelligent PR Migration**: OPEN PRs with existing branches become GitHub PRs, others become issues (safest approach)
 * **🔗 Automatic Link Rewriting**: Cross-references between issues/PRs are automatically updated to point to GitHub
-* **📎 Advanced Attachment Handling**: Downloads all attachments and inline images with GitHub CLI upload support
+* **📎 Advanced Attachment Handling**: Downloads all attachments and inline images with informative comments for manual upload
 * **👥 Smart User Mapping**: Maps Bitbucket users to GitHub accounts with support for unmapped users and account ID resolution
 * **🧪 Dry-run Capability**: Simulate entire migration without making changes to validate configuration
 * **📋 Comprehensive Reporting**: Detailed markdown reports with migration statistics and troubleshooting notes
@@ -127,7 +127,7 @@ migrate_bitbucket_to_github audit --workspace WORKSPACE --repo REPO --email EMAI
 # Or using the short alias
 bb2gh audit --workspace WORKSPACE --repo REPO --email EMAIL
 
-# Test authentication (Bitbucket and GitHub APIs, plus GitHub CLI)
+# Test authentication (Bitbucket and GitHub APIs)
 migrate_bitbucket_to_github test-auth --workspace WORKSPACE --repo REPO --email EMAIL --gh-owner GH_OWNER --gh-repo GH_REPO
 
 # Dry run migration (validate configuration)

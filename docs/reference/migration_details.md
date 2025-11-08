@@ -51,7 +51,7 @@ These limitations are imposed by GitHub's API and cannot be worked around:
 - **Timestamps**: Noted in descriptions/comments with original dates
 - **Authors**: @mentioned for notifications and transparency
 - **Reviewers**: Listed in PR description for reference
-- **Attachments**: Downloaded locally, uploaded manually or via `--use-gh-cli`
+- **Attachments**: Downloaded locally with informative comments for manual upload
 - **Issue Types/Priority**: Noted in description for reference
 - **Deleted Issue Numbers**: Filled with placeholder issues to preserve numbering
 
@@ -81,7 +81,7 @@ Understanding what is preserved vs. not preserved has important implications for
 - **Link Navigation**: Cross-references between issues work correctly
 
 ### Manual Work Required
-- **Attachments**: Must be uploaded manually unless using `--use-gh-cli`
+- **Attachments**: Must be uploaded manually via drag-and-drop (GitHub API limitation)
 - **Inline Images**: May need manual integration into comments (see [Images Migration](migration_images.md))
 - **Unhandled Links**: Some Bitbucket links require manual updates post-migration
 - **Unmapped Users**: Users without GitHub accounts should be mapped if they later join

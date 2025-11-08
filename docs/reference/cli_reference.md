@@ -297,7 +297,6 @@ migrate_bitbucket_to_github migrate --config CONFIG_FILE --dry-run [OPTIONS]
 | `--skip-pr-as-issue` | Skip migrating closed PRs as issues |
 | `--skip-milestones` | Skip milestone migration phase |
 | `--open-milestones-only` | Only migrate open milestones |
-| `--use-gh-cli` | Auto-upload attachments using GitHub CLI |
 | `--repo` / `--repos` | Migrate specific repository(es) (unified config only) | `--repo frontend` |
 | `--all` | Explicitly migrate all repositories (default for unified config) | |
 
@@ -311,8 +310,7 @@ migrate_bitbucket_to_github migrate --config migration_config.json --dry-run
 #### Dry Run with Selective Options
 ```bash
 migrate_bitbucket_to_github migrate --config migration_config.json --dry-run \
-  --skip-pr-as-issue \
-  --use-gh-cli
+  --skip-pr-as-issue
 ```
 
 #### Dry Run for Issues Only
@@ -486,7 +484,6 @@ migrate_bitbucket_to_github migrate --config CONFIG_FILE [OPTIONS]
 | `--skip-pr-as-issue` | Skip migrating closed PRs as issues |
 | `--skip-milestones` | Skip milestone migration phase |
 | `--open-milestones-only` | Only migrate open milestones |
-| `--use-gh-cli` | Auto-upload attachments using GitHub CLI |
 | `--repo` / `--repos` | Migrate specific repository(es) (unified config only) | `--repo frontend` |
 | `--all` | Explicitly migrate all repositories (default for unified config) | |
 | `--debug` | Enable debug logging | |
@@ -514,17 +511,10 @@ migrate_bitbucket_to_github migrate --config migration_config.json --skip-prs
 migrate_bitbucket_to_github migrate --config migration_config.json --skip-issues
 ```
 
-#### Migration with Automatic Attachment Upload
-```bash
-# Requires GitHub CLI installed and authenticated
-migrate_bitbucket_to_github migrate --config migration_config.json --use-gh-cli
-```
-
 #### Advanced Migration with Selective Options
 ```bash
 migrate_bitbucket_to_github migrate --config migration_config.json \
-  --skip-pr-as-issue \
-  --use-gh-cli
+  --skip-pr-as-issue
 ```
 
 #### Migrate Specific Repository (Unified Config)
@@ -547,10 +537,9 @@ for config in $CONFIG_DIR/*.json; do
   # Create separate attachments directory for each repo
   mkdir -p "$ATTACHMENTS_DIR/$repo_name"
 
-  # Run migration with auto-upload
+  # Run migration
   migrate_bitbucket_to_github \
-    --config "$config" \
-    --use-gh-cli
+    --config "$config"
 
   echo "Migration complete for $repo_name"
   echo "Attachments: $ATTACHMENTS_DIR/$repo_name/"
@@ -612,7 +601,7 @@ Comprehensive markdown report with:
 - Troubleshooting notes
 
 #### `attachments_temp/`
-Directory containing downloaded attachments for manual upload (unless using `--use-gh-cli`).
+Directory containing downloaded attachments for manual upload.
 
 ---
 
@@ -759,7 +748,7 @@ migrate_bitbucket_to_github migrate --config migration_config.json
 # 9. Review migration results
 cat migration_report.md
 
-# 10. Handle attachments (if not using --use-gh-cli)
+# 10. Handle attachments
 # Manually upload files from attachments_temp/ to GitHub issues
 ```
 
@@ -795,14 +784,11 @@ migrate_bitbucket_to_github test-auth --workspace myteam --repo large-repo --ema
 
 migrate_bitbucket_to_github audit --workspace myteam --repo large-repo --email user@example.com --gh-owner myuser --gh-repo large-repo
 
-# Install and setup GitHub CLI for auto-upload
-gh auth login
-
 # Run dry-run first to validate setup
-migrate_bitbucket_to_github migrate --config migration_config.json --dry-run --use-gh-cli
+migrate_bitbucket_to_github migrate --config migration_config.json --dry-run
 
-# Run migration with auto-upload
-migrate_bitbucket_to_github migrate --config migration_config.json --use-gh-cli
+# Run migration
+migrate_bitbucket_to_github migrate --config migration_config.json
 ```
 
 ### Use Case 3: Issues-Only Migration
@@ -836,10 +822,10 @@ for repo in $(cat repo_list.txt); do
   # ... manual step: edit migration_config.json ...
 
   # Dry run first
-  migrate_bitbucket_to_github migrate --config migration_config.json --dry-run --use-gh-cli
+  migrate_bitbucket_to_github migrate --config migration_config.json --dry-run
 
   # Migrate
-  migrate_bitbucket_to_github migrate --config migration_config.json --use-gh-cli
+  migrate_bitbucket_to_github migrate --config migration_config.json
 
   echo "Completed migration for $repo"
 done
@@ -930,7 +916,6 @@ migrate_bitbucket_to_github migrate --config config.json --skip-issues  # PRs on
 ### CLI Efficiency
 - Use `migrate --dry-run` first to validate your setup
 - Run scripts during off-peak hours for large repositories
-- Use `--use-gh-cli` for repositories with many attachments
 - Keep the `attachments_temp/` directory until migration is verified
 
 ### Error Recovery

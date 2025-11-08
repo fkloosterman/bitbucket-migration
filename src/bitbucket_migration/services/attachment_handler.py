@@ -3,8 +3,6 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from ..clients.github_cli_client import GitHubCliClient
-
 from ..core.migration_context import MigrationEnvironment, MigrationState
 from .services_data import AttachmentData
 
@@ -41,8 +39,6 @@ class AttachmentHandler:
 
         self.data.attachment_dir.mkdir(exist_ok=True)
 
-        self.gh_cli_client = self.environment.clients.gh_cli
-        self.use_gh_cli = self.gh_cli_client is not None
         self.dry_run = self.environment.dry_run
     
     def download_attachment(self, url: str, filename: str, item_type: str = None, item_number: int = None, comment_seq: int = None) -> Optional[Path]:
@@ -89,23 +85,16 @@ class AttachmentHandler:
         """
         Upload attachment to GitHub issue.
 
-        Uses GitHub CLI if available, otherwise creates a comment with upload instructions.
+        Creates a comment with upload instructions for manual attachment upload.
 
         Args:
             filepath: Path to the attachment file
             issue_number: GitHub issue number to attach to
 
         Returns:
-            Upload result or comment body
+            The comment body that was created
         """
-        github_client = self.environment.clients.gh
-        gh_owner = self.environment.config.github.owner
-        gh_repo = self.environment.config.github.repo
-
-        if self.use_gh_cli and self.gh_cli_client:
-            return self.gh_cli_client.upload_attachment(filepath, issue_number, gh_owner, gh_repo)
-        else:
-            return self._create_upload_comment(filepath, issue_number)
+        return self._create_upload_comment(filepath, issue_number)
 
     def _create_upload_comment(self, filepath: Path, issue_number: int) -> str:
         """
@@ -130,17 +119,16 @@ class AttachmentHandler:
         github_client.create_comment(issue_number, comment_body)
         return comment_body
 
-    def extract_and_download_inline_images(self, text: str, use_gh_cli: bool = False, item_type: str = None, item_number: int = None, comment_seq: int = None) -> tuple[str, list]:
+    def extract_and_download_inline_images(self, text: str, item_type: str = None, item_number: int = None, comment_seq: int = None) -> tuple[str, list]:
         """
         Extract Bitbucket-hosted inline images from markdown and download them.
 
         Processes markdown image syntax ![alt](url) and downloads any images hosted
         on Bitbucket or Bytebucket domains. Updates the markdown with appropriate
-        notes based on the upload method.
+        notes for manual upload.
 
         Args:
             text: The markdown text to process
-            use_gh_cli: Whether to use GitHub CLI for uploads (affects output format)
             item_type: 'issue' or 'pr' (optional, for context tracking)
             item_number: The issue or PR number (optional, for context tracking)
             comment_seq: Comment sequence number if processing a comment (optional)
@@ -184,9 +172,6 @@ class AttachmentHandler:
 
                     if self.dry_run:
                         return f"![{alt_text}]({image_url})\n\n📷 *Inline image: `{filename}` (will be downloaded to {self.data.attachment_dir})*"
-                    elif use_gh_cli:
-                        # With gh CLI, the image will be uploaded, so just keep the markdown
-                        return f"![{alt_text}]({image_url})\n\n📷 *Original Bitbucket image (will be uploaded via gh CLI)*"
                     else:
                         # Return modified markdown with note about manual upload
                         return f"![{alt_text}]({image_url})\n\n📷 *Original Bitbucket image (download from `{self.data.attachment_dir}/{filename}` and drag-and-drop here)*"

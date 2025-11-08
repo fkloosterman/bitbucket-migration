@@ -61,7 +61,7 @@ Migrate your Bitbucket Cloud repositories to GitHub with confidence using our co
 
     ---
 
-    Downloads all attachments and inline images with GitHub CLI upload support for automated processing.
+    Downloads all attachments and inline images with informative comments for manual upload.
 
 -   **🏗️ Multi-Repository Support**
 

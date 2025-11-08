@@ -126,12 +126,15 @@ class CrossRepoLinkHandler(BaseLinkHandler):
             # Already set to self.environment.config.github.owner, self.environment.config.github.repo
             pass
         else:
-            gh_owner, gh_repo = self.environment.services.get('cross_repo_mapping_store').get_mapped_repository(workspace, repo)
-            if not gh_repo:
+            mapped_owner, mapped_repo = self.environment.services.get('cross_repo_mapping_store').get_mapped_repository(workspace, repo)
+            if not mapped_repo:
                 rewritten = url
                 self._add_to_details(context, url, rewritten, 'cross_repo_link', 'unmapped')
                 return rewritten
-            if not gh_owner:
+            gh_repo = mapped_repo
+            if mapped_owner:
+                gh_owner = mapped_owner
+            else:
                 gh_owner = self.environment.config.github.owner
 
         # Handle repository home URLs (no resource_type)

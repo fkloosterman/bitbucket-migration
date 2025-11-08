@@ -11,7 +11,6 @@ from pathlib import Path
 
 from ..clients.bitbucket_client import BitbucketClient
 from ..clients.github_client import GitHubClient
-from ..clients.github_cli_client import GitHubCliClient
 from ..services.user_mapper import UserMapper
 from ..services.link_rewriter import LinkRewriter
 from ..services.attachment_handler import AttachmentHandler
@@ -162,14 +161,6 @@ class RepoMigrator(BaseMigrator):
             token=self.config.github.token,
             dry_run=self.dry_run
         )
-
-        # Setup GitHub CLI client if needed
-        # self.environment.clients.gh_cli = None
-        if self.config.options.use_gh_cli:
-            self.environment.clients.gh_cli = GitHubCliClient(
-                token=self.config.github.token,
-                dry_run=self.dry_run
-            )
 
         # Fetch issue type mapping for organization repositories
         api_type_mapping = {}
@@ -364,22 +355,6 @@ class RepoMigrator(BaseMigrator):
         """Setup and validate the migration environment."""
         self.logger.info("Setting up migration environment...")
 
-        # Check and setup GitHub CLI if requested
-        if self.config.options.use_gh_cli and not self.dry_run:
-            if not self.environment.clients.gh_cli.is_available():
-                self.logger.error("--use-gh-cli specified but GitHub CLI is not available")
-                self.logger.error("Please install gh CLI: https://cli.github.com/")
-                raise ConfigurationError("GitHub CLI not available. Please install from https://cli.github.com/")
-
-            if not self.environment.clients.gh_cli.is_authenticated():
-                self.logger.info("GitHub CLI is not authenticated. Attempting automatic authentication...")
-                if not self.environment.clients.gh_cli.authenticate():
-                    self.logger.error("Failed to authenticate GitHub CLI automatically")
-                    self.logger.error("Please run 'gh auth login' manually or use test-auth command")
-                    raise ConfigurationError("GitHub CLI authentication failed. Please authenticate manually.")
-                else:
-                    self.logger.info("GitHub CLI authenticated successfully")
-
         # Check repository type and fetch issue types
         self.logger.info("Checking repository type and issue type support...")
         self._check_repository_type()
@@ -569,31 +544,16 @@ class RepoMigrator(BaseMigrator):
             self.logger.info("="*80)
             self.logger.info(f"{len(attachment_handler.data.attachments)} attachments were downloaded to: {attachment_handler.data.attachment_dir}")
 
-            if self.config.options.use_gh_cli:
-                uploaded_count = len([a for a in attachment_handler.data.attachments if a.get('uploaded', False)])
-                self.logger.info(f"✓ Attachments were automatically uploaded using GitHub CLI")
-                self.logger.info(f"  Successfully uploaded: {uploaded_count}/{len(attachment_handler.data.attachments)}")
-
-                failed_count = len(attachment_handler.data.attachments) - uploaded_count
-                if failed_count > 0:
-                    self.logger.warning(f"⚠️  {failed_count} attachment(s) failed to upload")
-                    self.logger.warning("  These need manual upload via drag-and-drop")
-                    self.logger.warning("  Check migration.log for details")
-
-                self.logger.info(f"Note: Inline images in comments still need manual upload")
-                self.logger.info("      (gh CLI limitation - can't attach to comment edits)")
-            else:
-                self.logger.info("To upload attachments to GitHub issues:")
-                self.logger.info("1. Navigate to the issue on GitHub")
-                self.logger.info("2. Click the comment box")
-                self.logger.info(f"3. Drag and drop the file from {attachment_handler.data.attachment_dir}/")
-                self.logger.info("4. The file will be uploaded and embedded")
-                self.logger.info("Example:")
-                self.logger.info(f"  - Open: https://github.com/{self.config.github.owner}/{self.config.github.repo}/issues/1")
-                self.logger.info(f"  - Drag: {attachment_handler.data.attachment_dir}/screenshot.png")
-                self.logger.info("  - File will appear in comment with URL")
-                self.logger.info("Note: Comments already note which attachments belonged to each issue.")
-                self.logger.info("Tip: Use --use-gh-cli flag to automatically upload attachments")
+            self.logger.info("To upload attachments to GitHub issues:")
+            self.logger.info("1. Navigate to the issue on GitHub")
+            self.logger.info("2. Click the comment box")
+            self.logger.info(f"3. Drag and drop the file from {attachment_handler.data.attachment_dir}/")
+            self.logger.info("4. The file will be uploaded and embedded")
+            self.logger.info("Example:")
+            self.logger.info(f"  - Open: https://github.com/{self.config.github.owner}/{self.config.github.repo}/issues/1")
+            self.logger.info(f"  - Drag: {attachment_handler.data.attachment_dir}/screenshot.png")
+            self.logger.info("  - File will appear in comment with URL")
+            self.logger.info("Note: Comments already note which attachments belonged to each issue.")
 
             self.logger.info(f"Keep {attachment_handler.data.attachment_dir}/ folder as backup until verified.")
             self.logger.info("="*80)

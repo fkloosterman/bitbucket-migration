@@ -1,6 +1,6 @@
 # API Tokens Setup Guide
 
-This comprehensive guide explains all authentication requirements for the Bitbucket to GitHub migration tools, including the audit script, migration script, and optional GitHub CLI integration.
+This comprehensive guide explains all authentication requirements for the Bitbucket to GitHub migration tools, including the audit script and migration script.
 
 ---
 
@@ -8,19 +8,17 @@ This comprehensive guide explains all authentication requirements for the Bitbuc
 
 The migration process requires multiple authentication methods depending on which tools you use:
 
-| Tool | Bitbucket Token | GitHub PAT | GitHub CLI | Purpose |
-|------|----------------|------------|------------|---------|
-| `migrate_bitbucket_to_github test-auth` | ✅ Required | ✅ Required | ❌ Optional | Test authentication |
-| `migrate_bitbucket_to_github audit` | ✅ Required | ❌ Not needed | ❌ Not needed | Audit repository content |
-| `migrate_bitbucket_to_github migrate --dry-run` | ✅ Required | ✅ Required | ❌ Optional | Dry-run migrate issues/PRs |
-| `migrate_bitbucket_to_github migrate` | ✅ Required | ✅ Required | ❌ Optional | Migrate issues/PRs |
-| `migrate_bitbucket_to_github migrate --use-gh-cli` | ✅ Required | ✅ Required | ✅ Required | Auto-upload attachments |
-| `migrate_bitbucket_to_github cross-link` | ✅ Required | ✅ Required | ❌ Optional | Post-migration link updates |
+| Tool | Bitbucket Token | GitHub PAT | Purpose |
+|------|----------------|------------|---------|
+| `migrate_bitbucket_to_github test-auth` | ✅ Required | ✅ Required | Test authentication |
+| `migrate_bitbucket_to_github audit` | ✅ Required | ❌ Not needed | Audit repository content |
+| `migrate_bitbucket_to_github migrate --dry-run` | ✅ Required | ✅ Required | Dry-run migrate issues/PRs |
+| `migrate_bitbucket_to_github migrate` | ✅ Required | ✅ Required | Migrate issues/PRs |
+| `migrate_bitbucket_to_github cross-link` | ✅ Required | ✅ Required | Post-migration link updates |
 
-**Choose your path:**
+**What you need:**
 
-- **Basic Migration:** Bitbucket API Token + GitHub PAT
-- **Advanced Migration:** All three authentication methods (for automatic attachment uploads)
+- **Migration:** Bitbucket API Token + GitHub PAT
 - **Post-Migration:** Bitbucket API Token + GitHub PAT (for cross-repository link updates)
 
 ---
@@ -102,44 +100,6 @@ The migration process requires multiple authentication methods depending on whic
 
 **Note:** Tokens are no longer stored in config files. Set them via environment variables instead.
 
-### GitHub CLI Authentication (Optional)
-
-**Required only for:** `--use-gh-cli` flag (automatic attachment uploads)
-
-#### Setup Instructions
-
-1. **Install GitHub CLI:**
-    ```bash
-    # macOS
-    brew install gh
- 
-    # Ubuntu/Debian
-    sudo apt update && sudo apt install gh
- 
-    # Windows (using winget)
-    winget install --id GitHub.cli
- 
-    # Other platforms: https://cli.github.com/
-    ```
-
-2. **Authenticate GitHub CLI:**
-    ```bash
-    gh auth login
-
-    # Follow prompts:
-    # - GitHub.com
-    # - HTTPS
-    # - Login with web browser
-    # - Authorize GitHub CLI
-    ```
-
-3. **Verify authentication:**
-    ```bash
-    gh auth status
-    ```
-
-**Important:** GitHub CLI must be authenticated to the **same GitHub account/organization** as your PAT.
-
 ---
 
 ## 🔧 Token Security Best Practices
@@ -172,13 +132,13 @@ migrate_bitbucket_to_github audit --workspace YOUR_WORKSPACE --repo YOUR_REPO --
 
 ### Token Permissions Matrix
 
-| Operation | Bitbucket Token | GitHub PAT | GitHub CLI |
-|-----------|----------------|------------|------------|
-| Repository audit | Read access | Not needed | Not needed |
-| Issue migration | Read access | Repo access | Not needed |
-| PR migration | Read access | Repo access | Not needed |
-| Attachment upload | Read access | Repo access | Authenticated |
-| Cross-repo link updates | Read access | Repo access | Not needed |
+| Operation | Bitbucket Token | GitHub PAT |
+|-----------|----------------|------------|
+| Repository audit | Read access | Not needed |
+| Issue migration | Read access | Repo access |
+| PR migration | Read access | Repo access |
+| Attachment upload | Read access | Repo access |
+| Cross-repo link updates | Read access | Repo access |
 
 ---
 
@@ -216,20 +176,6 @@ curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
   -d '{"title":"Test Issue","body":"Testing authentication"}'
 ```
 
-### Test GitHub CLI Authentication
-
-```bash
-# Check authentication status
-gh auth status
-
-# Test repository access
-gh repo view YOUR_ORG/YOUR_REPO
-
-# Test issue creation (dry run)
-gh issue create --title "Test Issue" --body "Testing CLI auth" --repo YOUR_ORG/YOUR_REPO
-```
-
-**Note:** GitHub CLI authentication is tested automatically during `test-auth` command.
 
 ---
 
@@ -274,38 +220,6 @@ gh issue create --title "Test Issue" --body "Testing CLI auth" --repo YOUR_ORG/Y
 - Verify repository exists and is accessible
 - Check if organization/repository names are correct
 
-### GitHub CLI Problems
-
-**"gh: Not logged in"**
-```bash
-gh auth login
-```
-
-**"Repository not found"**
-
-- Verify repository exists
-- Check if CLI is authenticated to correct GitHub account
-- Ensure repository is accessible with current authentication
-
-**"Permission denied"**
-
-- CLI may be authenticated to different account than PAT
-- Repository may require different access level
-- Organization may restrict CLI access
-
-### Integration Issues
-
-**"GitHub CLI not available" (when using --use-gh-cli)**
-
-- Install GitHub CLI: https://cli.github.com/
-- Verify installation: `gh --version`
-- Authenticate: `gh auth login`
-
-**"Authentication mismatch"**
-
-- Ensure GitHub PAT and CLI are authenticated to same account
-- Check if you're a member of the target organization
-- Verify repository access permissions
 
 ---
 
@@ -363,7 +277,7 @@ gh auth login
 
 ## 🚀 Quick Start Commands
 
-### Basic Setup (No Attachments)
+### Basic Setup
 ```bash
 # 1. Set environment variables
 export BITBUCKET_TOKEN="ATAT123..."
@@ -380,42 +294,29 @@ migrate_bitbucket_to_github migrate --config config.json --dry-run
 
 # 5. Run full migration
 migrate_bitbucket_to_github migrate --config config.json
-```
 
-### Advanced Setup (With Auto-Upload)
-```bash
-# 1. Install and setup GitHub CLI
-gh auth login
-
-# 2. Test CLI authentication
-gh auth status
-
-# 3. Run migration with auto-upload
-migrate_bitbucket_to_github migrate --config config.json --use-gh-cli
-
-# 4. Update cross-repository links (post-migration)
+# 6. Update cross-repository links (post-migration)
 migrate_bitbucket_to_github cross-link --config config.json
 ```
 
 ---
 
 ## 📋 Token Requirements Summary
-
-| Feature | Bitbucket Token | GitHub PAT | GitHub CLI |
-|---------|----------------|------------|------------|
-| Repository audit | ✅ User-level, read access | ❌ | ❌ |
-| Issue migration | ✅ User-level, read access | ✅ `repo` scope | ❌ |
-| PR migration | ✅ User-level, read access | ✅ `repo` scope | ❌ |
-| Attachment upload | ✅ User-level, read access | ✅ `repo` scope | ✅ Authenticated |
-| Cross-repo link updates | ✅ User-level, read access | ✅ `repo` scope | ❌ |
-| User mapping | ✅ User-level, read access | ✅ `repo`, `user:email` | ❌ |
+| Feature | Bitbucket Token | GitHub PAT |
+|---------|----------------|------------|
+| Repository audit | ✅ User-level, read access | ❌ |
+| Issue migration | ✅ User-level, read access | ✅ `repo` scope |
+| PR migration | ✅ User-level, read access | ✅ `repo` scope |
+| Attachment upload | ✅ User-level, read access | ✅ `repo` scope |
+| Cross-repo link updates | ✅ User-level, read access | ✅ `repo` scope |
+| User mapping | ✅ User-level, read access | ✅ `repo`, `user:email` |
 
 **Key Points:**
 
 - Always use **user-level** Bitbucket API tokens (not Repository Access Tokens)
 - GitHub PAT requires **`repo`** scope for full functionality
-- GitHub CLI is **only needed** for automatic attachment uploads
 - **Test authentication** before running migration scripts
 - Use **dry-run modes** to validate your setup
+- Attachments require **manual upload** due to GitHub API limitations
 
 

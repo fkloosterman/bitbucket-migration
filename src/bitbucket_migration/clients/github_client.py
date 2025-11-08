@@ -264,6 +264,14 @@ class GitHubClient:
             url: The URL that was being accessed
             max_retries: Maximum number of retries that were attempted
         """
+        import sys
+        
+        # Check if running in test environment (pytest captures stdin/stdout)
+        # or if stdin is not a TTY (non-interactive environment)
+        if not sys.stdin.isatty() or 'pytest' in sys.modules:
+            # In test or non-interactive mode, just re-raise the error without prompting
+            raise original_error
+        
         print(f"\n{'='*60}")
         print("⚠️  GITHUB API RATE LIMIT - ALL RETRIES EXHAUSTED")
         print(f"{'='*60}")

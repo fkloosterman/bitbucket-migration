@@ -26,25 +26,18 @@ Inline images are modified in the markdown content with upload instructions:
 📷 *Inline image: `screenshot.png` (will be downloaded to attachments_temp)*
 ```
 
-### Manual Upload (Default)
+### Manual Upload
 ```markdown
 ![Screenshot](https://bitbucket.org/workspace/repo/images/screenshot.png)
 
 📷 *Original Bitbucket image (download from `attachments_temp/screenshot.png` and drag-and-drop here)*
 ```
 
-### Auto-Upload with GitHub CLI
-```markdown
-![Screenshot](https://bitbucket.org/workspace/repo/images/screenshot.png)
-
-📷 *Original Bitbucket image (will be uploaded via gh CLI)*
-```
-
 ## Handling Non-Migratable Information
 - **Bitbucket-Hosted Images**: Detected and downloaded to `attachments_temp/`.
 - **Inline Image Detection**: Scans issue/PR descriptions and comments for `![alt](url)` syntax.
 - **Upload Notes**: Added to descriptions/comments indicating where to find and upload images.
-- **With gh CLI**: Images are noted for upload; manual integration into comments may be needed due to gh CLI limitations with comment edits.
+- **Manual Upload Required**: Images must be manually uploaded via drag-and-drop due to GitHub API limitations.
 - **External Images**: Images hosted elsewhere (imgur, etc.) are left as-is.
 
 ## Difference from Attachments

@@ -11,23 +11,17 @@ Attachments are files that were explicitly attached to Bitbucket issues or pull 
 ## What Gets Created
 Comments are added to issues/PRs noting attachments:
 
-### Manual Upload (Default)
+### Attachment Comments
 ```markdown
 📎 **Attachment from Bitbucket**: `screenshot.png` (2.5 MB)
 
 *Note: This file was attached to the original Bitbucket issue. Please drag and drop this file from `attachments_temp/screenshot.png` to embed it in this issue.*
 ```
 
-### Auto-Upload with GitHub CLI
-```markdown
-📎 **Attachment from Bitbucket**: `screenshot.png` (2.5 MB)
-```
-(File automatically uploaded and embedded)
-
 ## Handling Non-Migratable Information
 - **Direct Upload**: GitHub API does not support direct attachment upload; files are downloaded locally to `attachments_temp/`.
 - **Manual Upload Required**: Comments are created on GitHub issues with instructions to drag-and-drop files.
-- **Auto-Upload Option**: With `--use-gh-cli`, attachments are uploaded automatically using GitHub CLI.
+- **Informative Comments**: The tool creates helpful comments with file names, sizes, and local paths for each attachment.
 - **Large Files**: Files are downloaded regardless of size; GitHub has its own upload limits.
 
 ## Difference from Inline Images

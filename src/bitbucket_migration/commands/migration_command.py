@@ -24,7 +24,7 @@ def run_migration(args):
     ----------
     args : argparse.Namespace
         Command-line arguments containing config path and optional overrides:
-        config (required), skip_issues, skip_prs, skip_pr_as_issue, use_gh_cli,
+        config (required), skip_issues, skip_prs, skip_pr_as_issue,
         repo (for unified config), repos (for unified config).
 
     Side Effects
@@ -89,8 +89,6 @@ def run_migration(args):
         config.options.skip_milestones = args.skip_milestones.lower() == 'true'
     if hasattr(args, 'open_milestones_only'):
         config.options.open_milestones_only = args.open_milestones_only.lower() == 'true'
-    if hasattr(args, 'use_gh_cli'):
-        config.options.use_gh_cli = args.use_gh_cli.lower() == 'true'
     if hasattr(args, 'dry_run'):
         config.options.dry_run = args.dry_run.lower() == 'true'
     

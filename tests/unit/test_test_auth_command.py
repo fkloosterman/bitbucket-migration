@@ -16,105 +16,12 @@ import sys
 from pathlib import Path
 
 from bitbucket_migration.commands.test_auth_command import (
-    run_test_auth, 
-    _check_gh_cli_available, 
-    _authenticate_gh_cli,
+    run_test_auth,
     prompt_for_missing_args
 )
 from bitbucket_migration.exceptions import APIError, AuthenticationError, NetworkError, ValidationError
 from bitbucket_migration.clients.bitbucket_client import BitbucketClient
 from bitbucket_migration.clients.github_client import GitHubClient
-
-
-class TestCheckGhCliAvailable:
-    """Test the _check_gh_cli_available function."""
-    
-    @patch('bitbucket_migration.commands.test_auth_command.GitHubCliClient')
-    def test_check_gh_cli_available_success(self, mock_cli_client_class):
-        """Test successful GitHub CLI availability check."""
-        # Setup mocks
-        mock_cli_client = Mock()
-        mock_cli_client_class.return_value = mock_cli_client
-        mock_cli_client.is_available.return_value = True
-        mock_cli_client.get_version.return_value = "2.40.0"
-        mock_cli_client.is_authenticated.return_value = True
-        
-        result = _check_gh_cli_available("test-token")
-        
-        assert result['available'] is True
-        assert result['authenticated'] is True
-        assert result['version'] == "2.40.0"
-        assert "installed" in result['details']
-        assert "authenticated" in result['details']
-    
-    @patch('bitbucket_migration.commands.test_auth_command.GitHubCliClient')
-    def test_check_gh_cli_not_available(self, mock_cli_client_class):
-        """Test GitHub CLI not available."""
-        # Setup mocks
-        mock_cli_client = Mock()
-        mock_cli_client_class.return_value = mock_cli_client
-        mock_cli_client.is_available.return_value = False
-        
-        result = _check_gh_cli_available("test-token")
-        
-        assert result['available'] is False
-        assert result['authenticated'] is False
-        assert result['version'] == ''
-        assert result['details'] == "GitHub CLI not installed"
-    
-    @patch('bitbucket_migration.commands.test_auth_command.GitHubCliClient')
-    def test_check_gh_cli_exception(self, mock_cli_client_class):
-        """Test handling of exceptions during CLI check."""
-        # Setup mocks to raise exception
-        mock_cli_client_class.side_effect = Exception("Test exception")
-        
-        result = _check_gh_cli_available("test-token")
-        
-        assert result['available'] is False
-        assert result['authenticated'] is False
-        assert "Error checking GitHub CLI" in result['details']
-        assert "Test exception" in result['details']
-
-
-class TestAuthenticateGhCli:
-    """Test the _authenticate_gh_cli function."""
-    
-    @patch('bitbucket_migration.commands.test_auth_command.GitHubCliClient')
-    def test_authenticate_gh_cli_success(self, mock_cli_client_class):
-        """Test successful GitHub CLI authentication."""
-        # Setup mocks
-        mock_cli_client = Mock()
-        mock_cli_client_class.return_value = mock_cli_client
-        mock_cli_client.authenticate.return_value = True
-        
-        result = _authenticate_gh_cli("test-token")
-        
-        assert result['success'] is True
-        assert result['error'] == ''
-    
-    @patch('bitbucket_migration.commands.test_auth_command.GitHubCliClient')
-    def test_authenticate_gh_cli_failure(self, mock_cli_client_class):
-        """Test failed GitHub CLI authentication."""
-        # Setup mocks
-        mock_cli_client = Mock()
-        mock_cli_client_class.return_value = mock_cli_client
-        mock_cli_client.authenticate.return_value = False
-        
-        result = _authenticate_gh_cli("test-token")
-        
-        assert result['success'] is False
-        assert result['error'] == "Authentication failed"
-    
-    @patch('bitbucket_migration.commands.test_auth_command.GitHubCliClient')
-    def test_authenticate_gh_cli_exception(self, mock_cli_client_class):
-        """Test handling of exceptions during CLI authentication."""
-        # Setup mocks to raise exception
-        mock_cli_client_class.side_effect = Exception("Auth exception")
-        
-        result = _authenticate_gh_cli("test-token")
-        
-        assert result['success'] is False
-        assert "Authentication error: Auth exception" in result['error']
 
 
 class TestTestAuthCommand:
@@ -136,8 +43,7 @@ class TestTestAuthCommand:
     @patch('bitbucket_migration.commands.test_auth_command.prompt_for_missing_args')
     @patch('bitbucket_migration.commands.test_auth_command.BitbucketClient')
     @patch('bitbucket_migration.commands.test_auth_command.GitHubClient')
-    @patch('bitbucket_migration.commands.test_auth_command._check_gh_cli_available')
-    def test_run_test_auth_all_success(self, mock_check_cli, mock_github_client_class, 
+    def test_run_test_auth_all_success(self, mock_github_client_class,
                                        mock_bitbucket_client_class, mock_prompt, mock_args):
         """Test successful authentication for all services."""
         # Setup mocks
@@ -153,14 +59,6 @@ class TestTestAuthCommand:
         mock_gh_client.test_connection.return_value = True
         mock_github_client_class.return_value = mock_gh_client
         
-        # GitHub CLI check
-        mock_check_cli.return_value = {
-            'available': True,
-            'authenticated': True,
-            'details': 'GitHub CLI 2.40.0 is installed and authenticated',
-            'version': '2.40.0'
-        }
-        
         with patch('builtins.print'):  # Suppress output
             with patch('builtins.input', side_effect=['test-owner', 'test-repo', 'test-gh-token']):
                 run_test_auth(mock_args)
@@ -168,8 +66,7 @@ class TestTestAuthCommand:
     @patch('bitbucket_migration.commands.test_auth_command.prompt_for_missing_args')
     @patch('bitbucket_migration.commands.test_auth_command.BitbucketClient')
     @patch('bitbucket_migration.commands.test_auth_command.GitHubClient')
-    @patch('bitbucket_migration.commands.test_auth_command._check_gh_cli_available')
-    def test_run_test_auth_bitbucket_auth_failure(self, mock_check_cli, mock_github_client_class, 
+    def test_run_test_auth_bitbucket_auth_failure(self, mock_github_client_class,
                                                  mock_bitbucket_client_class, mock_prompt, mock_args):
         """Test Bitbucket authentication failure."""
         # Setup mocks
@@ -185,14 +82,6 @@ class TestTestAuthCommand:
         mock_gh_client.test_connection.return_value = True
         mock_github_client_class.return_value = mock_gh_client
         
-        # GitHub CLI check
-        mock_check_cli.return_value = {
-            'available': True,
-            'authenticated': True,
-            'details': 'GitHub CLI 2.40.0 is installed and authenticated',
-            'version': '2.40.0'
-        }
-        
         with pytest.raises(SystemExit) as exc_info:
             with patch('builtins.print'):
                 with patch('builtins.input', side_effect=['test-owner', 'test-repo', 'test-gh-token']):
@@ -203,8 +92,7 @@ class TestTestAuthCommand:
     @patch('bitbucket_migration.commands.test_auth_command.prompt_for_missing_args')
     @patch('bitbucket_migration.commands.test_auth_command.BitbucketClient')
     @patch('bitbucket_migration.commands.test_auth_command.GitHubClient')
-    @patch('bitbucket_migration.commands.test_auth_command._check_gh_cli_available')
-    def test_run_test_auth_github_auth_failure(self, mock_check_cli, mock_github_client_class, 
+    def test_run_test_auth_github_auth_failure(self, mock_github_client_class,
                                              mock_bitbucket_client_class, mock_prompt, mock_args):
         """Test GitHub authentication failure."""
         # Setup mocks
@@ -220,14 +108,6 @@ class TestTestAuthCommand:
         mock_gh_client.test_connection.side_effect = AuthenticationError("Invalid GitHub token")
         mock_github_client_class.return_value = mock_gh_client
         
-        # GitHub CLI check
-        mock_check_cli.return_value = {
-            'available': True,
-            'authenticated': True,
-            'details': 'GitHub CLI 2.40.0 is installed and authenticated',
-            'version': '2.40.0'
-        }
-        
         with pytest.raises(SystemExit) as exc_info:
             with patch('builtins.print'):
                 with patch('builtins.input', side_effect=['test-owner', 'test-repo', 'test-gh-token']):
@@ -238,8 +118,7 @@ class TestTestAuthCommand:
     @patch('bitbucket_migration.commands.test_auth_command.prompt_for_missing_args')
     @patch('bitbucket_migration.commands.test_auth_command.BitbucketClient')
     @patch('bitbucket_migration.commands.test_auth_command.GitHubClient')
-    @patch('bitbucket_migration.commands.test_auth_command._check_gh_cli_available')
-    def test_run_test_auth_api_error_404(self, mock_check_cli, mock_github_client_class, 
+    def test_run_test_auth_api_error_404(self, mock_github_client_class,
                                        mock_bitbucket_client_class, mock_prompt, mock_args):
         """Test API 404 error handling."""
         # Setup mocks

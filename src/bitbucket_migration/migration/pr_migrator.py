@@ -708,7 +708,7 @@ class PullRequestMigrator:
 
         # Format and update PR or issue body
         formatter = self.formatter_factory.get_pull_request_formatter()
-        body, links_in_body, inline_images_body = formatter.format(bb_pr, as_issue=not as_pr, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli)
+        body, links_in_body, inline_images_body = formatter.format(bb_pr, as_issue=not as_pr, skip_link_rewriting=False)
 
         # Inline images are already tracked by the formatter, no need to duplicate
 
@@ -803,7 +803,7 @@ class PullRequestMigrator:
 
                 # Format comment
                 formatter = self.formatter_factory.get_comment_formatter()
-                comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='pr', item_number=pr_num, commit_id=commit_id, comment_seq=comment_seq, skip_link_rewriting=False, use_gh_cli=self.attachment_handler.use_gh_cli)
+                comment_body, comment_links, inline_images_comment = formatter.format(comment, item_type='pr', item_number=pr_num, commit_id=commit_id, comment_seq=comment_seq, skip_link_rewriting=False)
                 links_in_comments += comment_links
 
                 # Add annotation for pending

@@ -2,7 +2,6 @@ from typing import Dict, Optional, List, Tuple, Any
 
 from ..clients.bitbucket_client import BitbucketClient
 from ..clients.github_client import GitHubClient
-from ..clients.github_cli_client import GitHubCliClient
 from ..utils.logging_config import MigrationLogger
 from ..utils.base_dir_manager import BaseDirManager
 
@@ -38,7 +37,6 @@ class ServiceLocator:
 class ClientContext:
     bb: Optional[BitbucketClient] = None
     gh: Optional[GitHubClient] = None
-    gh_cli: Optional[GitHubCliClient] = None
 
 @dataclass
 class MigrationEnvironment:

@@ -91,7 +91,6 @@ class OptionsConfig:
     skip_pr_as_issue: bool = False
     skip_milestones: bool = False
     open_milestones_only: bool = False
-    use_gh_cli: bool = False
     dry_run: bool = False
     rewrite_cross_repo_links: bool = False
 
@@ -519,7 +518,6 @@ class ConfigLoader:
                             'skip_pr_as_issue': config.options.skip_pr_as_issue,
                             'skip_milestones': config.options.skip_milestones,
                             'open_milestones_only': config.options.open_milestones_only,
-                            'use_gh_cli': config.options.use_gh_cli,
                             'rewrite_cross_repo_links': config.options.rewrite_cross_repo_links
                         },
             # 'cross_repo_mappings_file': config.cross_repo_mappings_file,
