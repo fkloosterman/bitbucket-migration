@@ -23,8 +23,7 @@
   "options": {
     "skip_issues": false,
     "skip_prs": false,
-    "skip_pr_as_issue": false,
-    "use_gh_cli": false
+    "skip_pr_as_issue": false
   },
 
   "user_mapping": {
