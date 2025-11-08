@@ -1153,7 +1153,6 @@
      B --&gt; D[BitbucketClient]
      C --&gt; D
      C --&gt; E[GitHubClient]
-     C --&gt; F[GitHubCliClient]
      C --&gt; G[Services: UserMapper, LinkRewriter, AttachmentHandler]
      C --&gt; H[Migrators: IssueMigrator, PullRequestMigrator, MilestoneMigrator]
      C --&gt; I[Formatters: FormatterFactory]
@@ -1164,7 +1163,6 @@
      G --&gt; R[Link Handlers: IssueLinkHandler, PrLinkHandler, etc.]
      D --&gt; K[Bitbucket API]
      E --&gt; L[GitHub API]
-     F --&gt; M[GitHub CLI]
      S[BaseDirManager] --&gt; T[FileRegistry]
      U[MigrationContext] --&gt; V[ServiceLocator]</code></pre>
 <h2 id="main-components">Main Components</h2>
@@ -1179,13 +1177,12 @@
 <ul>
 <li><strong>BitbucketClient</strong> (<code>src/bitbucket_migration/clients/bitbucket_client.py</code>): Interfaces with Bitbucket API for fetching issues, PRs, milestones, etc.</li>
 <li><strong>GitHubClient</strong> (<code>src/bitbucket_migration/clients/github_client.py</code>): Interfaces with GitHub API for creating issues, PRs, comments, etc.</li>
-<li><strong>GitHubCliClient</strong> (<code>src/bitbucket_migration/clients/github_cli_client.py</code>): Wraps GitHub CLI for attachment uploads and authentication checks.</li>
 </ul>
 <h3 id="services">Services</h3>
 <ul>
 <li><strong>UserMapper</strong> (<code>src/bitbucket_migration/services/user_mapper.py</code>): Maps Bitbucket users to GitHub accounts, resolving account IDs.</li>
 <li><strong>LinkRewriter</strong> (<code>src/bitbucket_migration/services/link_rewriter.py</code>): Rewrites cross-references between issues and PRs to point to GitHub.</li>
-<li><strong>AttachmentHandler</strong> (<code>src/bitbucket_migration/services/attachment_handler.py</code>): Downloads attachments from Bitbucket and uploads to GitHub (via CLI or manual).</li>
+<li><strong>AttachmentHandler</strong> (<code>src/bitbucket_migration/services/attachment_handler.py</code>): Downloads attachments from Bitbucket and creates informative comments for manual upload.</li>
 <li><strong>CrossRepoMappingStore</strong> (<code>src/bitbucket_migration/services/cross_repo_mapping_store.py</code>): Manages mappings between repositories for cross-repository link rewriting.</li>
 <li><strong>LinkDetector</strong> (<code>src/bitbucket_migration/services/link_detector.py</code>): Detects and extracts URLs from text content.</li>
 <li><strong>BaseLinkHandler</strong> (<code>src/bitbucket_migration/services/base_link_handler.py</code>): Base class for link handling with priority-based processing.</li>
@@ -1259,7 +1256,7 @@
 <li><strong>Link Rewriting</strong>: LinkRewriter processes content using various LinkHandlers to update references.</li>
 <li><strong>Migration Execution</strong>: RepoMigrator coordinates IssueMigrator and PullRequestMigrator to create content on GitHub.</li>
 <li><strong>Cross-Repository Linking</strong>: CrossRepoMappingStore and CrossRepoLinkHandler manage links between repositories.</li>
-<li><strong>Attachment Handling</strong>: AttachmentHandler downloads from Bitbucket and uploads via GitHubCliClient.</li>
+<li><strong>Attachment Handling</strong>: AttachmentHandler downloads from Bitbucket and creates informative comments for manual upload.</li>
 <li><strong>Reporting</strong>: ReportGenerator produces summaries, mappings, and audit reports.</li>
 <li><strong>Post-Migration Updates</strong>: CrossLinkUpdater can update links after all migrations are complete.</li>
 </ol>

@@ -1738,8 +1738,7 @@
 <span class="w">  </span><span class="nt">&quot;options&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">&quot;skip_issues&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
 <span class="w">    </span><span class="nt">&quot;skip_prs&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;skip_pr_as_issue&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;use_gh_cli&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
+<span class="w">    </span><span class="nt">&quot;skip_pr_as_issue&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
 <span class="w">  </span><span class="p">},</span>
 
 <span class="w">  </span><span class="nt">&quot;user_mapping&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -1978,12 +1977,6 @@
 <td><code>false</code></td>
 <td>Skip migrating closed PRs as issues</td>
 </tr>
-<tr>
-<td><code>use_gh_cli</code></td>
-<td>boolean</td>
-<td><code>false</code></td>
-<td>Use GitHub CLI for attachment uploads</td>
-</tr>
 </tbody>
 </table>
 <hr />
@@ -2203,15 +2196,13 @@ GITHUB_TOKEN=your_github_token
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;skip_issues&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">&quot;skip_prs&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;skip_pr_as_issue&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;use_gh_cli&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
+<span class="w">  </span><span class="nt">&quot;skip_pr_as_issue&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
 <span class="p">}</span>
 </code></pre></div>
 <ul>
 <li><code>skip_issues</code>: Skip migrating issues entirely</li>
 <li><code>skip_prs</code>: Skip migrating pull requests as PRs (but may still migrate as issues if <code>skip_pr_as_issue</code> is false)</li>
 <li><code>skip_pr_as_issue</code>: Skip migrating closed/merged PRs as issues</li>
-<li><code>use_gh_cli</code>: Use GitHub CLI for attachment uploads instead of API</li>
 </ul>
 <h2 id="migration-workflow">📋 Migration Workflow</h2>
 <h3 id="phase-0-setup-and-audit">Phase 0: Setup and Audit</h3>

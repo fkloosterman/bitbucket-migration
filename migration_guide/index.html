@@ -523,18 +523,9 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#automated-upload-recommended" class="md-nav__link">
+  <a href="#attachment-upload-process" class="md-nav__link">
     <span class="md-ellipsis">
-      Automated Upload (Recommended)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#manual-upload" class="md-nav__link">
-    <span class="md-ellipsis">
-      Manual Upload
+      Attachment Upload Process
     </span>
   </a>
   
@@ -1313,18 +1304,9 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#automated-upload-recommended" class="md-nav__link">
+  <a href="#attachment-upload-process" class="md-nav__link">
     <span class="md-ellipsis">
-      Automated Upload (Recommended)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#manual-upload" class="md-nav__link">
-    <span class="md-ellipsis">
-      Manual Upload
+      Attachment Upload Process
     </span>
   </a>
   
@@ -1765,7 +1747,6 @@ migrate_bitbucket_to_github<span class="w"> </span>cross-link<span class="w"> </
 <details>
 <summary>Advanced Options</summary>
 <ul>
-<li>Use <code>--use-gh-cli</code> for automatic attachment upload.</li>
 <li>Use <code>--skip-issues</code> or <code>--skip-prs</code> to migrate selectively.</li>
 <li>For <strong>Phase 2 cross-repo link updates</strong>: Use separate <code>cross-link</code> subcommand.</li>
 <li>See <a href="../reference/cli_reference/">CLI Reference</a> for all options.</li>
@@ -1773,18 +1754,8 @@ migrate_bitbucket_to_github<span class="w"> </span>cross-link<span class="w"> </
 </details>
 <hr />
 <h3 id="step-6-upload-attachments">Step 6 — Upload Attachments</h3>
-<p>Attachments are downloaded locally because GitHub’s API doesn’t support direct upload. Use the <code>--use-gh-cli</code> option in the migration script for automated upload, or follow the manual steps below.</p>
-<h4 id="automated-upload-recommended">Automated Upload (Recommended)</h4>
-<p>Add <code>--use-gh-cli</code> to the migration command for automatic attachment upload:</p>
-<div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--use-gh-cli
-</code></pre></div>
-<p>This requires GitHub CLI installed and authenticated.</p>
-<p><strong>For multi-repository migrations:</strong>
-<div class="highlight"><pre><span></span><code><span class="c1"># For each repository</span>
-migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--use-gh-cli
-<span class="c1"># Repeat for each repository...</span>
-</code></pre></div></p>
-<h4 id="manual-upload">Manual Upload</h4>
+<p>Attachments are downloaded locally because GitHub's API doesn't support direct upload. The migration tool creates informative comments on each issue/PR indicating which attachments need to be uploaded.</p>
+<h4 id="attachment-upload-process">Attachment Upload Process</h4>
 <ol>
 <li>
 <p><strong>Locate Files</strong>
@@ -1815,14 +1786,6 @@ ls<span class="w"> </span>-lh
 <details>
 <summary>Advanced Options</summary>
 <p>For bulk uploads or prioritization:</p>
-<p><strong>Bulk Upload with GitHub CLI</strong></p>
-<div class="highlight"><pre><span></span><code>gh<span class="w"> </span>auth<span class="w"> </span>login
-<span class="nb">cd</span><span class="w"> </span>attachments_temp
-<span class="k">while</span><span class="w"> </span><span class="nv">IFS</span><span class="o">=</span><span class="s1">&#39;,&#39;</span><span class="w"> </span><span class="nb">read</span><span class="w"> </span>-r<span class="w"> </span>file<span class="w"> </span>issue_num<span class="p">;</span><span class="w"> </span><span class="k">do</span>
-<span class="w">  </span>gh<span class="w"> </span>issue<span class="w"> </span>comment<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$issue_num</span><span class="s2">&quot;</span><span class="w"> </span>--repo<span class="w"> </span>OWNER/REPO<span class="w"> </span>--body<span class="w"> </span><span class="s2">&quot;**Attachment:** </span><span class="nv">$file</span><span class="s2">&quot;</span><span class="w"> </span>--attach<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$file</span><span class="s2">&quot;</span>
-<span class="w">  </span>sleep<span class="w"> </span><span class="m">2</span>
-<span class="k">done</span><span class="w"> </span>&lt;<span class="w"> </span>attachment_mapping.csv
-</code></pre></div>
 <p><strong>Prioritization</strong></p>
 <table>
 <thead>
@@ -1860,7 +1823,7 @@ ls<span class="w"> </span>-lh
 <li>Verify Git history: branches, tags, and commits match Bitbucket.</li>
 <li>Check issue/PR counts and content against audit report.</li>
 <li>Spot-check user mentions, comments, and timestamps.</li>
-<li>Confirm attachments are uploaded (if not using --use-gh-cli).</li>
+<li>Confirm attachments are uploaded.</li>
 </ul>
 <p><strong>Clean-Up Operations:</strong></p>
 <ul>

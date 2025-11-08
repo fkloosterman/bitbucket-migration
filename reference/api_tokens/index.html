@@ -904,30 +904,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#github-cli-authentication-optional" class="md-nav__link">
-    <span class="md-ellipsis">
-      GitHub CLI Authentication (Optional)
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="GitHub CLI Authentication (Optional)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#setup-instructions" class="md-nav__link">
-    <span class="md-ellipsis">
-      Setup Instructions
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -1003,15 +979,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#test-github-cli-authentication" class="md-nav__link">
-    <span class="md-ellipsis">
-      Test GitHub CLI Authentication
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -1040,24 +1007,6 @@
   <a href="#github-token-problems" class="md-nav__link">
     <span class="md-ellipsis">
       GitHub Token Problems
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#github-cli-problems" class="md-nav__link">
-    <span class="md-ellipsis">
-      GitHub CLI Problems
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#integration-issues" class="md-nav__link">
-    <span class="md-ellipsis">
-      Integration Issues
     </span>
   </a>
   
@@ -1121,18 +1070,9 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#basic-setup-no-attachments" class="md-nav__link">
+  <a href="#basic-setup" class="md-nav__link">
     <span class="md-ellipsis">
-      Basic Setup (No Attachments)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#advanced-setup-with-auto-upload" class="md-nav__link">
-    <span class="md-ellipsis">
-      Advanced Setup (With Auto-Upload)
+      Basic Setup
     </span>
   </a>
   
@@ -1342,30 +1282,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#github-cli-authentication-optional" class="md-nav__link">
-    <span class="md-ellipsis">
-      GitHub CLI Authentication (Optional)
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="GitHub CLI Authentication (Optional)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#setup-instructions" class="md-nav__link">
-    <span class="md-ellipsis">
-      Setup Instructions
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -1441,15 +1357,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#test-github-cli-authentication" class="md-nav__link">
-    <span class="md-ellipsis">
-      Test GitHub CLI Authentication
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -1478,24 +1385,6 @@
   <a href="#github-token-problems" class="md-nav__link">
     <span class="md-ellipsis">
       GitHub Token Problems
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#github-cli-problems" class="md-nav__link">
-    <span class="md-ellipsis">
-      GitHub CLI Problems
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#integration-issues" class="md-nav__link">
-    <span class="md-ellipsis">
-      Integration Issues
     </span>
   </a>
   
@@ -1559,18 +1448,9 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#basic-setup-no-attachments" class="md-nav__link">
+  <a href="#basic-setup" class="md-nav__link">
     <span class="md-ellipsis">
-      Basic Setup (No Attachments)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#advanced-setup-with-auto-upload" class="md-nav__link">
-    <span class="md-ellipsis">
-      Advanced Setup (With Auto-Upload)
+      Basic Setup
     </span>
   </a>
   
@@ -1610,7 +1490,7 @@
 
 
 <h1 id="api-tokens-setup-guide">API Tokens Setup Guide</h1>
-<p>This comprehensive guide explains all authentication requirements for the Bitbucket to GitHub migration tools, including the audit script, migration script, and optional GitHub CLI integration.</p>
+<p>This comprehensive guide explains all authentication requirements for the Bitbucket to GitHub migration tools, including the audit script and migration script.</p>
 <hr />
 <h2 id="authentication-overview">🔑 Authentication Overview</h2>
 <p>The migration process requires multiple authentication methods depending on which tools you use:</p>
@@ -1620,7 +1500,6 @@
 <th>Tool</th>
 <th>Bitbucket Token</th>
 <th>GitHub PAT</th>
-<th>GitHub CLI</th>
 <th>Purpose</th>
 </tr>
 </thead>
@@ -1629,13 +1508,11 @@
 <td><code>migrate_bitbucket_to_github test-auth</code></td>
 <td>✅ Required</td>
 <td>✅ Required</td>
-<td>❌ Optional</td>
 <td>Test authentication</td>
 </tr>
 <tr>
 <td><code>migrate_bitbucket_to_github audit</code></td>
 <td>✅ Required</td>
-<td>❌ Not needed</td>
 <td>❌ Not needed</td>
 <td>Audit repository content</td>
 </tr>
@@ -1643,36 +1520,25 @@
 <td><code>migrate_bitbucket_to_github migrate --dry-run</code></td>
 <td>✅ Required</td>
 <td>✅ Required</td>
-<td>❌ Optional</td>
 <td>Dry-run migrate issues/PRs</td>
 </tr>
 <tr>
 <td><code>migrate_bitbucket_to_github migrate</code></td>
 <td>✅ Required</td>
 <td>✅ Required</td>
-<td>❌ Optional</td>
 <td>Migrate issues/PRs</td>
-</tr>
-<tr>
-<td><code>migrate_bitbucket_to_github migrate --use-gh-cli</code></td>
-<td>✅ Required</td>
-<td>✅ Required</td>
-<td>✅ Required</td>
-<td>Auto-upload attachments</td>
 </tr>
 <tr>
 <td><code>migrate_bitbucket_to_github cross-link</code></td>
 <td>✅ Required</td>
 <td>✅ Required</td>
-<td>❌ Optional</td>
 <td>Post-migration link updates</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Choose your path:</strong></p>
+<p><strong>What you need:</strong></p>
 <ul>
-<li><strong>Basic Migration:</strong> Bitbucket API Token + GitHub PAT</li>
-<li><strong>Advanced Migration:</strong> All three authentication methods (for automatic attachment uploads)</li>
+<li><strong>Migration:</strong> Bitbucket API Token + GitHub PAT</li>
 <li><strong>Post-Migration:</strong> Bitbucket API Token + GitHub PAT (for cross-repository link updates)</li>
 </ul>
 <hr />
@@ -1752,42 +1618,6 @@
 <span class="p">}</span>
 </code></pre></div>
 <p><strong>Note:</strong> Tokens are no longer stored in config files. Set them via environment variables instead.</p>
-<h3 id="github-cli-authentication-optional">GitHub CLI Authentication (Optional)</h3>
-<p><strong>Required only for:</strong> <code>--use-gh-cli</code> flag (automatic attachment uploads)</p>
-<h4 id="setup-instructions">Setup Instructions</h4>
-<ol>
-<li>
-<p><strong>Install GitHub CLI:</strong>
-    <div class="highlight"><pre><span></span><code><span class="c1"># macOS</span>
-brew<span class="w"> </span>install<span class="w"> </span>gh
-
-<span class="c1"># Ubuntu/Debian</span>
-sudo<span class="w"> </span>apt<span class="w"> </span>update<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>gh
-
-<span class="c1"># Windows (using winget)</span>
-winget<span class="w"> </span>install<span class="w"> </span>--id<span class="w"> </span>GitHub.cli
-
-<span class="c1"># Other platforms: https://cli.github.com/</span>
-</code></pre></div></p>
-</li>
-<li>
-<p><strong>Authenticate GitHub CLI:</strong>
-    <div class="highlight"><pre><span></span><code>gh<span class="w"> </span>auth<span class="w"> </span>login
-
-<span class="c1"># Follow prompts:</span>
-<span class="c1"># - GitHub.com</span>
-<span class="c1"># - HTTPS</span>
-<span class="c1"># - Login with web browser</span>
-<span class="c1"># - Authorize GitHub CLI</span>
-</code></pre></div></p>
-</li>
-<li>
-<p><strong>Verify authentication:</strong>
-    <div class="highlight"><pre><span></span><code>gh<span class="w"> </span>auth<span class="w"> </span>status
-</code></pre></div></p>
-</li>
-</ol>
-<p><strong>Important:</strong> GitHub CLI must be authenticated to the <strong>same GitHub account/organization</strong> as your PAT.</p>
 <hr />
 <h2 id="token-security-best-practices">🔧 Token Security Best Practices</h2>
 <h3 id="environment-variables-recommended">Environment Variables (Recommended)</h3>
@@ -1820,7 +1650,6 @@ migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>
 <th>Operation</th>
 <th>Bitbucket Token</th>
 <th>GitHub PAT</th>
-<th>GitHub CLI</th>
 </tr>
 </thead>
 <tbody>
@@ -1828,31 +1657,26 @@ migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>
 <td>Repository audit</td>
 <td>Read access</td>
 <td>Not needed</td>
-<td>Not needed</td>
 </tr>
 <tr>
 <td>Issue migration</td>
 <td>Read access</td>
 <td>Repo access</td>
-<td>Not needed</td>
 </tr>
 <tr>
 <td>PR migration</td>
 <td>Read access</td>
 <td>Repo access</td>
-<td>Not needed</td>
 </tr>
 <tr>
 <td>Attachment upload</td>
 <td>Read access</td>
 <td>Repo access</td>
-<td>Authenticated</td>
 </tr>
 <tr>
 <td>Cross-repo link updates</td>
 <td>Read access</td>
 <td>Repo access</td>
-<td>Not needed</td>
 </tr>
 </tbody>
 </table>
@@ -1879,17 +1703,6 @@ curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </spa
 <span class="w">  </span>https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;title&quot;:&quot;Test Issue&quot;,&quot;body&quot;:&quot;Testing authentication&quot;}&#39;</span>
 </code></pre></div>
-<h3 id="test-github-cli-authentication">Test GitHub CLI Authentication</h3>
-<div class="highlight"><pre><span></span><code><span class="c1"># Check authentication status</span>
-gh<span class="w"> </span>auth<span class="w"> </span>status
-
-<span class="c1"># Test repository access</span>
-gh<span class="w"> </span>repo<span class="w"> </span>view<span class="w"> </span>YOUR_ORG/YOUR_REPO
-
-<span class="c1"># Test issue creation (dry run)</span>
-gh<span class="w"> </span>issue<span class="w"> </span>create<span class="w"> </span>--title<span class="w"> </span><span class="s2">&quot;Test Issue&quot;</span><span class="w"> </span>--body<span class="w"> </span><span class="s2">&quot;Testing CLI auth&quot;</span><span class="w"> </span>--repo<span class="w"> </span>YOUR_ORG/YOUR_REPO
-</code></pre></div>
-<p><strong>Note:</strong> GitHub CLI authentication is tested automatically during <code>test-auth</code> command.</p>
 <hr />
 <h2 id="troubleshooting-authentication-issues">🔍 Troubleshooting Authentication Issues</h2>
 <h3 id="bitbucket-token-problems">Bitbucket Token Problems</h3>
@@ -1928,35 +1741,6 @@ gh<span class="w"> </span>issue<span class="w"> </span>create<span class="w"> </
 <ul>
 <li>Verify repository exists and is accessible</li>
 <li>Check if organization/repository names are correct</li>
-</ul>
-<h3 id="github-cli-problems">GitHub CLI Problems</h3>
-<p><strong>"gh: Not logged in"</strong>
-<div class="highlight"><pre><span></span><code>gh<span class="w"> </span>auth<span class="w"> </span>login
-</code></pre></div></p>
-<p><strong>"Repository not found"</strong></p>
-<ul>
-<li>Verify repository exists</li>
-<li>Check if CLI is authenticated to correct GitHub account</li>
-<li>Ensure repository is accessible with current authentication</li>
-</ul>
-<p><strong>"Permission denied"</strong></p>
-<ul>
-<li>CLI may be authenticated to different account than PAT</li>
-<li>Repository may require different access level</li>
-<li>Organization may restrict CLI access</li>
-</ul>
-<h3 id="integration-issues">Integration Issues</h3>
-<p><strong>"GitHub CLI not available" (when using --use-gh-cli)</strong></p>
-<ul>
-<li>Install GitHub CLI: https://cli.github.com/</li>
-<li>Verify installation: <code>gh --version</code></li>
-<li>Authenticate: <code>gh auth login</code></li>
-</ul>
-<p><strong>"Authentication mismatch"</strong></p>
-<ul>
-<li>Ensure GitHub PAT and CLI are authenticated to same account</li>
-<li>Check if you're a member of the target organization</li>
-<li>Verify repository access permissions</li>
 </ul>
 <hr />
 <h2 id="verification-workflow">💡 Verification Workflow</h2>
@@ -2012,7 +1796,7 @@ gh<span class="w"> </span>issue<span class="w"> </span>create<span class="w"> </
 </ol>
 <hr />
 <h2 id="quick-start-commands">🚀 Quick Start Commands</h2>
-<h3 id="basic-setup-no-attachments">Basic Setup (No Attachments)</h3>
+<h3 id="basic-setup">Basic Setup</h3>
 <div class="highlight"><pre><span></span><code><span class="c1"># 1. Set environment variables</span>
 <span class="nb">export</span><span class="w"> </span><span class="nv">BITBUCKET_TOKEN</span><span class="o">=</span><span class="s2">&quot;ATAT123...&quot;</span>
 <span class="nb">export</span><span class="w"> </span><span class="nv">GITHUB_TOKEN</span><span class="o">=</span><span class="s2">&quot;ghp_456...&quot;</span>
@@ -2028,18 +1812,8 @@ migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </spa
 
 <span class="c1"># 5. Run full migration</span>
 migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>config.json
-</code></pre></div>
-<h3 id="advanced-setup-with-auto-upload">Advanced Setup (With Auto-Upload)</h3>
-<div class="highlight"><pre><span></span><code><span class="c1"># 1. Install and setup GitHub CLI</span>
-gh<span class="w"> </span>auth<span class="w"> </span>login
 
-<span class="c1"># 2. Test CLI authentication</span>
-gh<span class="w"> </span>auth<span class="w"> </span>status
-
-<span class="c1"># 3. Run migration with auto-upload</span>
-migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>config.json<span class="w"> </span>--use-gh-cli
-
-<span class="c1"># 4. Update cross-repository links (post-migration)</span>
+<span class="c1"># 6. Update cross-repository links (post-migration)</span>
 migrate_bitbucket_to_github<span class="w"> </span>cross-link<span class="w"> </span>--config<span class="w"> </span>config.json
 </code></pre></div>
 <hr />
@@ -2050,7 +1824,6 @@ migrate_bitbucket_to_github<span class="w"> </span>cross-link<span class="w"> </
 <th>Feature</th>
 <th>Bitbucket Token</th>
 <th>GitHub PAT</th>
-<th>GitHub CLI</th>
 </tr>
 </thead>
 <tbody>
@@ -2058,37 +1831,31 @@ migrate_bitbucket_to_github<span class="w"> </span>cross-link<span class="w"> </
 <td>Repository audit</td>
 <td>✅ User-level, read access</td>
 <td>❌</td>
-<td>❌</td>
 </tr>
 <tr>
 <td>Issue migration</td>
 <td>✅ User-level, read access</td>
 <td>✅ <code>repo</code> scope</td>
-<td>❌</td>
 </tr>
 <tr>
 <td>PR migration</td>
 <td>✅ User-level, read access</td>
 <td>✅ <code>repo</code> scope</td>
-<td>❌</td>
 </tr>
 <tr>
 <td>Attachment upload</td>
 <td>✅ User-level, read access</td>
 <td>✅ <code>repo</code> scope</td>
-<td>✅ Authenticated</td>
 </tr>
 <tr>
 <td>Cross-repo link updates</td>
 <td>✅ User-level, read access</td>
 <td>✅ <code>repo</code> scope</td>
-<td>❌</td>
 </tr>
 <tr>
 <td>User mapping</td>
 <td>✅ User-level, read access</td>
 <td>✅ <code>repo</code>, <code>user:email</code></td>
-<td>❌</td>
 </tr>
 </tbody>
 </table>
@@ -2096,9 +1863,9 @@ migrate_bitbucket_to_github<span class="w"> </span>cross-link<span class="w"> </
 <ul>
 <li>Always use <strong>user-level</strong> Bitbucket API tokens (not Repository Access Tokens)</li>
 <li>GitHub PAT requires <strong><code>repo</code></strong> scope for full functionality</li>
-<li>GitHub CLI is <strong>only needed</strong> for automatic attachment uploads</li>
 <li><strong>Test authentication</strong> before running migration scripts</li>
 <li>Use <strong>dry-run modes</strong> to validate your setup</li>
+<li>Attachments require <strong>manual upload</strong> due to GitHub API limitations</li>
 </ul>
 
 

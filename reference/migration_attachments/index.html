@@ -661,18 +661,9 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#manual-upload-default" class="md-nav__link">
+  <a href="#attachment-comments" class="md-nav__link">
     <span class="md-ellipsis">
-      Manual Upload (Default)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#auto-upload-with-github-cli" class="md-nav__link">
-    <span class="md-ellipsis">
-      Auto-Upload with GitHub CLI
+      Attachment Comments
     </span>
   </a>
   
@@ -986,18 +977,9 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#manual-upload-default" class="md-nav__link">
+  <a href="#attachment-comments" class="md-nav__link">
     <span class="md-ellipsis">
-      Manual Upload (Default)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#auto-upload-with-github-cli" class="md-nav__link">
-    <span class="md-ellipsis">
-      Auto-Upload with GitHub CLI
+      Attachment Comments
     </span>
   </a>
   
@@ -1056,20 +1038,16 @@
 </ul>
 <h2 id="what-gets-created">What Gets Created</h2>
 <p>Comments are added to issues/PRs noting attachments:</p>
-<h3 id="manual-upload-default">Manual Upload (Default)</h3>
+<h3 id="attachment-comments">Attachment Comments</h3>
 <div class="highlight"><pre><span></span><code>📎 <span class="gs">**Attachment from Bitbucket**</span>: <span class="sb">`screenshot.png`</span> (2.5 MB)
 
 <span class="ge">*Note: This file was attached to the original Bitbucket issue. Please drag and drop this file from `attachments_temp/screenshot.png` to embed it in this issue.*</span>
 </code></pre></div>
-<h3 id="auto-upload-with-github-cli">Auto-Upload with GitHub CLI</h3>
-<p><div class="highlight"><pre><span></span><code>📎 <span class="gs">**Attachment from Bitbucket**</span>: <span class="sb">`screenshot.png`</span> (2.5 MB)
-</code></pre></div>
-(File automatically uploaded and embedded)</p>
 <h2 id="handling-non-migratable-information">Handling Non-Migratable Information</h2>
 <ul>
 <li><strong>Direct Upload</strong>: GitHub API does not support direct attachment upload; files are downloaded locally to <code>attachments_temp/</code>.</li>
 <li><strong>Manual Upload Required</strong>: Comments are created on GitHub issues with instructions to drag-and-drop files.</li>
-<li><strong>Auto-Upload Option</strong>: With <code>--use-gh-cli</code>, attachments are uploaded automatically using GitHub CLI.</li>
+<li><strong>Informative Comments</strong>: The tool creates helpful comments with file names, sizes, and local paths for each attachment.</li>
 <li><strong>Large Files</strong>: Files are downloaded regardless of size; GitHub has its own upload limits.</li>
 </ul>
 <h2 id="difference-from-inline-images">Difference from Inline Images</h2>

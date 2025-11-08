@@ -1466,15 +1466,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#migration-with-automatic-attachment-upload" class="md-nav__link">
-    <span class="md-ellipsis">
-      Migration with Automatic Attachment Upload
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#advanced-migration-with-selective-options" class="md-nav__link">
     <span class="md-ellipsis">
       Advanced Migration with Selective Options
@@ -2667,15 +2658,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#migration-with-automatic-attachment-upload" class="md-nav__link">
-    <span class="md-ellipsis">
-      Migration with Automatic Attachment Upload
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#advanced-migration-with-selective-options" class="md-nav__link">
     <span class="md-ellipsis">
       Advanced Migration with Selective Options
@@ -3565,11 +3547,6 @@ Report saved to: bitbucket_audit_report.json
 <td></td>
 </tr>
 <tr>
-<td><code>--use-gh-cli</code></td>
-<td>Auto-upload attachments using GitHub CLI</td>
-<td></td>
-</tr>
-<tr>
 <td><code>--repo</code> / <code>--repos</code></td>
 <td>Migrate specific repository(es) (unified config only)</td>
 <td><code>--repo frontend</code></td>
@@ -3587,8 +3564,7 @@ Report saved to: bitbucket_audit_report.json
 </code></pre></div>
 <h4 id="dry-run-with-selective-options">Dry Run with Selective Options</h4>
 <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--dry-run<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--skip-pr-as-issue<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--use-gh-cli
+<span class="w">  </span>--skip-pr-as-issue
 </code></pre></div>
 <h4 id="dry-run-for-issues-only">Dry Run for Issues Only</h4>
 <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--dry-run<span class="w"> </span>--skip-prs
@@ -3811,11 +3787,6 @@ After successful dry-run, use migrate subcommand (without --dry-run) to perform 
 <td></td>
 </tr>
 <tr>
-<td><code>--use-gh-cli</code></td>
-<td>Auto-upload attachments using GitHub CLI</td>
-<td></td>
-</tr>
-<tr>
 <td><code>--repo</code> / <code>--repos</code></td>
 <td>Migrate specific repository(es) (unified config only)</td>
 <td><code>--repo frontend</code></td>
@@ -3847,14 +3818,9 @@ After successful dry-run, use migrate subcommand (without --dry-run) to perform 
 <h4 id="pull-requests-only-migration">Pull Requests Only Migration</h4>
 <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--skip-issues
 </code></pre></div>
-<h4 id="migration-with-automatic-attachment-upload">Migration with Automatic Attachment Upload</h4>
-<div class="highlight"><pre><span></span><code><span class="c1"># Requires GitHub CLI installed and authenticated</span>
-migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--use-gh-cli
-</code></pre></div>
 <h4 id="advanced-migration-with-selective-options">Advanced Migration with Selective Options</h4>
 <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--skip-pr-as-issue<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--use-gh-cli
+<span class="w">  </span>--skip-pr-as-issue
 </code></pre></div>
 <h4 id="migrate-specific-repository-unified-config">Migrate Specific Repository (Unified Config)</h4>
 <div class="highlight"><pre><span></span><code>migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--repo<span class="w"> </span>frontend
@@ -3873,10 +3839,9 @@ migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </spa
 <span class="w">  </span><span class="c1"># Create separate attachments directory for each repo</span>
 <span class="w">  </span>mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$ATTACHMENTS_DIR</span><span class="s2">/</span><span class="nv">$repo_name</span><span class="s2">&quot;</span>
 
-<span class="w">  </span><span class="c1"># Run migration with auto-upload</span>
+<span class="w">  </span><span class="c1"># Run migration</span>
 <span class="w">  </span>migrate_bitbucket_to_github<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>--config<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$config</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>--use-gh-cli
+<span class="w">    </span>--config<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$config</span><span class="s2">&quot;</span>
 
 <span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Migration complete for </span><span class="nv">$repo_name</span><span class="s2">&quot;</span>
 <span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Attachments: </span><span class="nv">$ATTACHMENTS_DIR</span><span class="s2">/</span><span class="nv">$repo_name</span><span class="s2">/&quot;</span>
@@ -3936,7 +3901,7 @@ migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </spa
 <li>Troubleshooting notes</li>
 </ul>
 <h4 id="attachments_temp_1"><code>attachments_temp/</code></h4>
-<p>Directory containing downloaded attachments for manual upload (unless using <code>--use-gh-cli</code>).</p>
+<p>Directory containing downloaded attachments for manual upload.</p>
 <hr />
 <h2 id="cleanup-clean-subcommand">🧹 Cleanup: <code>clean</code> Subcommand</h2>
 <p>Removes output files generated by audit, dry-run, and migrate subcommands. Useful for cleaning up after migration or starting fresh.</p>
@@ -4096,7 +4061,7 @@ migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </spa
 <span class="c1"># 9. Review migration results</span>
 cat<span class="w"> </span>migration_report.md
 
-<span class="c1"># 10. Handle attachments (if not using --use-gh-cli)</span>
+<span class="c1"># 10. Handle attachments</span>
 <span class="c1"># Manually upload files from attachments_temp/ to GitHub issues</span>
 </code></pre></div>
 <h3 id="phase-4-post-migration-verification">Phase 4: Post-Migration Verification</h3>
@@ -4125,14 +4090,11 @@ migrate_bitbucket_to_github<span class="w"> </span>test-auth<span class="w"> </s
 
 migrate_bitbucket_to_github<span class="w"> </span>audit<span class="w"> </span>--workspace<span class="w"> </span>myteam<span class="w"> </span>--repo<span class="w"> </span>large-repo<span class="w"> </span>--email<span class="w"> </span>user@example.com<span class="w"> </span>--gh-owner<span class="w"> </span>myuser<span class="w"> </span>--gh-repo<span class="w"> </span>large-repo
 
-<span class="c1"># Install and setup GitHub CLI for auto-upload</span>
-gh<span class="w"> </span>auth<span class="w"> </span>login
-
 <span class="c1"># Run dry-run first to validate setup</span>
-migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--dry-run<span class="w"> </span>--use-gh-cli
+migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--dry-run
 
-<span class="c1"># Run migration with auto-upload</span>
-migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--use-gh-cli
+<span class="c1"># Run migration</span>
+migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json
 </code></pre></div>
 <h3 id="use-case-3-issues-only-migration">Use Case 3: Issues-Only Migration</h3>
 <div class="highlight"><pre><span></span><code><span class="c1"># When you only want to migrate issues, not PRs</span>
@@ -4162,10 +4124,10 @@ migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </spa
 <span class="w">  </span><span class="c1"># ... manual step: edit migration_config.json ...</span>
 
 <span class="w">  </span><span class="c1"># Dry run first</span>
-<span class="w">  </span>migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--dry-run<span class="w"> </span>--use-gh-cli
+<span class="w">  </span>migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--dry-run
 
 <span class="w">  </span><span class="c1"># Migrate</span>
-<span class="w">  </span>migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json<span class="w"> </span>--use-gh-cli
+<span class="w">  </span>migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </span>--config<span class="w"> </span>migration_config.json
 
 <span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Completed migration for </span><span class="nv">$repo</span><span class="s2">&quot;</span>
 <span class="k">done</span>
@@ -4264,7 +4226,6 @@ migrate_bitbucket_to_github<span class="w"> </span>migrate<span class="w"> </spa
 <ul>
 <li>Use <code>migrate --dry-run</code> first to validate your setup</li>
 <li>Run scripts during off-peak hours for large repositories</li>
-<li>Use <code>--use-gh-cli</code> for repositories with many attachments</li>
 <li>Keep the <code>attachments_temp/</code> directory until migration is verified</li>
 </ul>
 <h3 id="error-recovery">Error Recovery</h3>
