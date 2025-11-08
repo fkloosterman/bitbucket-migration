@@ -37,6 +37,7 @@ nav:
     - User Mapping: reference/user_mapping.md
     - API Tokens: reference/api_tokens.md
     - Command Line Interface: reference/cli_reference.md
+    - Rate Limits: reference/rate_limits.md
   - Architecture: reference/architecture.md
 
 docs_dir: docs

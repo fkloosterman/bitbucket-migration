@@ -373,19 +373,8 @@ class GitHubClient:
         while True:
             try:
                 choice = input("What would you like to do? (t)ry again, (w)ait longer, (c)ontinue, or (q)uit: ").strip().lower()
-                if choice in ['t', 'try again']:
-                    # Suggest appropriate wait time based on error type
-                    if is_secondary:
-                        default_wait = "10"  # Secondary limits typically clear faster
-                        print("Note: For secondary rate limits, waiting 10-15 minutes is recommended.")
-                    else:
-                        default_wait = "60"  # Primary limits reset hourly
-                        print("Note: For primary rate limits, the limit typically resets at the top of the hour.")
-                    
-                    wait_minutes = int(input(f"How many minutes to wait before retrying? (default {default_wait}): ") or default_wait)
-                    print(f"⏳ Waiting {wait_minutes} minutes before retrying...")
-                    time.sleep(wait_minutes * 60)
-                    print("🔄 Restarting current operation...")
+                elif choice in ['t', 'try again']:
+                    print("🔄 Retrying immediately...")
                     # Reset the attempt counter by re-raising to let the caller handle it
                     raise original_error
                 elif choice in ['w', 'wait longer']:

@@ -60,6 +60,24 @@ For migrating multiple repositories that reference each other:
 
 ---
 
+## Rate Limits and Best Practices
+
+GitHub enforces two types of rate limits that may affect migration:
+
+- **Primary Rate Limits**: 5,000 requests/hour quota, tracked via API headers
+- **Secondary Rate Limits**: Pattern-based abuse detection, no fixed quota, typically clears in 5-10 minutes
+
+The migration tool automatically handles rate limits with exponential backoff and user prompts. To minimize issues:
+
+- Use a GitHub Personal Access Token (PAT) with `repo` scope
+- Configure `request_delay_seconds` (default 1.5s) to space out requests
+- Run migrations during off-peak hours if possible
+- Be prepared to wait when secondary limits are triggered
+
+See [Rate Limits Reference](reference/rate_limits.md) for detailed information.
+
+---
+
 ## Installation and Setup
 
 1. **Install from PyPI** (Recommended):
