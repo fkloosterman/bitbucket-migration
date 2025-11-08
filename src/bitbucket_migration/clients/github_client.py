@@ -231,12 +231,78 @@ class GitHubClient:
                     time.sleep(wait_time)
                     continue
                 break
+            
+            except APIError as e:
+                # Check if this is a rate limit error
+                if any(keyword in str(e).lower() for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                    if attempt < max_retries:
+                        # Use calculated wait time or exponential backoff for rate limit APIErrors
+                        wait_time = min(2 ** attempt, 300)  # Cap at 5 minutes
+                        print(f"Rate limit APIError detected. Waiting {wait_time:.0f}s before retry {attempt+1}/{max_retries}")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        # All retries exhausted - ask user what to do
+                        self._handle_retry_exhaustion(e, url, max_retries)
+                        raise  # Re-raise the original APIError
+                else:
+                    # Not a rate limit error, don't retry
+                    raise
 
-        # All retries exhausted
+        # All retries exhausted for non-APIError exceptions
         if last_exception:
             raise NetworkError(f"Network error after {max_retries} retries: {last_exception}")
         else:
             raise APIError(f"Request failed after {max_retries} retries")
+
+    def _handle_retry_exhaustion(self, original_error: APIError, url: str, max_retries: int) -> None:
+        """
+        Handle the case when all retries have been exhausted for rate limiting.
+        
+        Args:
+            original_error: The original APIError that triggered the retry exhaustion
+            url: The URL that was being accessed
+            max_retries: Maximum number of retries that were attempted
+        """
+        print(f"\n{'='*60}")
+        print("⚠️  GITHUB API RATE LIMIT - ALL RETRIES EXHAUSTED")
+        print(f"{'='*60}")
+        print(f"Error: {original_error}")
+        print(f"URL: {url}")
+        print(f"Max retries: {max_retries}")
+        print()
+        print("GitHub's rate limit typically resets hourly.")
+        print("Recommended actions:")
+        print("  1. Wait for rate limit to reset (check GitHub's rate limit status)")
+        print("  2. Try again later when limits have reset")
+        print("  3. Continue with other repositories and retry this one separately")
+        print()
+        
+        while True:
+            try:
+                choice = input("What would you like to do? (t)ry again, (w)ait longer, (c)ontinue, or (q)uit: ").strip().lower()
+                if choice in ['t', 'try again']:
+                    print("🔄 Restarting current operation...")
+                    # Reset the attempt counter by re-raising to let the caller handle it
+                    raise original_error
+                elif choice in ['w', 'wait longer']:
+                    wait_minutes = int(input("How many minutes to wait? (default 60): ") or "60")
+                    print(f"⏳ Waiting {wait_minutes} minutes before retrying...")
+                    time.sleep(wait_minutes * 60)
+                    # After waiting, re-raise to retry
+                    raise original_error
+                elif choice in ['c', 'continue']:
+                    print("⏭️  Skipping current operation and continuing with migration...")
+                    # Return without raising - this will cause the caller to continue
+                    return
+                elif choice in ['q', 'quit']:
+                    print("👋 Exiting migration as requested.")
+                    raise original_error  # Re-raise to exit gracefully
+                else:
+                    print("❌ Please enter t, w, c, or q")
+            except KeyboardInterrupt:
+                print("\n🛑 Migration interrupted by user.")
+                raise original_error
 
     def create_issue(self, title: str, body: str, **kwargs) -> Dict[str, Any]:
         """
@@ -299,12 +365,14 @@ class GitHubClient:
             elif e.response.status_code == 422:
                 raise ValidationError(f"Invalid issue data: {e}")
             elif e.response.status_code == 403:
-                # Check if it's a rate limit or permission issue
+                # Check if this is a rate limit or abuse detection
                 try:
                     error_data = e.response.json()
                     if isinstance(error_data, dict):
                         error_msg = error_data.get('message', '').lower()
-                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests']):
+                        # Check for rate limiting
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
                             raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
                 except (ValueError, AttributeError, TypeError):
                     pass
@@ -313,6 +381,9 @@ class GitHubClient:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error creating GitHub issue: {e}")
 
@@ -381,11 +452,25 @@ class GitHubClient:
             elif e.response.status_code == 422:
                 raise ValidationError(f"Invalid PR data or branch doesn't exist: {e}")
             elif e.response.status_code == 403:
+                # Check if this is a rate limit or abuse detection
+                try:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '').lower()
+                        # Check for rate limiting
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                except (ValueError, AttributeError, TypeError):
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error creating GitHub PR: {e}")
 
@@ -470,11 +555,25 @@ class GitHubClient:
             elif e.response.status_code == 404:
                 raise APIError(f"Issue not found: {issue_number}", status_code=404)
             elif e.response.status_code == 403:
+                # Check if this is a rate limit or abuse detection
+                try:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '').lower()
+                        # Check for rate limiting
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                except (ValueError, AttributeError, TypeError):
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error fetching GitHub issue: {e}")
 
@@ -531,11 +630,25 @@ class GitHubClient:
             elif e.response.status_code == 404:
                 raise APIError(f"Issue/PR not found: {issue_number}", status_code=404)
             elif e.response.status_code == 403:
+                # Check if this is a rate limit or abuse detection
+                try:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '').lower()
+                        # Check for rate limiting
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                except (ValueError, AttributeError, TypeError):
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error fetching GitHub comments: {e}")
 
@@ -587,12 +700,17 @@ class GitHubClient:
             elif e.response.status_code == 422:
                 raise ValidationError(f"Invalid comment data: {e}")
             elif e.response.status_code == 403:
-                # Check if this is a locked issue/PR
+                # Check if this is a rate limit, abuse detection, or actually locked issue/PR
                 try:
                     error_data = e.response.json()
                     if isinstance(error_data, dict):
-                        error_msg = error_data.get('message', '')
-                        if 'locked' in error_msg.lower():
+                        error_msg = error_data.get('message', '').lower()
+                        # Check for rate limiting first
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                        # Check for actual locking
+                        elif 'locked' in error_msg:
                             raise ValidationError(f"Issue/PR #{issue_number} is locked and cannot accept new comments")
                 except (ValueError, AttributeError, TypeError):
                     pass
@@ -601,6 +719,9 @@ class GitHubClient:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error creating GitHub comment: {e}")
 
@@ -651,11 +772,25 @@ class GitHubClient:
             elif e.response.status_code == 422:
                 raise ValidationError(f"Invalid comment update data: {e}")
             elif e.response.status_code == 403:
+                # Check if this is a rate limit or abuse detection
+                try:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '').lower()
+                        # Check for rate limiting
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                except (ValueError, AttributeError, TypeError):
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error updating GitHub comment: {e}")
 
@@ -770,11 +905,25 @@ class GitHubClient:
                 except (ValueError, AttributeError):
                     raise ValidationError(f"Invalid review comment data: {e}")
             elif e.response.status_code == 403:
+                # Check if this is a rate limit or abuse detection
+                try:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '').lower()
+                        # Check for rate limiting
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                except (ValueError, AttributeError, TypeError):
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error creating GitHub PR review comment: {e}")
 
@@ -822,11 +971,25 @@ class GitHubClient:
             elif e.response.status_code == 422:
                 raise ValidationError(f"Invalid issue update data: {e}")
             elif e.response.status_code == 403:
+                # Check if this is a rate limit or abuse detection
+                try:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '').lower()
+                        # Check for rate limiting
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                except (ValueError, AttributeError, TypeError):
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error updating GitHub issue: {e}")
         
@@ -876,11 +1039,25 @@ class GitHubClient:
             elif e.response.status_code == 422:
                 raise ValidationError(f"Invalid pull request update data: {e}")
             elif e.response.status_code == 403:
+                # Check if this is a rate limit or abuse detection
+                try:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '').lower()
+                        # Check for rate limiting
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                except (ValueError, AttributeError, TypeError):
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error updating GitHub pull request: {e}")
 
@@ -925,6 +1102,17 @@ class GitHubClient:
                 # Organization issue types not found - this is normal for personal repos
                 return {}
             elif e.response.status_code == 403:
+                # Check if this is a rate limit or abuse detection
+                try:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '').lower()
+                        # Check for rate limiting
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                except (ValueError, AttributeError, TypeError):
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
@@ -933,6 +1121,9 @@ class GitHubClient:
         except (ValueError, AttributeError, TypeError) as e:
             # Handle JSON parsing errors from issue_types
             raise APIError(f"Error parsing issue types response: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error fetching GitHub issue types: {e}")
 
@@ -989,11 +1180,25 @@ class GitHubClient:
             elif e.response.status_code == 404:
                 raise APIError(f"Repository not found: {self.owner}/{self.repo}", status_code=404)
             elif e.response.status_code == 403:
+                # Check if this is a rate limit or abuse detection
+                try:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '').lower()
+                        # Check for rate limiting
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                except (ValueError, AttributeError, TypeError):
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error fetching GitHub milestones: {e}")
 
@@ -1104,11 +1309,25 @@ class GitHubClient:
                 except (ValueError, AttributeError):
                     raise ValidationError(f"Invalid milestone data: {e}")
             elif e.response.status_code == 403:
+                # Check if this is a rate limit or abuse detection
+                try:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '').lower()
+                        # Check for rate limiting
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                except (ValueError, AttributeError, TypeError):
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error creating GitHub milestone: {e}")
 
@@ -1145,11 +1364,25 @@ class GitHubClient:
             if e.response.status_code == 401:
                 raise AuthenticationError("GitHub authentication failed. Please check your token.")
             elif e.response.status_code == 403:
+                # Check if this is a rate limit or abuse detection
+                try:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '').lower()
+                        # Check for rate limiting
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                except (ValueError, AttributeError, TypeError):
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             else:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error checking GitHub branch: {e}")
 
@@ -1177,6 +1410,17 @@ class GitHubClient:
             if e.response.status_code == 401:
                 raise AuthenticationError("GitHub authentication failed. Please check your token.")
             elif e.response.status_code == 403:
+                # Check if this is a rate limit or abuse detection
+                try:
+                    error_data = e.response.json()
+                    if isinstance(error_data, dict):
+                        error_msg = error_data.get('message', '').lower()
+                        # Check for rate limiting
+                        if any(keyword in error_msg for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                            # Re-raise the APIError so retry logic in _make_request_with_retry can catch it
+                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
+                except (ValueError, AttributeError, TypeError):
+                    pass
                 raise AuthenticationError("GitHub API access forbidden. Please check your token permissions.")
             elif e.response.status_code == 404:
                 raise APIError(f"Repository not found: {self.owner}/{self.repo}", status_code=404)
@@ -1184,6 +1428,9 @@ class GitHubClient:
                 raise APIError(f"GitHub API error: {e}", status_code=e.response.status_code)
         except requests.exceptions.RequestException as e:
             raise NetworkError(f"Network error communicating with GitHub API: {e}")
+        except APIError:
+            # Re-raise APIError to let _make_request_with_retry's retry logic handle rate limits
+            raise
         except Exception as e:
             raise APIError(f"Unexpected error fetching GitHub repository info: {e}")
 

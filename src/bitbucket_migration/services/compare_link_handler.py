@@ -55,7 +55,7 @@ class CompareLinkHandler(BaseLinkHandler):
         """
         match = self.PATTERN.match(url)  # Use pre-compiled pattern
         if not match:
-            self.logger.debug("URL did not match compare pattern: %s", url)
+            self.logger.debug(f"URL did not match compare pattern: {url}")
             return None
 
         # Extract from either pattern (group 1&2 OR group 3&4)

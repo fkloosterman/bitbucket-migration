@@ -901,7 +901,7 @@ class LinkRewriter:
 
                 # Validate the generated GitHub URL
                 if not self.validate_github_url(gh_url, 'issue'):
-                    self.logger.error("Invalid GitHub PR URL generated: %s", gh_url)
+                    self.logger.error(f"Invalid GitHub PR URL generated: {gh_url}")
                     self.validation_failures.append({
                         'original_url': original_ref,
                         'invalid_url': gh_url,

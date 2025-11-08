@@ -82,7 +82,7 @@ class AttachmentHandler:
             })
             return filepath
         except Exception as e:
-            self.logger.error("Failed to download attachment %s: %s", filename, e, extra={'filename': filename, 'error': str(e)})
+            self.logger.error(f"Failed to download attachment {filename}: {e} (Context: filename={filename}, error={str(e)})")
             return None
     
     def upload_to_github(self, filepath: Path, issue_number: int) -> Optional[str]:

@@ -96,7 +96,7 @@ class BaseLinkHandler(ABC):
         try:
             return template.format(**kwargs)
         except (KeyError, ValueError) as e:
-            self.logger.warning("Template formatting error: %s", e)
+            self.logger.warning(f"Template formatting error: {e}")
             return self.template_config.get_template('default') if self.template_config else ''
 
     @staticmethod

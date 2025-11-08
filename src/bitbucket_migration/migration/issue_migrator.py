@@ -201,10 +201,35 @@ class IssueMigrator:
 
                     if att_url:
                         self.logger.info(f"    Downloading {att_name}...")
-                        filepath = self.attachment_handler.download_attachment(att_url, att_name, item_type='issue', item_number=issue_num)
-                        if filepath:
-                            self.logger.info(f"    Creating attachment note on GitHub...")
-                            self.attachment_handler.upload_to_github(filepath, gh_issue['number'])
+                        # Handle cases where href might be a list or string - with intelligent URL selection
+                        original_att_url = att_url
+                        if isinstance(att_url, list):
+                            if not att_url:
+                                att_url = None
+                                self.logger.warning(f"    Warning: Empty URL list for attachment {att_name}")
+                            elif len(att_url) == 1:
+                                att_url = att_url[0]
+                                self.logger.info(f"    Selected URL from single-item list for {att_name}")
+                            else:
+                                # Multiple URLs - choose the best one
+                                self.logger.info(f"    Found {len(att_url)} URLs for {att_name}, selecting best...")
+                                for url in att_url:
+                                    if 'api.bitbucket.org' in url:
+                                        att_url = url
+                                        self.logger.info(f"    Selected primary API URL for {att_name}")
+                                        break
+                                else:
+                                    # Fall back to first URL if no preferred pattern found
+                                    att_url = att_url[0]
+                                    self.logger.info(f"    Selected first URL from {len(att_url)} options for {att_name}")
+                        
+                        if att_url:
+                            filepath = self.attachment_handler.download_attachment(att_url, att_name, item_type='issue', item_number=issue_num)
+                            if filepath:
+                                self.logger.info(f"    Creating attachment note on GitHub...")
+                                self.attachment_handler.upload_to_github(filepath, gh_issue['number'])
+                        else:
+                            self.logger.warning(f"    Warning: No valid URL found for attachment {att_name}")
 
             # Comments will be created in the second pass to avoid duplication
 

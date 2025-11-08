@@ -563,18 +563,18 @@ class RepoMigrator(BaseMigrator):
     def _print_post_migration_instructions(self) -> None:
         """Print post-migration instructions."""
         attachment_handler = self.environment.services.get('attachment_handler')
-        if not self.dry_run and len(attachment_handler.attachments) > 0:
+        if not self.dry_run and len(attachment_handler.data.attachments) > 0:
             self.logger.info("="*80)
             self.logger.info("POST-MIGRATION: Attachment Handling")
             self.logger.info("="*80)
-            self.logger.info(f"{len(attachment_handler.attachments)} attachments were downloaded to: {attachment_handler.attachment_dir}")
+            self.logger.info(f"{len(attachment_handler.data.attachments)} attachments were downloaded to: {attachment_handler.data.attachment_dir}")
 
             if self.config.options.use_gh_cli:
-                uploaded_count = len([a for a in attachment_handler.attachments if a.get('uploaded', False)])
+                uploaded_count = len([a for a in attachment_handler.data.attachments if a.get('uploaded', False)])
                 self.logger.info(f"✓ Attachments were automatically uploaded using GitHub CLI")
-                self.logger.info(f"  Successfully uploaded: {uploaded_count}/{len(attachment_handler.attachments)}")
+                self.logger.info(f"  Successfully uploaded: {uploaded_count}/{len(attachment_handler.data.attachments)}")
 
-                failed_count = len(attachment_handler.attachments) - uploaded_count
+                failed_count = len(attachment_handler.data.attachments) - uploaded_count
                 if failed_count > 0:
                     self.logger.warning(f"⚠️  {failed_count} attachment(s) failed to upload")
                     self.logger.warning("  These need manual upload via drag-and-drop")
@@ -586,16 +586,16 @@ class RepoMigrator(BaseMigrator):
                 self.logger.info("To upload attachments to GitHub issues:")
                 self.logger.info("1. Navigate to the issue on GitHub")
                 self.logger.info("2. Click the comment box")
-                self.logger.info(f"3. Drag and drop the file from {attachment_handler.attachment_dir}/")
+                self.logger.info(f"3. Drag and drop the file from {attachment_handler.data.attachment_dir}/")
                 self.logger.info("4. The file will be uploaded and embedded")
                 self.logger.info("Example:")
                 self.logger.info(f"  - Open: https://github.com/{self.config.github.owner}/{self.config.github.repo}/issues/1")
-                self.logger.info(f"  - Drag: {attachment_handler.attachment_dir}/screenshot.png")
+                self.logger.info(f"  - Drag: {attachment_handler.data.attachment_dir}/screenshot.png")
                 self.logger.info("  - File will appear in comment with URL")
                 self.logger.info("Note: Comments already note which attachments belonged to each issue.")
                 self.logger.info("Tip: Use --use-gh-cli flag to automatically upload attachments")
 
-            self.logger.info(f"Keep {attachment_handler.attachment_dir}/ folder as backup until verified.")
+            self.logger.info(f"Keep {attachment_handler.data.attachment_dir}/ folder as backup until verified.")
             self.logger.info("="*80)
 
         # Print PR migration explanation

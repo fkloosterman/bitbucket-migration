@@ -206,10 +206,35 @@ class PullRequestMigrator:
                                     att_url = attachment.get('links', {}).get('self', {}).get('href')
 
                                     if att_url:
-                                        self.logger.info(f"    Processing {att_name}...")
-                                        filepath = self.attachment_handler.download_attachment(att_url, att_name, item_type='pr', item_number=pr_num)
-                                        if filepath:
-                                            self.attachment_handler.upload_to_github(filepath, gh_pr['number'])
+                                        # Handle cases where href might be a list or string - with intelligent URL selection
+                                        original_att_url = att_url
+                                        if isinstance(att_url, list):
+                                            if not att_url:
+                                                att_url = None
+                                                self.logger.warning(f"    Warning: Empty URL list for attachment {att_name}")
+                                            elif len(att_url) == 1:
+                                                att_url = att_url[0]
+                                                self.logger.info(f"    Selected URL from single-item list for {att_name}")
+                                            else:
+                                                # Multiple URLs - choose the best one
+                                                self.logger.info(f"    Found {len(att_url)} URLs for {att_name}, selecting best...")
+                                                for url in att_url:
+                                                    if 'api.bitbucket.org' in url:
+                                                        att_url = url
+                                                        self.logger.info(f"    Selected primary API URL for {att_name}")
+                                                        break
+                                                else:
+                                                    # Fall back to first URL if no preferred pattern found
+                                                    att_url = att_url[0]
+                                                    self.logger.info(f"    Selected first URL from {len(att_url)} options for {att_name}")
+                                        
+                                        if att_url:
+                                            self.logger.info(f"    Processing {att_name}...")
+                                            filepath = self.attachment_handler.download_attachment(att_url, att_name, item_type='pr', item_number=pr_num)
+                                            if filepath:
+                                                self.attachment_handler.upload_to_github(filepath, gh_pr['number'])
+                                        else:
+                                            self.logger.warning(f"    Warning: No valid URL found for attachment {att_name}")
 
                             # Update the record with attachments count
                             for record in self.state.pr_records:
@@ -374,11 +399,36 @@ class PullRequestMigrator:
                     att_url = attachment.get('links', {}).get('self', {}).get('href')
 
                     if att_url:
-                        self.logger.info(f"    Downloading {att_name}...")
-                        filepath = self.attachment_handler.download_attachment(att_url, att_name, item_type='pr', item_number=pr_num)
-                        if filepath:
-                            self.logger.info(f"    Creating attachment note...")
-                            self.attachment_handler.upload_to_github(filepath, gh_issue['number'])
+                        # Handle cases where href might be a list or string - with intelligent URL selection
+                        original_att_url = att_url
+                        if isinstance(att_url, list):
+                            if not att_url:
+                                att_url = None
+                                self.logger.warning(f"    Warning: Empty URL list for attachment {att_name}")
+                            elif len(att_url) == 1:
+                                att_url = att_url[0]
+                                self.logger.info(f"    Selected URL from single-item list for {att_name}")
+                            else:
+                                # Multiple URLs - choose the best one
+                                self.logger.info(f"    Found {len(att_url)} URLs for {att_name}, selecting best...")
+                                for url in att_url:
+                                    if 'api.bitbucket.org' in url:
+                                        att_url = url
+                                        self.logger.info(f"    Selected primary API URL for {att_name}")
+                                        break
+                                else:
+                                    # Fall back to first URL if no preferred pattern found
+                                    att_url = att_url[0]
+                                    self.logger.info(f"    Selected first URL from {len(att_url)} options for {att_name}")
+                        
+                        if att_url:
+                            self.logger.info(f"    Downloading {att_name}...")
+                            filepath = self.attachment_handler.download_attachment(att_url, att_name, item_type='pr', item_number=pr_num)
+                            if filepath:
+                                self.logger.info(f"    Creating attachment note...")
+                                self.attachment_handler.upload_to_github(filepath, gh_issue['number'])
+                        else:
+                            self.logger.warning(f"    Warning: No valid URL found for attachment {att_name}")
 
             # Update the record with attachments count
             for record in self.state.pr_records:
@@ -770,24 +820,52 @@ class PullRequestMigrator:
                 if inline_data and commit_id:
                     # Attempt to create as inline review comment
                     try:
+                        # Log detailed info for debugging
+                        self.logger.debug(f"  DEBUG: Creating inline comment for comment ID {comment.get('id')}")
+                        self.logger.debug(f"  DEBUG: inline_data = {inline_data}")
+                        self.logger.debug(f"  DEBUG: commit_id = {commit_id[:7] if commit_id else 'None'}")
+                        self.logger.debug(f"  DEBUG: in_reply_to = {in_reply_to}")
+                        self.logger.debug(f"  DEBUG: parent_id = {parent_id}")
+                        
                         path = inline_data.get('path')
-                        line = inline_data.get('to')
-                        start_line = inline_data.get('from')
+                        line = inline_data.get('to')          # Anchor line in new version (ending line if multi-line)
+                        from_line = inline_data.get('from')   # Anchor line in old version (ending line if multi-line)
+                        start_from = inline_data.get('start_from')  # Starting line in old version (null for single-line)
+                        start_to = inline_data.get('start_to')      # Starting line in new version (null for single-line)
 
-                        # Log attempt details
-                        self.logger.info(f"  Attempting inline comment: path={path}, line={line}, start_line={start_line}, commit={commit_id[:7] if commit_id else 'None'}, in_reply_to={in_reply_to['gh_id']}")
+                        # Log attempt details with proper None handling
+                        in_reply_to_id = in_reply_to['gh_id'] if in_reply_to and isinstance(in_reply_to, dict) else 'None'
+                        self.logger.info(f"  Attempting inline comment: path={path}, line={line}, from={from_line}, start_from={start_from}, start_to={start_to}, commit={commit_id[:7] if commit_id else 'None'}, in_reply_to={in_reply_to_id}")
 
                         if path and line:
+                            # Strategy: Use in_reply_to when available to simplify parameter handling
+                            # GitHub allows omitting start_line/start_side for multi-line comments when using in_reply_to
+                            has_parent = in_reply_to and isinstance(in_reply_to, dict)
+                            
+                            if has_parent:
+                                # When using in_reply_to, we can omit start_line/start_side even for multi-line
+                                actual_start_line = None
+                                actual_start_side = None
+                                reply_id = in_reply_to['gh_id']
+                                self.logger.info(f"  Using in_reply_to approach: reply_to={reply_id}, omitting start_line/start_side")
+                            else:
+                                # Fall back to explicit start_line/start_side for multi-line comments
+                                # For single-line: start_from and start_to are null
+                                # For multi-line: start_from and start_to are set
+                                actual_start_line = start_to if start_to else None  # Use start_to for multi-line comments
+                                actual_start_side = 'LEFT' if actual_start_line else None
+                                reply_id = None
+                            
                             gh_comment = self.environment.clients.gh.create_pr_review_comment(
                                 pull_number=gh_number,
                                 body=comment_body,
                                 path=path,
                                 line=line,
-                                side='RIGHT',  # Default to new file side
-                                start_line=start_line if start_line and start_line != line else None,
-                                start_side='LEFT' if start_line and start_line != line else None,  # Use 'LEFT' for start if multi-line
+                                side='RIGHT',  # Always 'RIGHT' for target (new) version
+                                start_line=actual_start_line,
+                                start_side=actual_start_side,
                                 commit_id=commit_id,
-                                in_reply_to=in_reply_to['gh_id']
+                                in_reply_to=reply_id
                             )
                             if not activity_id=='unknown':
                                 self.state.mappings.pr_comments[activity_id] = {
@@ -809,7 +887,11 @@ class PullRequestMigrator:
                         # Fallback to regular comment on failure
                         self.logger.warning(f"  Failed to create inline comment: {e}")
                         self.logger.warning(f"    Details - Path: {path}, Line: {line}, Commit: {commit_id[:7] if commit_id else 'None'}")
-                        self.logger.warning(f"    Start line: {start_line}, Side: RIGHT, Start side: LEFT")
+                        # Use the same logic as above for consistency
+                        actual_start_line = start_to if start_to else None
+                        actual_start_side = 'LEFT' if actual_start_line else None
+                        self.logger.warning(f"    Start line: {actual_start_line}, Side: RIGHT, Start side: {actual_start_side}")
+                        self.logger.warning(f"    Raw BB params: from={from_line}, to={line}, start_from={start_from}, start_to={start_to}")
 
                         # Add detailed context to the fallback comment
                         context_note = f"> 💬 **Code comment on `{path}` (line {line})**"
@@ -882,6 +964,12 @@ class PullRequestMigrator:
                     except ValidationError as e:
                         if 'locked' in str(e).lower():
                             self.logger.warning(f"  Skipping comment on locked PR #{gh_number}: {e}")
+                            # Add note to record that PR was locked (this is actual repository locking)
+                            for record in self.state.pr_records:
+                                if record.get('gh_number') == gh_number:
+                                    if 'locked' not in ' '.join(record.get('remarks', [])):
+                                        record['remarks'].append('PR was locked - comments skipped')
+                                    break
                         else:
                             raise
 
@@ -913,6 +1001,12 @@ class PullRequestMigrator:
                     except ValidationError as e:
                         if 'locked' in str(e).lower():
                             self.logger.warning(f"  Skipping comment on locked PR #{gh_number}: {e}")
+                            # Add note to record that PR was locked (this is actual repository locking)
+                            for record in self.state.pr_records:
+                                if record.get('gh_number') == gh_number:
+                                    if 'locked' not in ' '.join(record.get('remarks', [])):
+                                        record['remarks'].append('PR was locked - comments skipped')
+                                    break
                         else:
                             raise
                 else:
@@ -942,8 +1036,8 @@ class PullRequestMigrator:
             else:
                 self.logger.info(f"  Skipping unknown activity type on PR #{pr_num}")
 
-            # Add rate limiting delay between comments to avoid secondary rate limits
-            time.sleep(0.5)
+            # Add rate limiting delay between comments to avoid secondary rate limits and abuse detection
+            time.sleep(1.0)  # Increased from 0.5 to 1.0 seconds
 
         # Update the record with actual counts
         for record in self.state.pr_records:
