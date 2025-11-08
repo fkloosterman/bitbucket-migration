@@ -373,7 +373,7 @@ class GitHubClient:
         while True:
             try:
                 choice = input("What would you like to do? (t)ry again, (w)ait longer, (c)ontinue, or (q)uit: ").strip().lower()
-                elif choice in ['t', 'try again']:
+                if choice in ['t', 'try again']:
                     print("🔄 Retrying immediately...")
                     # Reset the attempt counter by re-raising to let the caller handle it
                     raise original_error
@@ -988,10 +988,21 @@ class GitHubClient:
             elif e.response.status_code == 404:
                 raise APIError(f"Pull request or file not found: {pull_number}", status_code=404)
             elif e.response.status_code == 422:
-                # Enhanced error handling for 422 errors
+                # Enhanced error handling for 422 errors with detailed diagnostics
                 try:
                     error_data = e.response.json()
                     error_message = error_data.get('message', str(e))
+
+                    # Log detailed field-level errors if available
+                    errors = error_data.get('errors', [])
+                    if errors:
+                        print(f"GitHub API Validation Errors:")
+                        for error in errors:
+                            field = error.get('field', 'unknown')
+                            code = error.get('code', 'unknown')
+                            msg = error.get('message', 'Unknown error')
+                            print(f"  • {field} ({code}): {msg}")
+
                     # Check for specific validation errors
                     if 'commit_id' in error_message.lower():
                         raise ValidationError(f"Invalid commit_id parameter: {error_message}")
