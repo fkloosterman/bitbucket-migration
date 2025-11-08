@@ -93,6 +93,7 @@ class OptionsConfig:
     open_milestones_only: bool = False
     dry_run: bool = False
     rewrite_cross_repo_links: bool = False
+    request_delay_seconds: float = 1.5  # Delay between mutative API requests (GitHub recommends >= 1.0)
 
 
 @dataclass
@@ -518,7 +519,8 @@ class ConfigLoader:
                             'skip_pr_as_issue': config.options.skip_pr_as_issue,
                             'skip_milestones': config.options.skip_milestones,
                             'open_milestones_only': config.options.open_milestones_only,
-                            'rewrite_cross_repo_links': config.options.rewrite_cross_repo_links
+                            'rewrite_cross_repo_links': config.options.rewrite_cross_repo_links,
+                            'request_delay_seconds': config.options.request_delay_seconds
                         },
             # 'cross_repo_mappings_file': config.cross_repo_mappings_file,
             'link_rewriting_config': {

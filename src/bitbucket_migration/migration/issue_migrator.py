@@ -650,7 +650,8 @@ class IssueMigrator:
             migrated_comments_count += 1
 
             # Add rate limiting delay between comments to avoid secondary rate limits
-            time.sleep(0.5)
+            # GitHub recommends at least 1 second between mutative requests (POST/PATCH/PUT/DELETE)
+            time.sleep(self.environment.config.options.request_delay_seconds)
 
         # Create comments for issue description changes
         self.logger.info(f"Creating {len(description_changes)} description change comments for issue #{issue_num}")
@@ -681,7 +682,8 @@ class IssueMigrator:
                         raise
 
                 # Add rate limiting delay between comments to avoid secondary rate limits
-                time.sleep(0.5)
+                # GitHub recommends at least 1 second between mutative requests (POST/PATCH/PUT/DELETE)
+                time.sleep(self.environment.config.options.request_delay_seconds)
 
         # Create comments for other issue-level changes (status, assignee, etc.)
         self.logger.info(f"Creating {len(other_changes)} other issue change comments for issue #{issue_num}")
@@ -739,7 +741,8 @@ class IssueMigrator:
                         raise
 
                 # Add rate limiting delay between comments to avoid secondary rate limits
-                time.sleep(0.5)
+                # GitHub recommends at least 1 second between mutative requests (POST/PATCH/PUT/DELETE)
+                time.sleep(self.environment.config.options.request_delay_seconds)
 
         # Update the record with actual counts
         for record in self.state.issue_records:

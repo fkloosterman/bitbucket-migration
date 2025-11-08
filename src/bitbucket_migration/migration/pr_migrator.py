@@ -1037,7 +1037,8 @@ class PullRequestMigrator:
                 self.logger.info(f"  Skipping unknown activity type on PR #{pr_num}")
 
             # Add rate limiting delay between comments to avoid secondary rate limits and abuse detection
-            time.sleep(1.0)  # Increased from 0.5 to 1.0 seconds
+            # GitHub recommends at least 1 second between mutative requests (POST/PATCH/PUT/DELETE)
+            time.sleep(self.environment.config.options.request_delay_seconds)
 
         # Update the record with actual counts
         for record in self.state.pr_records:

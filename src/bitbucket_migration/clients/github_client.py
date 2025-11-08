@@ -106,13 +106,14 @@ class GitHubClient:
             # If header parsing fails, keep existing values
             pass
 
-    def _calculate_wait_time(self, headers: dict, status_code: int) -> float:
+    def _calculate_wait_time(self, headers: dict, status_code: int, response_body: dict = None) -> float:
         """
         Calculate optimal wait time based on GitHub's rate limit signals.
 
         Args:
             headers: Response headers
             status_code: HTTP status code
+            response_body: Optional response body (for checking error messages)
 
         Returns:
             Seconds to wait before retry (0 = no wait needed)
@@ -132,7 +133,7 @@ class GitHubClient:
             remaining = int(headers.get('X-RateLimit-Remaining', 1))
 
             if remaining == 0:
-                # We have no remaining quota - this is a rate limit
+                # We have no remaining quota - this is a primary rate limit
                 if reset_time > 0:
                     # Calculate exact wait time from reset
                     wait_time = max(0, reset_time - time.time() + 1)
@@ -143,13 +144,22 @@ class GitHubClient:
                     # No reset time available, use conservative default
                     return 60
             else:
-                # This 403 has remaining quota, so it's likely not a rate limit
-                # but a permission/policy issue - don't retry
+                # This 403 has remaining quota - check if it's abuse detection/secondary limit
+                # by examining the error message
+                if response_body and isinstance(response_body, dict):
+                    error_msg = response_body.get('message', '').lower()
+                    if any(keyword in error_msg for keyword in ['abuse', 'secondary', 'too many requests', 'rate limit']):
+                        # This is abuse detection/secondary rate limiting
+                        # GitHub recommends waiting "a few minutes" - start with 3 minutes
+                        wait_time = 180  # 3 minutes base wait time for secondary limits
+                        return wait_time
+                
+                # Otherwise, it's likely a permission/policy issue - don't retry
                 return 0
 
         # Priority 3: Progressive backoff for 429 (secondary limits)
         if status_code == 429:
-            wait_time = 60  # Start with 1 minute for secondary limits
+            wait_time = 180  # Start with 3 minutes for 429 secondary limits
             return wait_time
 
         # Priority 4: Calculated wait based on remaining quota
@@ -180,82 +190,139 @@ class GitHubClient:
         Raises:
             The original exception after all retries are exhausted
         """
-        last_exception = None
+        # Outer loop allows user to restart retries after waiting
+        while True:
+            last_exception = None
+            user_requested_retry = False
 
-        for attempt in range(max_retries + 1):
-            try:
-                # Make the request
-                response = self.session.request(method, url, **kwargs)
+            for attempt in range(max_retries + 1):
+                try:
+                    # Make the request
+                    response = self.session.request(method, url, **kwargs)
 
-                # Update rate limit tracking from headers (free!)
-                self._update_rate_limits_from_headers(response.headers)
+                    # Update rate limit tracking from headers (free!)
+                    self._update_rate_limits_from_headers(response.headers)
 
-                # Success case
-                if response.status_code < 400:
+                    # Success case
+                    if response.status_code < 400:
+                        return response
+
+                    # Rate limit error cases
+                    if response.status_code in [403, 429]:
+                        # Try to get response body for error message checking
+                        response_body = None
+                        try:
+                            response_body = response.json()
+                        except (ValueError, AttributeError):
+                            pass  # Not JSON or empty body
+                        
+                        # Detect rate limit type for better user messaging
+                        is_secondary = False
+                        if response_body and isinstance(response_body, dict):
+                            error_msg = response_body.get('message', '').lower()
+                            is_secondary = any(keyword in error_msg for keyword in ['abuse', 'secondary'])
+                        
+                        wait_time = self._calculate_wait_time(response.headers, response.status_code, response_body)
+    
+                        if attempt < max_retries and wait_time > 0:
+                            # Apply exponential backoff multiplier for retries
+                            # First retry: base wait time, subsequent retries increase exponentially
+                            if attempt > 0:
+                                exponential_multiplier = min(2 ** attempt, 8)  # Cap at 8x
+                                actual_wait = wait_time * exponential_multiplier
+                            else:
+                                actual_wait = wait_time
+                            
+                            # User-friendly message
+                            limit_type = "Secondary rate limit" if is_secondary else "Rate limit"
+                            print(f"⏳ {limit_type} hit. Waiting {actual_wait:.0f}s before retry {attempt+1}/{max_retries}")
+                            time.sleep(actual_wait)
+                            continue
+                        elif wait_time == 0:
+                            # No wait needed, likely a permission issue rather than rate limit
+                            # Return response so raise_for_status() can be called
+                            return response
+                        else:
+                            # Cannot retry (either exhausted retries or no wait time needed)
+                            # Create the error message with secondary/primary distinction
+                            if is_secondary:
+                                error_msg = "GitHub API secondary rate limit (abuse detection) exceeded. Please wait before retrying."
+                            else:
+                                error_msg = "GitHub API rate limit exceeded. Please wait before retrying."
+                            api_error = APIError(error_msg)
+                            
+                            # Call retry exhaustion handler which may prompt user
+                            try:
+                                self._handle_retry_exhaustion(api_error, url, max_retries, is_secondary)
+                                # If we reach here, user chose to continue/skip - re-raise to let caller handle
+                                raise api_error
+                            except APIError as e:
+                                # Check if this is the same error (user wants to retry after waiting)
+                                if str(e) == str(api_error):
+                                    # User waited and wants to retry - break out of inner loop and restart
+                                    user_requested_retry = True
+                                    break
+                                else:
+                                    # Different error, re-raise
+                                    raise
+
+                    # For other errors, retry on server errors (5xx) and some client errors
+                    if response.status_code >= 500 or response.status_code in [408]:
+                        if attempt < max_retries:
+                            wait_time = min(2 ** attempt, 30)  # Exponential backoff, max 30 seconds
+                            time.sleep(wait_time)
+                            continue
+
+                    # If we get here, it's a non-retryable error
                     return response
 
-                # Rate limit error cases
-                if response.status_code in [403, 429]:
-                    wait_time = self._calculate_wait_time(response.headers, response.status_code)
-
-                    if attempt < max_retries and wait_time > 0:
-                        # Can retry
-                        print(f"Rate limit hit (status {response.status_code}). Waiting {wait_time:.0f}s before retry {attempt+1}/{max_retries}")
-                        time.sleep(wait_time)
-                        continue
-                    elif wait_time == 0:
-                        # No wait needed, likely a permission issue rather than rate limit
-                        # Return response so raise_for_status() can be called
-                        return response
-                    else:
-                        # Cannot retry (either exhausted retries or no wait time needed)
-                        if response.status_code == 403:
-                            raise APIError("GitHub API rate limit exceeded. Please wait before retrying.")
-                        else:  # 429
-                            raise APIError("GitHub API secondary rate limit exceeded. Please wait before retrying.")
-
-                # For other errors, retry on server errors (5xx) and some client errors
-                if response.status_code >= 500 or response.status_code in [408]:
+                except requests.exceptions.RequestException as e:
+                    last_exception = e
                     if attempt < max_retries:
-                        wait_time = min(2 ** attempt, 30)  # Exponential backoff, max 30 seconds
+                        wait_time = min(2 ** attempt, 30)
                         time.sleep(wait_time)
                         continue
-
-                # If we get here, it's a non-retryable error
-                return response
-
-            except requests.exceptions.RequestException as e:
-                last_exception = e
-                if attempt < max_retries:
-                    wait_time = min(2 ** attempt, 30)
-                    time.sleep(wait_time)
-                    continue
-                break
+                    break
             
-            except APIError as e:
-                # Check if this is a rate limit error
-                if any(keyword in str(e).lower() for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
-                    if attempt < max_retries:
-                        # Use calculated wait time or exponential backoff for rate limit APIErrors
-                        wait_time = min(2 ** attempt, 300)  # Cap at 5 minutes
-                        print(f"Rate limit APIError detected. Waiting {wait_time:.0f}s before retry {attempt+1}/{max_retries}")
-                        time.sleep(wait_time)
-                        continue
+                except APIError as e:
+                    # Check if this is a rate limit error
+                    if any(keyword in str(e).lower() for keyword in ['rate limit', 'too many requests', 'abuse', 'blocked']):
+                        if attempt < max_retries:
+                            # Use calculated wait time or exponential backoff for rate limit APIErrors
+                            wait_time = min(2 ** attempt, 300)  # Cap at 5 minutes
+                            print(f"Rate limit APIError detected. Waiting {wait_time:.0f}s before retry {attempt+1}/{max_retries}")
+                            time.sleep(wait_time)
+                            continue
+                        else:
+                            # All retries exhausted - ask user what to do
+                            try:
+                                # Detect if it's secondary rate limit
+                                is_secondary_error = 'secondary' in str(e).lower() or 'abuse' in str(e).lower()
+                                self._handle_retry_exhaustion(e, url, max_retries, is_secondary_error)
+                                raise  # Re-raise the original APIError
+                            except APIError as retry_error:
+                                # Check if user wants to retry after waiting
+                                if str(retry_error) == str(e):
+                                    user_requested_retry = True
+                                    break
+                                else:
+                                    raise
                     else:
-                        # All retries exhausted - ask user what to do
-                        self._handle_retry_exhaustion(e, url, max_retries)
-                        raise  # Re-raise the original APIError
-                else:
-                    # Not a rate limit error, don't retry
-                    raise
+                        # Not a rate limit error, don't retry
+                        raise
 
-        # All retries exhausted for non-APIError exceptions
-        if last_exception:
-            raise NetworkError(f"Network error after {max_retries} retries: {last_exception}")
-        else:
-            raise APIError(f"Request failed after {max_retries} retries")
+            # Check if user requested retry - if so, restart the outer loop
+            if user_requested_retry:
+                print(f"🔄 Restarting retry attempts for {url}...")
+                continue  # Restart the outer while loop
+            
+            # All retries exhausted for non-APIError exceptions
+            if last_exception:
+                raise NetworkError(f"Network error after {max_retries} retries: {last_exception}")
+            else:
+                raise APIError(f"Request failed after {max_retries} retries")
 
-    def _handle_retry_exhaustion(self, original_error: APIError, url: str, max_retries: int) -> None:
+    def _handle_retry_exhaustion(self, original_error: APIError, url: str, max_retries: int, is_secondary: bool = False) -> None:
         """
         Handle the case when all retries have been exhausted for rate limiting.
         
@@ -263,12 +330,16 @@ class GitHubClient:
             original_error: The original APIError that triggered the retry exhaustion
             url: The URL that was being accessed
             max_retries: Maximum number of retries that were attempted
+            is_secondary: Whether this is a secondary (abuse) rate limit
         """
         import sys
         
         # Check if running in test environment (pytest captures stdin/stdout)
         # or if stdin is not a TTY (non-interactive environment)
-        if not sys.stdin.isatty() or 'pytest' in sys.modules:
+        is_tty = sys.stdin.isatty()
+        has_pytest = 'pytest' in sys.modules
+        
+        if not is_tty or has_pytest:
             # In test or non-interactive mode, just re-raise the error without prompting
             raise original_error
         
@@ -279,22 +350,53 @@ class GitHubClient:
         print(f"URL: {url}")
         print(f"Max retries: {max_retries}")
         print()
-        print("GitHub's rate limit typically resets hourly.")
-        print("Recommended actions:")
-        print("  1. Wait for rate limit to reset (check GitHub's rate limit status)")
-        print("  2. Try again later when limits have reset")
-        print("  3. Continue with other repositories and retry this one separately")
+        
+        # Check if this is abuse detection (secondary) or primary rate limit
+        if is_secondary or 'abuse' in str(original_error).lower() or 'secondary' in str(original_error).lower():
+            print("This appears to be GitHub's abuse detection (secondary rate limit).")
+            print("Unlike primary rate limits, secondary limits don't have specific reset times.")
+            print()
+            print("Recommended actions:")
+            print("  1. Wait 5-10 minutes before retrying (allows abuse detection to clear)")
+            print("  2. Increase config.options.request_delay_seconds (currently controls delays)")
+            print("  3. Continue with migration (may hit limit again if pattern persists)")
+        else:
+            print("This appears to be a primary rate limit (quota exhausted).")
+            print("Primary rate limits typically reset at the top of the hour.")
+            print()
+            print("Recommended actions:")
+            print("  1. Wait for rate limit to reset (check GitHub's rate limit status)")
+            print("  2. Try again later when limits have reset")
+            print("  3. Continue with other repositories and retry this one separately")
         print()
         
         while True:
             try:
                 choice = input("What would you like to do? (t)ry again, (w)ait longer, (c)ontinue, or (q)uit: ").strip().lower()
                 if choice in ['t', 'try again']:
+                    # Suggest appropriate wait time based on error type
+                    if is_secondary:
+                        default_wait = "10"  # Secondary limits typically clear faster
+                        print("Note: For secondary rate limits, waiting 10-15 minutes is recommended.")
+                    else:
+                        default_wait = "60"  # Primary limits reset hourly
+                        print("Note: For primary rate limits, the limit typically resets at the top of the hour.")
+                    
+                    wait_minutes = int(input(f"How many minutes to wait before retrying? (default {default_wait}): ") or default_wait)
+                    print(f"⏳ Waiting {wait_minutes} minutes before retrying...")
+                    time.sleep(wait_minutes * 60)
                     print("🔄 Restarting current operation...")
                     # Reset the attempt counter by re-raising to let the caller handle it
                     raise original_error
                 elif choice in ['w', 'wait longer']:
-                    wait_minutes = int(input("How many minutes to wait? (default 60): ") or "60")
+                    # Suggest different defaults based on error type
+                    if is_secondary:
+                        default_wait = "10"  # Secondary limits typically clear faster
+                        print("Note: For secondary rate limits, 10-15 minutes is usually sufficient.")
+                    else:
+                        default_wait = "60"  # Primary limits reset hourly
+                    
+                    wait_minutes = int(input(f"How many minutes to wait? (default {default_wait}): ") or default_wait)
                     print(f"⏳ Waiting {wait_minutes} minutes before retrying...")
                     time.sleep(wait_minutes * 60)
                     # After waiting, re-raise to retry
