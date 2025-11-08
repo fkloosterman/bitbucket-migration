@@ -13,8 +13,10 @@
       
       
       
-        <link rel="prev" href="../rate_limits/">
+        <link rel="prev" href="../cli_reference/">
       
+      
+        <link rel="next" href="../architecture/">
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
@@ -22,7 +24,7 @@
     
     
       
-        <title>Architecture - Bitbucket → GitHub Migration</title>
+        <title>Rate Limits - Bitbucket → GitHub Migration</title>
       
     
     
@@ -64,7 +66,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#architecture-reference" class="md-skip">
+        <a href="#rate-limits-reference" class="md-skip">
           Skip to content
         </a>
       
@@ -100,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Architecture
+              Rate Limits
             
           </span>
         </div>
@@ -215,6 +217,8 @@
   
   
   
+    
+  
   
     
     
@@ -222,10 +226,12 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../migration_details/" class="md-tabs__link">
           
   
@@ -247,11 +253,9 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="./" class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
         
   
   
@@ -365,8 +369,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -386,19 +392,20 @@
     
     
       
+        
+        
+      
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
-        
-          
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -411,7 +418,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             Reference
@@ -792,36 +799,6 @@
                 
   
   
-  
-  
-    <li class="md-nav__item">
-      <a href="../rate_limits/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Rate Limits
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
     
   
   
@@ -839,7 +816,7 @@
   
   
   <span class="md-ellipsis">
-    Architecture
+    Rate Limits
     
   </span>
   
@@ -852,7 +829,7 @@
   
   
   <span class="md-ellipsis">
-    Architecture
+    Rate Limits
     
   </span>
   
@@ -875,100 +852,46 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#introduction" class="md-nav__link">
+  <a href="#overview" class="md-nav__link">
     <span class="md-ellipsis">
-      Introduction
+      Overview
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#high-level-architecture" class="md-nav__link">
+  <a href="#primary-rate-limits" class="md-nav__link">
     <span class="md-ellipsis">
-      High-Level Architecture
+      Primary Rate Limits
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#main-components" class="md-nav__link">
-    <span class="md-ellipsis">
-      Main Components
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Main Components">
+    <nav class="md-nav" aria-label="Primary Rate Limits">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#core-orchestrators" class="md-nav__link">
+  <a href="#characteristics" class="md-nav__link">
     <span class="md-ellipsis">
-      Core Orchestrators
+      Characteristics
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#api-clients" class="md-nav__link">
+  <a href="#detection" class="md-nav__link">
     <span class="md-ellipsis">
-      API Clients
+      Detection
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#services" class="md-nav__link">
+  <a href="#handling" class="md-nav__link">
     <span class="md-ellipsis">
-      Services
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#migrators" class="md-nav__link">
-    <span class="md-ellipsis">
-      Migrators
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#formatters-and-reports" class="md-nav__link">
-    <span class="md-ellipsis">
-      Formatters and Reports
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#audit-components" class="md-nav__link">
-    <span class="md-ellipsis">
-      Audit Components
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#commands" class="md-nav__link">
-    <span class="md-ellipsis">
-      Commands
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#configuration-and-utilities" class="md-nav__link">
-    <span class="md-ellipsis">
-      Configuration and Utilities
+      Handling
     </span>
   </a>
   
@@ -980,9 +903,276 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#interactions-and-data-flow" class="md-nav__link">
+  <a href="#secondary-rate-limits-abuse-detection" class="md-nav__link">
     <span class="md-ellipsis">
-      Interactions and Data Flow
+      Secondary Rate Limits (Abuse Detection)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Secondary Rate Limits (Abuse Detection)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#characteristics_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Characteristics
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#common-triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Triggers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#detection_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Detection
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#handling_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Handling
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Options
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#request-delay" class="md-nav__link">
+    <span class="md-ellipsis">
+      Request Delay
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-practice-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      Best Practice Values
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-interaction" class="md-nav__link">
+    <span class="md-ellipsis">
+      User Interaction
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="User Interaction">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#user-interaction-prompts" class="md-nav__link">
+    <span class="md-ellipsis">
+      User Interaction Prompts
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prevention-strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prevention Strategies
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Prevention Strategies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-token-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Token Selection
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-timing" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Timing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-configuration-tuning" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Configuration Tuning
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-batch-size-awareness" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Batch Size Awareness
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Issues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#abuse-detection-triggered-immediately" class="md-nav__link">
+    <span class="md-ellipsis">
+      "Abuse detection triggered immediately"
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rate-limit-persists-after-waiting" class="md-nav__link">
+    <span class="md-ellipsis">
+      "Rate limit persists after waiting"
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#inconsistent-rate-limiting" class="md-nav__link">
+    <span class="md-ellipsis">
+      "Inconsistent rate limiting"
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#diagnostic-information" class="md-nav__link">
+    <span class="md-ellipsis">
+      Diagnostic Information
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recovery-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recovery Steps
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      API Reference
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="API Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rate-limit-headers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rate Limit Headers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-response-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error Response Format
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Related Documentation
     </span>
   </a>
   
@@ -992,6 +1182,36 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
     </li>
   
 
@@ -1006,7 +1226,7 @@
               
                 
               
-              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" hidden>
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
                     
@@ -1025,100 +1245,46 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#introduction" class="md-nav__link">
+  <a href="#overview" class="md-nav__link">
     <span class="md-ellipsis">
-      Introduction
+      Overview
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#high-level-architecture" class="md-nav__link">
+  <a href="#primary-rate-limits" class="md-nav__link">
     <span class="md-ellipsis">
-      High-Level Architecture
+      Primary Rate Limits
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#main-components" class="md-nav__link">
-    <span class="md-ellipsis">
-      Main Components
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Main Components">
+    <nav class="md-nav" aria-label="Primary Rate Limits">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#core-orchestrators" class="md-nav__link">
+  <a href="#characteristics" class="md-nav__link">
     <span class="md-ellipsis">
-      Core Orchestrators
+      Characteristics
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#api-clients" class="md-nav__link">
+  <a href="#detection" class="md-nav__link">
     <span class="md-ellipsis">
-      API Clients
+      Detection
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#services" class="md-nav__link">
+  <a href="#handling" class="md-nav__link">
     <span class="md-ellipsis">
-      Services
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#migrators" class="md-nav__link">
-    <span class="md-ellipsis">
-      Migrators
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#formatters-and-reports" class="md-nav__link">
-    <span class="md-ellipsis">
-      Formatters and Reports
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#audit-components" class="md-nav__link">
-    <span class="md-ellipsis">
-      Audit Components
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#commands" class="md-nav__link">
-    <span class="md-ellipsis">
-      Commands
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#configuration-and-utilities" class="md-nav__link">
-    <span class="md-ellipsis">
-      Configuration and Utilities
+      Handling
     </span>
   </a>
   
@@ -1130,9 +1296,276 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#interactions-and-data-flow" class="md-nav__link">
+  <a href="#secondary-rate-limits-abuse-detection" class="md-nav__link">
     <span class="md-ellipsis">
-      Interactions and Data Flow
+      Secondary Rate Limits (Abuse Detection)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Secondary Rate Limits (Abuse Detection)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#characteristics_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Characteristics
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#common-triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Triggers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#detection_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Detection
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#handling_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Handling
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Options
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#request-delay" class="md-nav__link">
+    <span class="md-ellipsis">
+      Request Delay
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-practice-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      Best Practice Values
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-interaction" class="md-nav__link">
+    <span class="md-ellipsis">
+      User Interaction
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="User Interaction">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#user-interaction-prompts" class="md-nav__link">
+    <span class="md-ellipsis">
+      User Interaction Prompts
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prevention-strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prevention Strategies
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Prevention Strategies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-token-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Token Selection
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-timing" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Timing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-configuration-tuning" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Configuration Tuning
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-batch-size-awareness" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Batch Size Awareness
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Issues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#abuse-detection-triggered-immediately" class="md-nav__link">
+    <span class="md-ellipsis">
+      "Abuse detection triggered immediately"
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rate-limit-persists-after-waiting" class="md-nav__link">
+    <span class="md-ellipsis">
+      "Rate limit persists after waiting"
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#inconsistent-rate-limiting" class="md-nav__link">
+    <span class="md-ellipsis">
+      "Inconsistent rate limiting"
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#diagnostic-information" class="md-nav__link">
+    <span class="md-ellipsis">
+      Diagnostic Information
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recovery-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recovery Steps
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      API Reference
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="API Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rate-limit-headers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rate Limit Headers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-response-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error Response Format
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Related Documentation
     </span>
   </a>
   
@@ -1159,133 +1592,238 @@
   
 
 
-<h1 id="architecture-reference">Architecture Reference</h1>
-<p>This document describes the architecture of the bitbucket_migration package, providing developers with an understanding of the main components, their responsibilities, and how they interact.</p>
-<h2 id="introduction">Introduction</h2>
-<p>The bitbucket_migration package uses a modular, orchestrator-based architecture to handle the migration process from Bitbucket to GitHub. The design emphasizes separation of concerns, with specialized components for API interactions, data processing, and migration logic. This allows for easy testing, maintenance, and extension.</p>
-<p>Key design principles:</p>
+<h1 id="rate-limits-reference">Rate Limits Reference</h1>
+<p><strong>Version:</strong> 1.0  <strong>Last Updated:</strong> 2025-11-05</p>
+<hr />
+<h2 id="overview">Overview</h2>
+<p>GitHub enforces two types of API rate limits that can affect migration performance and reliability:</p>
 <ul>
-<li><strong>Modularity</strong>: Each component has a single responsibility.</li>
-<li><strong>Orchestration</strong>: A central coordinator manages the workflow.</li>
-<li><strong>Security</strong>: Secure handling of API tokens and configuration.</li>
-<li><strong>Extensibility</strong>: Services and formatters can be easily added or modified.</li>
+<li><strong>Primary Rate Limits</strong>: Quota-based limits (5,000 requests/hour) tracked via HTTP headers</li>
+<li><strong>Secondary Rate Limits</strong>: Pattern-based abuse detection with no fixed quota or reset time</li>
 </ul>
-<h2 id="high-level-architecture">High-Level Architecture</h2>
-<pre class="mermaid"><code>graph TD
-     A[CLI Entry Point] --&gt; B[AuditOrchestrator]
-     A --&gt; C[MigrationOrchestrator]
-     A --&gt; N[CrossLinkOrchestrator]
-     B --&gt; D[BitbucketClient]
-     C --&gt; D
-     C --&gt; E[GitHubClient]
-     C --&gt; G[Services: UserMapper, LinkRewriter, AttachmentHandler]
-     C --&gt; H[Migrators: IssueMigrator, PullRequestMigrator, MilestoneMigrator]
-     C --&gt; I[Formatters: FormatterFactory]
-     C --&gt; J[ReportGenerator]
-     C --&gt; O[RepoMigrator]
-     N --&gt; P[CrossLinkUpdater]
-     O --&gt; Q[BaseMigrator]
-     G --&gt; R[Link Handlers: IssueLinkHandler, PrLinkHandler, etc.]
-     D --&gt; K[Bitbucket API]
-     E --&gt; L[GitHub API]
-     S[BaseDirManager] --&gt; T[FileRegistry]
-     U[MigrationContext] --&gt; V[ServiceLocator]</code></pre>
-<h2 id="main-components">Main Components</h2>
-<h3 id="core-orchestrators">Core Orchestrators</h3>
+<p>The migration tool automatically handles both types with exponential backoff, user interaction, and configurable delays.</p>
+<hr />
+<h2 id="primary-rate-limits">Primary Rate Limits</h2>
+<h3 id="characteristics">Characteristics</h3>
 <ul>
-<li><strong>MigrationOrchestrator</strong> (<code>src/bitbucket_migration/core/orchestrator.py</code>): Central coordinator for the migration process. Initializes components, fetches data, executes migrations, and generates reports.</li>
-<li><strong>AuditOrchestrator</strong> (<code>src/bitbucket_migration/audit/audit_orchestrator.py</code>): Handles pre-migration analysis, generating audit reports and configuration templates.</li>
-<li><strong>CrossLinkOrchestrator</strong> (<code>src/bitbucket_migration/core/orchestrator.py</code>): Manages cross-repository link updates after migration.</li>
-<li><strong>BaseOrchestrator</strong> (<code>src/bitbucket_migration/core/orchestrator.py</code>): Base class providing common functionality for all orchestrators.</li>
+<li><strong>Quota</strong>: 5,000 requests per hour for authenticated requests</li>
+<li><strong>Reset</strong>: Hourly at the start of each hour (UTC)</li>
+<li><strong>Tracking</strong>: Via <code>X-RateLimit-Remaining</code> and <code>X-RateLimit-Reset</code> headers</li>
+<li><strong>Scope</strong>: Per user/token</li>
 </ul>
-<h3 id="api-clients">API Clients</h3>
+<h3 id="detection">Detection</h3>
+<p>The tool detects primary rate limits by checking:</p>
+<div class="highlight"><pre><span></span><code><span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;X-RateLimit-Remaining&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;0&#39;</span>
+</code></pre></div>
+<h3 id="handling">Handling</h3>
 <ul>
-<li><strong>BitbucketClient</strong> (<code>src/bitbucket_migration/clients/bitbucket_client.py</code>): Interfaces with Bitbucket API for fetching issues, PRs, milestones, etc.</li>
-<li><strong>GitHubClient</strong> (<code>src/bitbucket_migration/clients/github_client.py</code>): Interfaces with GitHub API for creating issues, PRs, comments, etc.</li>
+<li>Waits until the reset time indicated in <code>X-RateLimit-Reset</code> header</li>
+<li>No user interaction required (automatic)</li>
+<li>Exponential backoff not needed (fixed reset time)</li>
 </ul>
-<h3 id="services">Services</h3>
+<hr />
+<h2 id="secondary-rate-limits-abuse-detection">Secondary Rate Limits (Abuse Detection)</h2>
+<h3 id="characteristics_1">Characteristics</h3>
 <ul>
-<li><strong>UserMapper</strong> (<code>src/bitbucket_migration/services/user_mapper.py</code>): Maps Bitbucket users to GitHub accounts, resolving account IDs.</li>
-<li><strong>LinkRewriter</strong> (<code>src/bitbucket_migration/services/link_rewriter.py</code>): Rewrites cross-references between issues and PRs to point to GitHub.</li>
-<li><strong>AttachmentHandler</strong> (<code>src/bitbucket_migration/services/attachment_handler.py</code>): Downloads attachments from Bitbucket and creates informative comments for manual upload.</li>
-<li><strong>CrossRepoMappingStore</strong> (<code>src/bitbucket_migration/services/cross_repo_mapping_store.py</code>): Manages mappings between repositories for cross-repository link rewriting.</li>
-<li><strong>LinkDetector</strong> (<code>src/bitbucket_migration/services/link_detector.py</code>): Detects and extracts URLs from text content.</li>
-<li><strong>BaseLinkHandler</strong> (<code>src/bitbucket_migration/services/base_link_handler.py</code>): Base class for link handling with priority-based processing.</li>
-<li><strong>IssueLinkHandler</strong> (<code>src/bitbucket_migration/services/issue_link_handler.py</code>): Handles Bitbucket issue link rewriting.</li>
-<li><strong>PrLinkHandler</strong> (<code>src/bitbucket_migration/services/pr_link_handler.py</code>): Handles Bitbucket PR link rewriting.</li>
-<li><strong>BranchLinkHandler</strong> (<code>src/bitbucket_migration/services/branch_link_handler.py</code>): Handles Bitbucket branch link rewriting.</li>
-<li><strong>CommitLinkHandler</strong> (<code>src/bitbucket_migration/services/commit_link_handler.py</code>): Handles Bitbucket commit link rewriting.</li>
-<li><strong>CompareLinkHandler</strong> (<code>src/bitbucket_migration/services/compare_link_handler.py</code>): Handles Bitbucket compare link rewriting.</li>
-<li><strong>CrossRepoLinkHandler</strong> (<code>src/bitbucket_migration/services/cross_repo_link_handler.py</code>): Handles cross-repository link rewriting.</li>
-<li><strong>RepoHomeLinkHandler</strong> (<code>src/bitbucket_migration/services/repo_home_link_handler.py</code>): Handles repository home page link rewriting.</li>
-<li><strong>ShortIssueRefHandler</strong> (<code>src/bitbucket_migration/services/short_issue_ref_handler.py</code>): Handles short issue reference rewriting.</li>
+<li><strong>No fixed quota</strong>: Triggered by request patterns GitHub considers abusive</li>
+<li><strong>No fixed reset time</strong>: Typically clears in 5-10 minutes, but can vary</li>
+<li><strong>Triggers</strong>: Too many requests in short time, concurrent requests, unusual patterns</li>
+<li><strong>Response</strong>: HTTP 403 with abuse detection message</li>
 </ul>
-<h3 id="migrators">Migrators</h3>
+<h3 id="common-triggers">Common Triggers</h3>
 <ul>
-<li><strong>IssueMigrator</strong> (<code>src/bitbucket_migration/migration/issue_migrator.py</code>): Handles migration of issues, including comments and attachments.</li>
-<li><strong>PullRequestMigrator</strong> (<code>src/bitbucket_migration/migration/pr_migrator.py</code>): Migrates PRs, deciding whether to create GitHub PRs or issues based on branch existence and status.</li>
-<li><strong>MilestoneMigrator</strong> (<code>src/bitbucket_migration/migration/milestone_migrator.py</code>): Manages migration of milestones from Bitbucket to GitHub.</li>
-<li><strong>RepoMigrator</strong> (<code>src/bitbucket_migration/core/repo_migrator.py</code>): Orchestrates migration for individual repositories, coordinating all migrators.</li>
-<li><strong>BaseMigrator</strong> (<code>src/bitbucket_migration/core/repo_migrator.py</code>): Base class providing common migration functionality.</li>
-<li><strong>CrossLinkMigrator</strong> (<code>src/bitbucket_migration/core/repo_migrator.py</code>): Handles cross-repository link updates.</li>
+<li>Multiple concurrent API calls</li>
+<li>High-frequency requests without delays</li>
+<li>Unusual request patterns</li>
+<li>Large batch operations</li>
 </ul>
-<h3 id="formatters-and-reports">Formatters and Reports</h3>
+<h3 id="detection_1">Detection</h3>
+<p>The tool detects secondary limits by parsing error responses for keywords:</p>
+<div class="highlight"><pre><span></span><code><span class="n">is_secondary</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">keyword</span> <span class="ow">in</span> <span class="n">error_msg</span> <span class="k">for</span> <span class="n">keyword</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;abuse&#39;</span><span class="p">,</span> <span class="s1">&#39;secondary&#39;</span><span class="p">])</span>
+</code></pre></div>
+<h3 id="handling_1">Handling</h3>
 <ul>
-<li><strong>FormatterFactory</strong> (<code>src/bitbucket_migration/formatters/formatter_factory.py</code>): Creates formatters for content (e.g., Markdown, HTML).</li>
-<li><strong>ReportGenerator</strong> (<code>src/bitbucket_migration/migration/report_generator.py</code>): Generates migration reports and mappings.</li>
-<li><strong>ContentFormatter</strong> (<code>src/bitbucket_migration/formatters/content_formatter.py</code>): Base class for content formatting.</li>
-<li><strong>IssueContentFormatter</strong> (<code>src/bitbucket_migration/formatters/content_formatter.py</code>): Formats issue content for GitHub.</li>
-<li><strong>PullRequestContentFormatter</strong> (<code>src/bitbucket_migration/formatters/content_formatter.py</code>): Formats PR content for GitHub.</li>
-<li><strong>CommentContentFormatter</strong> (<code>src/bitbucket_migration/formatters/content_formatter.py</code>): Formats comment content for GitHub.</li>
+<li><strong>Exponential backoff</strong>: Starts at 180 seconds, doubles each retry (180s → 360s → 720s → 1440s, capped at 8x multiplier)</li>
+<li><strong>User interaction</strong>: Prompts for manual retry after maximum backoff attempts</li>
+<li><strong>Configurable delays</strong>: <code>request_delay_seconds</code> setting spaces out requests</li>
 </ul>
-<h3 id="audit-components">Audit Components</h3>
+<hr />
+<h2 id="configuration-options">Configuration Options</h2>
+<h3 id="request-delay">Request Delay</h3>
+<p>Configure spacing between mutative requests:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;options&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;request_delay_seconds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1.5</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
 <ul>
-<li><strong>Auditor</strong> (<code>src/bitbucket_migration/audit/auditor.py</code>): Performs detailed audit of repositories for migration planning.</li>
-<li><strong>AuditUtils</strong> (<code>src/bitbucket_migration/audit/audit_utils.py</code>): Utility functions for audit analysis and reporting.</li>
+<li><strong>Default</strong>: 1.5 seconds</li>
+<li><strong>Purpose</strong>: Prevents triggering secondary rate limits</li>
+<li><strong>Applied to</strong>: Issue creation, PR creation, comment posting, label updates, milestone operations</li>
 </ul>
-<h3 id="commands">Commands</h3>
+<h3 id="best-practice-values">Best Practice Values</h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Recommended Delay</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Small repositories (&lt; 100 issues)</td>
+<td>1.0s</td>
+<td>Faster migration for simple cases</td>
+</tr>
+<tr>
+<td>Medium repositories (100-1000 issues)</td>
+<td>1.5s</td>
+<td>Balance speed and reliability</td>
+</tr>
+<tr>
+<td>Large repositories (&gt; 1000 issues)</td>
+<td>2.0s</td>
+<td>Conservative approach for big migrations</td>
+</tr>
+<tr>
+<td>Problematic tokens</td>
+<td>3.0s</td>
+<td>Extra caution for rate limit history</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="user-interaction">User Interaction</h2>
+<p>When automatic retries are exhausted, the tool prompts for user action:</p>
+<h3 id="user-interaction-prompts">User Interaction Prompts</h3>
+<p>When automatic retries are exhausted, the tool displays detailed information and prompts for user action:</p>
+<div class="highlight"><pre><span></span><code>============================================================
+⚠️  GITHUB API RATE LIMIT - ALL RETRIES EXHAUSTED
+============================================================
+Error: GitHub API secondary rate limit (abuse detection) exceeded. Please wait before retrying.
+URL: https://api.github.com/repos/owner/repo/issues
+Max retries: 5
+
+This appears to be GitHub&#39;s abuse detection (secondary rate limit).
+Unlike primary rate limits, secondary limits don&#39;t have specific reset times.
+
+Recommended actions:
+  1. Wait 5-10 minutes before retrying (allows abuse detection to clear)
+  2. Increase config.options.request_delay_seconds (currently controls delays)
+  3. Continue with migration (may hit limit again if pattern persists)
+
+What would you like to do? (t)ry again, (w)ait longer, (c)ontinue, or (q)uit:
+</code></pre></div>
+<p><strong>"(t)ry again" vs "(w)ait longer"</strong>: Both options prompt for a wait time, but they provide different default values based on the rate limit type:</p>
 <ul>
-<li><strong>MigrationCommand</strong> (<code>src/bitbucket_migration/commands/migration_command.py</code>): Handles migration command execution.</li>
-<li><strong>AuditCommand</strong> (<code>src/bitbucket_migration/commands/audit_command.py</code>): Handles audit command execution.</li>
-<li><strong>CleanCommand</strong> (<code>src/bitbucket_migration/commands/clean_command.py</code>): Handles cleanup command execution.</li>
-<li><strong>CrossLinkCommand</strong> (<code>src/bitbucket_migration/commands/cross_link_command.py</code>): Handles cross-link update command execution.</li>
-<li><strong>TestAuthCommand</strong> (<code>src/bitbucket_migration/commands/test_auth_command.py</code>): Handles authentication testing command execution.</li>
+<li><strong>"(t)ry again"</strong>: Retries immediately without waiting (user can override with custom wait time)</li>
+<li><strong>"(w)ait longer"</strong>: Uses a longer default wait time (15 minutes for secondary limits, 60 minutes for primary limits)</li>
 </ul>
-<h3 id="configuration-and-utilities">Configuration and Utilities</h3>
+<p>If the user chooses either option, they are prompted for wait time:</p>
+<div class="highlight"><pre><span></span><code>How many minutes to wait before retrying? (default 10):
+</code></pre></div>
+<hr />
+<h2 id="prevention-strategies">Prevention Strategies</h2>
+<h3 id="1-token-selection">1. Token Selection</h3>
 <ul>
-<li><strong>MigrationConfig</strong> (<code>src/bitbucket_migration/config/migration_config.py</code>): Data structures for configuration.</li>
-<li><strong>SecureConfigLoader</strong> (<code>src/bitbucket_migration/config/secure_config.py</code>): Loads configuration securely, supporting environment variables.</li>
-<li><strong>ConfigLoader</strong> (<code>src/bitbucket_migration/config/migration_config.py</code>): Handles loading and validation of configuration files.</li>
-<li><strong>ConfigValidator</strong> (<code>src/bitbucket_migration/config/migration_config.py</code>): Validates configuration data.</li>
-<li><strong>LinkRewritingConfig</strong> (<code>src/bitbucket_migration/config/migration_config.py</code>): Configuration for link rewriting templates.</li>
-<li><strong>MigrationContext</strong> (<code>src/bitbucket_migration/core/migration_context.py</code>): Provides context and service locator for migration operations.</li>
-<li><strong>ServiceLocator</strong> (<code>src/bitbucket_migration/core/migration_context.py</code>): Registry for services with attribute-like access.</li>
-<li><strong>MigrationEnvironment</strong> (<code>src/bitbucket_migration/core/migration_context.py</code>): Environment configuration and state.</li>
-<li><strong>MigrationMappings</strong> (<code>src/bitbucket_migration/core/migration_context.py</code>): Tracks mappings between Bitbucket and GitHub entities.</li>
-<li><strong>MigrationState</strong> (<code>src/bitbucket_migration/core/migration_context.py</code>): Current state of the migration process.</li>
-<li><strong>BaseDirManager</strong> (<code>src/bitbucket_migration/utils/base_dir_manager.py</code>): Manages base directory structure and file operations.</li>
-<li><strong>FileRegistry</strong> (<code>src/bitbucket_migration/utils/file_registry.py</code>): Tracks and manages migration-related files with locking.</li>
-<li><strong>MigrationLogger</strong> (<code>src/bitbucket_migration/utils/logging_config.py</code>): Custom logging configuration for migration operations.</li>
-<li><strong>Logging and Exceptions</strong>: Custom logging (<code>utils/logging_config.py</code>) and exceptions (<code>exceptions.py</code>) for error handling.</li>
+<li>Use a <strong>Personal Access Token (PAT)</strong> with <code>repo</code> scope</li>
+<li>Avoid using OAuth tokens with broader scopes</li>
+<li>Consider using a secondary account if primary has rate limit history</li>
 </ul>
-<h2 id="interactions-and-data-flow">Interactions and Data Flow</h2>
+<h3 id="2-timing">2. Timing</h3>
+<ul>
+<li>Run migrations during <strong>off-peak hours</strong> (UTC nighttime)</li>
+<li>Avoid running multiple migrations simultaneously</li>
+<li>Schedule large migrations during weekends if possible</li>
+</ul>
+<h3 id="3-configuration-tuning">3. Configuration Tuning</h3>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;options&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;request_delay_seconds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">2.0</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="4-batch-size-awareness">4. Batch Size Awareness</h3>
+<ul>
+<li>Large repositories may need longer delays</li>
+<li>Monitor initial migration runs and adjust delays accordingly</li>
+<li>Consider splitting very large migrations into phases</li>
+</ul>
+<hr />
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="common-issues">Common Issues</h3>
+<h4 id="abuse-detection-triggered-immediately">"Abuse detection triggered immediately"</h4>
+<p><strong>Symptoms</strong>: Rate limit error on first few requests</p>
+<p><strong>Solutions</strong>:</p>
+<ul>
+<li>Increase <code>request_delay_seconds</code> to 3.0</li>
+<li>Use a different GitHub token</li>
+<li>Wait 10-15 minutes before retrying</li>
+</ul>
+<h4 id="rate-limit-persists-after-waiting">"Rate limit persists after waiting"</h4>
+<p><strong>Symptoms</strong>: Continues failing even after backoff periods</p>
+<p><strong>Solutions</strong>:</p>
+<ul>
+<li>Check token permissions and validity</li>
+<li>Verify network connectivity</li>
+<li>Consider using a different GitHub account/token</li>
+<li>Contact GitHub support if issue persists</li>
+</ul>
+<h4 id="inconsistent-rate-limiting">"Inconsistent rate limiting"</h4>
+<p><strong>Symptoms</strong>: Works sometimes, fails other times</p>
+<p><strong>Solutions</strong>:</p>
+<ul>
+<li>Increase delays consistently</li>
+<li>Run during off-peak hours</li>
+<li>Monitor GitHub status page for API issues</li>
+</ul>
+<h3 id="diagnostic-information">Diagnostic Information</h3>
+<p>The tool provides detailed logging for rate limit events:</p>
+<div class="highlight"><pre><span></span><code>2025-11-08 00:33:53 - INFO -   Created update comment for PR #62
+2025-11-08 00:33:54 - ERROR - GitHub API rate limit exceeded. Please wait before retrying.
+2025-11-08 00:33:54 - INFO - Rate limit type: secondary (abuse detection)
+2025-11-08 00:33:54 - INFO - Waiting 180 seconds before retry...
+</code></pre></div>
+<h3 id="recovery-steps">Recovery Steps</h3>
 <ol>
-<li><strong>CLI Invocation</strong>: User runs commands like <code>migrate</code>, <code>audit</code>, <code>cross-link</code>, or <code>clean</code> via the main script.</li>
-<li><strong>Orchestrator Setup</strong>: Appropriate orchestrator (MigrationOrchestrator, AuditOrchestrator, CrossLinkOrchestrator) initializes components based on config.</li>
-<li><strong>Configuration Loading</strong>: SecureConfigLoader loads and validates configuration, supporting environment variables.</li>
-<li><strong>Repository Setup</strong>: BaseDirManager and FileRegistry manage directory structure and file tracking.</li>
-<li><strong>Data Fetching</strong>: BitbucketClient fetches issues, PRs, milestones, comments, and attachments from Bitbucket API.</li>
-<li><strong>User Mapping</strong>: UserMapper builds account ID mappings from fetched data.</li>
-<li><strong>Milestone Migration</strong>: MilestoneMigrator creates corresponding milestones on GitHub.</li>
-<li><strong>Content Processing</strong>: Formatters convert Bitbucket content to GitHub-compatible format.</li>
-<li><strong>Link Rewriting</strong>: LinkRewriter processes content using various LinkHandlers to update references.</li>
-<li><strong>Migration Execution</strong>: RepoMigrator coordinates IssueMigrator and PullRequestMigrator to create content on GitHub.</li>
-<li><strong>Cross-Repository Linking</strong>: CrossRepoMappingStore and CrossRepoLinkHandler manage links between repositories.</li>
-<li><strong>Attachment Handling</strong>: AttachmentHandler downloads from Bitbucket and creates informative comments for manual upload.</li>
-<li><strong>Reporting</strong>: ReportGenerator produces summaries, mappings, and audit reports.</li>
-<li><strong>Post-Migration Updates</strong>: CrossLinkUpdater can update links after all migrations are complete.</li>
+<li><strong>Identify limit type</strong> from error message and logs</li>
+<li><strong>Wait appropriate time</strong> (5-10 min for secondary, until reset for primary)</li>
+<li><strong>Retry with increased delays</strong> if needed</li>
+<li><strong>Consider token rotation</strong> for persistent issues</li>
 </ol>
-<p>The orchestrator ensures sequential execution, with error handling and partial saves on interruption.</p>
+<hr />
+<h2 id="api-reference">API Reference</h2>
+<h3 id="rate-limit-headers">Rate Limit Headers</h3>
+<p>GitHub provides rate limit information in response headers:</p>
+<ul>
+<li><code>X-RateLimit-Limit</code>: Maximum requests per hour</li>
+<li><code>X-RateLimit-Remaining</code>: Remaining requests in current window</li>
+<li><code>X-RateLimit-Reset</code>: Unix timestamp when limit resets</li>
+<li><code>X-RateLimit-Used</code>: Requests used in current window (GitHub Apps only)</li>
+</ul>
+<h3 id="error-response-format">Error Response Format</h3>
+<p>Primary rate limit (HTTP 403):
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;API rate limit exceeded for user ID 12345.&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;documentation_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting&quot;</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<p>Secondary rate limit (HTTP 403):
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;You have triggered an abuse detection mechanism. Please wait a few minutes before you try again.&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;documentation_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://docs.github.com/rest/overview/resources-in-the-rest-api#secondary-rate-limits&quot;</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h2 id="related-documentation">Related Documentation</h2>
+<ul>
+<li><a href="https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting">GitHub API Rate Limiting</a></li>
+<li><a href="https://docs.github.com/rest/overview/resources-in-the-rest-api#secondary-rate-limits">Secondary Rate Limits</a></li>
+<li><a href="../migration_config/">Migration Config Reference</a></li>
+<li><a href="../cli_reference/">CLI Reference</a></li>
+</ul>
 
 
 

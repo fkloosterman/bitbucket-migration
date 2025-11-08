@@ -440,6 +440,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rate-limits-and-best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rate Limits and Best Practices
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#installation-and-setup" class="md-nav__link">
     <span class="md-ellipsis">
       Installation and Setup
@@ -704,6 +713,8 @@
   
     
     
+      
+        
       
         
       
@@ -1121,6 +1132,29 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/rate_limits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Rate Limits
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1217,6 +1251,15 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rate-limits-and-best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rate Limits and Best Practices
+    </span>
+  </a>
   
 </li>
       
@@ -1535,6 +1578,21 @@
 <li>Updates ONLY cross-repository links using mappings from all repositories</li>
 <li>No new issues/PRs created - only existing content modified</li>
 </ul>
+<hr />
+<h2 id="rate-limits-and-best-practices">Rate Limits and Best Practices</h2>
+<p>GitHub enforces two types of rate limits that may affect migration:</p>
+<ul>
+<li><strong>Primary Rate Limits</strong>: 5,000 requests/hour quota, tracked via API headers</li>
+<li><strong>Secondary Rate Limits</strong>: Pattern-based abuse detection, no fixed quota, typically clears in 5-10 minutes</li>
+</ul>
+<p>The migration tool automatically handles rate limits with exponential backoff and user prompts. To minimize issues:</p>
+<ul>
+<li>Use a GitHub Personal Access Token (PAT) with <code>repo</code> scope</li>
+<li>Configure <code>request_delay_seconds</code> (default 1.5s) to space out requests</li>
+<li>Run migrations during off-peak hours if possible</li>
+<li>Be prepared to wait when secondary limits are triggered</li>
+</ul>
+<p>See <a href="../reference/rate_limits/">Rate Limits Reference</a> for detailed information.</p>
 <hr />
 <h2 id="installation-and-setup">Installation and Setup</h2>
 <ol>
