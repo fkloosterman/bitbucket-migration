@@ -1,6 +1,6 @@
 [project]
 name = "bitbucket-migration"
-version = "0.2.0"
+version = "1.0.0"
 description = "Scripts to assist with the migration of a Bitbucket git repository to GitHub."
 authors = [
     { name = "FKloosterman", email = "devfakl@gmail.com" }
