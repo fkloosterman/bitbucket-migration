@@ -263,7 +263,7 @@ class LinkRewriter:
             else:
                 # Process text blocks independently
                 processed_content = content
-                
+
                 # PHASE 1: Process markdown links FIRST to prevent nesting
                 processed_content, md_links = self._rewrite_markdown_links(processed_content)
                 links_found += md_links
@@ -276,23 +276,25 @@ class LinkRewriter:
                 processed_content, url_links = self._rewrite_urls_with_handlers(processed_content)
                 links_found += url_links
 
-                # PHASE 2.5: Escape non-URL angle brackets to prevent GitHub markdown misinterpretation
-                processed_content = self._escape_non_url_angle_brackets(processed_content)
+                # Skip cosmetic phases during cross-link operations (already done during migration)
+                if not hasattr(self.environment, 'mode') or self.environment.mode != "cross-link":
+                    # PHASE 2.5: Escape non-URL angle brackets to prevent GitHub markdown misinterpretation
+                    processed_content = self._escape_non_url_angle_brackets(processed_content)
 
-                # PHASE 3: Rewrite mentions
-                processed_content, mention_replaced, mention_unmapped, unmapped_list = self._rewrite_mentions(processed_content)
-                total_mentions_replaced += mention_replaced
-                total_mentions_unmapped += mention_unmapped
-                total_unmapped_list.extend(unmapped_list)
+                    # PHASE 3: Rewrite mentions
+                    processed_content, mention_replaced, mention_unmapped, unmapped_list = self._rewrite_mentions(processed_content)
+                    total_mentions_replaced += mention_replaced
+                    total_mentions_unmapped += mention_unmapped
+                    total_unmapped_list.extend(unmapped_list)
 
-                # PHASE 4: Rewrite short issue references
-                processed_content, short_issue_links = self._rewrite_short_issue_refs(processed_content)
-                links_found += short_issue_links
+                    # PHASE 4: Rewrite short issue references
+                    processed_content, short_issue_links = self._rewrite_short_issue_refs(processed_content)
+                    links_found += short_issue_links
 
-                # PHASE 5: Rewrite PR references
-                processed_content, pr_ref_links = self._rewrite_pr_refs(processed_content)
-                links_found += pr_ref_links
-                
+                    # PHASE 5: Rewrite PR references
+                    processed_content, pr_ref_links = self._rewrite_pr_refs(processed_content)
+                    links_found += pr_ref_links
+
                 processed_blocks.append(('text', processed_content))
         
         # Reassemble all processed blocks

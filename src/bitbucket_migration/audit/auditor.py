@@ -65,7 +65,8 @@ class Auditor:
 
         self.environment = MigrationEnvironment(
             base_dir_manager=base_dir_manager or BaseDirManager("."),
-            logger=MigrationLogger(log_level=log_level)
+            logger=MigrationLogger(log_level=log_level),
+            mode="audit"
         )
 
         # self.services = ServiceLocator()

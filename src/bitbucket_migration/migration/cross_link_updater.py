@@ -97,14 +97,12 @@ class CrossLinkUpdater:
                         continue
                     self.logger.info(f"Updating GitHub {label} #{gh_item_id} (was BB #{item_id})")
 
-                    if kind == 'issue':
-                        gh_item = self.environment.clients.gh.get_issue(gh_item_id)
-                    else:
-                        gh_item = self.environment.clients.gh.get_pull_request(gh_item_id)
-                        
+                    # Use get_issue() which works for both issues and PRs
+                    gh_item = self.environment.clients.gh.get_issue(gh_item_id)
+
                     current_body = gh_item.get('body', '')
             
-                    new_body, links_found = self.link_rewriter.rewrite_links(
+                    new_body, links_found, _, _, _, _, _ = self.link_rewriter.rewrite_links(
                         current_body, item_type=kind, item_number=item_id, comment_id=0  # 0 = description
                     )
 
@@ -113,10 +111,8 @@ class CrossLinkUpdater:
                             self.logger.info(f"  [DRY RUN] Would update {label} #{gh_item_id} description: {links_found} cross-repo links rewritten")
                             self.stats['simulated_updates'] += 1
                         else:
-                            if kind == 'issue':
-                                self.environment.clients.gh.update_issue(gh_item_id, body=new_body)
-                            else:
-                                self.environment.clients.gh.update_pull_request(gh_item_id, body=new_body)
+                            # Use update_issue() which works for both issues and PRs
+                            self.environment.clients.gh.update_issue(gh_item_id, body=new_body)
 
                             self.stats['cross_repo_links_rewritten'] += links_found
                             self.logger.info(f"  Updated {label} description: {links_found} cross-repo links rewritten")
@@ -159,7 +155,7 @@ class CrossLinkUpdater:
                             
                             current_body = comment.get('body', '')
 
-                            new_body, links_found = self.link_rewriter.rewrite_links(
+                            new_body, links_found, _, _, _, _, _ = self.link_rewriter.rewrite_links(
                                 current_body, item_type=kind, item_number=item_id, comment_seq=seq, comment_id=gh_comment_id
                             )
 
@@ -168,7 +164,7 @@ class CrossLinkUpdater:
                                     self.logger.info(f"  [DRY RUN] Would update GitHub {label} #{gh_item_id} comment {gh_comment_id}: {links_found} cross-repo links rewritten")
                                     self.stats['simulated_updates'] += 1
                                 else:
-                                    self.environment.clients.gh.update_comment(gh_item_id, gh_comment_id, new_body)
+                                    self.environment.clients.gh.update_comment(gh_comment_id, new_body)
                                     self.stats['comments_updated'] += 1
                                     self.stats['cross_repo_links_rewritten'] += links_found
                                     self.logger.info(f"  Updated GitHub {label} #{gh_item_id} comment {gh_comment_id}: {links_found} cross-repo links rewritten")

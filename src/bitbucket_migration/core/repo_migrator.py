@@ -133,7 +133,8 @@ class RepoMigrator(BaseMigrator):
         self.environment = MigrationEnvironment(
             config = config, dry_run=dry_run,
             base_dir_manager=self.base_dir_manager,
-            logger=self.logger
+            logger=self.logger,
+            mode="migrate"
         )
 
         self.state = MigrationState()
@@ -615,7 +616,8 @@ class CrossLinkMigrator(BaseMigrator):
         self.environment = MigrationEnvironment(
             config = config, dry_run=dry_run,
             base_dir_manager=self.base_dir_manager,
-            logger=self.logger
+            logger=self.logger,
+            mode="cross-link"
         )
 
         # self.services = ServiceLocator()

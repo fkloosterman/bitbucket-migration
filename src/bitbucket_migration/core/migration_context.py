@@ -46,6 +46,7 @@ class MigrationEnvironment:
     dry_run: bool = False
     base_dir_manager: Optional[BaseDirManager] = None
     logger: Optional[MigrationLogger] = None
+    mode: str = "migrate"  # "migrate" or "cross-link"
 
 @dataclass
 class MigrationMappings:

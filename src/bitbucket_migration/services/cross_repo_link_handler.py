@@ -37,9 +37,14 @@ class CrossRepoLinkHandler(BaseLinkHandler):
         
         # Read detection_only mode from config
         options = getattr(self.environment.config, 'options', None)
-        self.detection_only = not getattr(
-            options, 'rewrite_cross_repo_links', False
-        ) if options else False
+
+        # Determine detection mode based on operation type
+        if self.environment.mode == "cross-link":
+            # Cross-link operations: always rewrite detected links
+            self.detection_only = False
+        else:
+            # Initial migration: respect user config setting
+            self.detection_only = not getattr(options, 'rewrite_cross_repo_links', False) if options else False
 
         self.logger.debug(
                 "CrossRepoLinkHandler initialized for {0}/{1} -> {2}/{3} (detection_only={4})".format(
